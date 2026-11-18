@@ -66,3 +66,29 @@ indirme) ve `.env` içinde `ANTHROPIC_API_KEY` (soru-cevapta LLM cevabı).
 - Skor ağırlıkları ve eşikleri doğrulanmış bir model değildir; Aşama 4'te duyarlılık analizi.
 - Bölüm ayıklama gerçek EDGAR belgelerinin tüm varyasyonlarında denenmedi.
 - PDF dışa aktarma yok; tek süreçli arka plan işi (birden çok worker için kuyruk gerekir).
+
+## Performans ölçümleri (kullanıcı bilgisayarı, 19 Kasım 2026)
+
+ASUS X515JF, CPU (4 iş parçacığı), torch 2.15.0+cpu, MSFT: iki 10-K + bir 10-Q, 2.155 cümle.
+
+| Ölçüm | Önce | Sonra |
+| --- | --- | --- |
+| Tam analiz (önbelleksiz) | 349 sn | 193,7 sn (−%44) |
+| Duygu analizi hızı | ~7 cümle/sn | 15,0 cümle/sn (2,1x) |
+| Yeniden analiz (cümle önbelleği) | 349 sn | 60,9 sn (−%83), duygu 0 sn |
+
+Skor (83,9), risk farkı (25/8/25/52) ve cümle sayıları iyileştirme öncesi ve sonrası aynı.
+
+`bench_sentiment` (500 cümle; token uzunluğu medyan 30, en uzun 139):
+
+| Yapılandırma | Cümle/sn | Hızlanma | Eski yöntemle uyum |
+| --- | --- | --- | --- |
+| (a) Eski: pipeline, sırasız, batch 16 | 7,2 | 1,00x | %100 |
+| (b) Yeni: sıralı dinamik dolgu, batch 32 | 14,8 | 2,06x | %100 |
+| (c) Yeni + int8 kuantizasyon | 35,9 | 5,01x | %70,6 |
+| (d) Yeni + max_length 256 | 14,1 | 1,97x | %100 |
+
+Karar: (b) varsayılan. int8 kuantizasyon 5 kat hızlı olmasına rağmen reddedildi: olumsuz
+cümlelerin %74'ü (164'ün 121'i) nötr olarak etiketlendi. Bu sistematik kayma risk ve MD&A
+tonunu olduğundan olumlu gösterir ve skordaki metin tonu bileşenini yukarı çeker. max_length
+256 kazanç sağlamadı (256 token'ı aşan cümle yok; sıralı dolgu zaten gereksiz dolguyu önlüyor).
