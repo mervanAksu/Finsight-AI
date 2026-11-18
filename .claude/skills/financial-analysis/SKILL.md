@@ -56,7 +56,9 @@ Hesaplanamama kuralları (değer `None`, `status = "missing"`, `reason` dolu):
 - Payda 0 → "payda sıfır".
 - roe ve debt_to_equity'de özkaynak ≤ 0 → "özkaynak negatif veya sıfır; oran anlamlı değil".
 - ocf_to_net_income'da net_income ≤ 0 → "net kâr sıfır veya negatif; oran anlamlı değil".
-- revenue ≤ 0 → marj oranları hesaplanmaz.
+- revenue = 0 → "payda sıfır"; revenue < 0 → "gelir negatif; marj oranı anlamlı değil".
+- Birden fazla girdi eksikse neden virgülle birleşir: "eksik veri: operating_cash_flow, capex".
+- Eksik oranlarda da bulunan girdiler `inputs` içinde listelenir (izlenebilirlik).
 
 Dönemsel değişim (YoY): `(cur − prev) / |prev|`; `prev` 0 veya yoksa `None`.
 (Not: mevcut `xbrl.yoy_changes` yüzde döndürür ve negatif tabanda `None` verir; yeni kod
@@ -85,8 +87,10 @@ mali yıl içindir.
 
 Net ton = (olumlu cümle − olumsuz cümle) / toplam cümle.
 
-Bant (gösterim için, derecelendirme değildir): ≥ 75 "Güçlü", 60–74 "Dengeli",
-45–59 "İzlenmeli", < 45 "Zayıf".
+Bant (gösterim için, derecelendirme değildir), 1 ondalığa **yuvarlanmış** toplamdan:
+≥ 75 "Güçlü", 60 ≤ x < 75 "Dengeli", 45 ≤ x < 60 "İzlenmeli", < 45 "Zayıf".
+Toplam, yuvarlanmamış bileşen puanlarından hesaplanır; gösterge nesnelerinde ek olarak
+`reason` ve `threshold` (ör. "%0–%20") alanları bulunur.
 
 Her bileşen için `explanation` Türkçe tek cümle: hangi gösterge, değeri ve puana etkisi.
 Örnek: "Net kâr marjı %24,3 (eşik %0–%20 → 100 puan)." Bu ağırlık ve eşikler doğrulanmış
