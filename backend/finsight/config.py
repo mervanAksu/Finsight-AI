@@ -36,3 +36,40 @@ def get_database_url() -> str:
 
 def get_cache_dir() -> str:
     return os.getenv("SEC_CACHE_DIR", ".sec_cache")
+
+
+# --- Aşama 3 eklemeleri: API, arayüz ve belge depolama -----------------------------------
+
+DEFAULT_CORS_ORIGINS = ("http://127.0.0.1:5173", "http://localhost:5173")
+
+
+def get_cors_origins() -> list[str]:
+    """Geliştirme arayüzü adresleri + FINSIGHT_CORS_ORIGINS (virgülle ayrılmış) ekleri."""
+    origins: list[str] = list(DEFAULT_CORS_ORIGINS)
+    for item in os.getenv("FINSIGHT_CORS_ORIGINS", "").split(","):
+        item = item.strip().rstrip("/")
+        if item and item not in origins:
+            origins.append(item)
+    return origins
+
+
+def get_frontend_dist() -> str | None:
+    """Derlenmiş arayüz klasörü: FINSIGHT_FRONTEND_DIST veya depo kökündeki frontend/dist.
+
+    Klasör yoksa (veya index.html içermiyorsa) None; API arayüzsüz çalışır.
+    """
+    candidates = []
+    env = os.getenv("FINSIGHT_FRONTEND_DIST", "").strip()
+    if env:
+        candidates.append(env)
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    candidates.append(os.path.join(repo_root, "frontend", "dist"))
+    for path in candidates:
+        if os.path.isfile(os.path.join(path, "index.html")):
+            return path
+    return None
+
+
+def get_documents_dir() -> str:
+    """İndirilen rapor belgelerinin (10-K/10-Q HTML) saklandığı klasör."""
+    return os.getenv("FINSIGHT_DOCUMENTS_DIR") or os.path.join(get_cache_dir(), "documents")

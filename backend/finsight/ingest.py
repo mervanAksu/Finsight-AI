@@ -1,11 +1,14 @@
-"""Komut satırı veri çekme aracı.
+"""Komut satırı veri çekme ve analiz aracı.
 
 Kullanım:
     python -m finsight.ingest AAPL MSFT --years 3 --csv cikti.csv
+    python -m finsight.ingest MSFT --analyze
 
 Her şirket için SEC'ten şunları çeker ve veritabanına yazar:
 - şirket bilgisi ve 10-K / 10-Q / 8-K başvuru listesi (submissions)
-- son N mali yılın temel kalemleri (companyfacts)
+- son N+1 mali yılın temel kalemleri (companyfacts; ortalama oranlar için bir yıl fazla)
+--analyze ile ayrıca son iki 10-K ve son 10-Q indirilip bölüm, duygu, gömme, risk farkı ve
+skor üretilir (jobs.run_analysis_for_company).
 """
 
 import argparse
@@ -14,15 +17,14 @@ import logging
 import sys
 import time
 
-from sqlalchemy import select
-
 from . import DISCLAIMER
 from .config import ConfigError, get_cache_dir, get_max_rps, get_user_agent
 from .db import init_db, make_engine, make_session_factory
-from .edgar import build_ticker_map, document_url
-from .models import Company, Filing, FinancialFact
+from .edgar import build_ticker_map
+from .models import Company
 from .pipeline import collect
 from .rate_limiter import RateLimiter
+from .repository import save_collected
 from .sec_client import FileCache, SecClient
 from .xbrl import yoy_changes
 
@@ -30,47 +32,11 @@ log = logging.getLogger("finsight.ingest")
 
 
 def save(session, data: dict) -> Company:
-    """Tekrar çalıştırmada mükerrer kayıt oluşturmadan yazar (upsert)."""
-    info = data["company"]
-    company = session.scalar(select(Company).where(Company.cik == info["cik"]))
-    if company is None:
-        company = Company(cik=info["cik"])
-        session.add(company)
-    for key in ("ticker", "name", "sic", "fiscal_year_end"):
-        setattr(company, key, info[key])
-    session.flush()
+    """Tekrar çalıştırmada mükerrer kayıt oluşturmadan yazar (upsert).
 
-    for f in data["filings"]:
-        row = session.scalar(select(Filing).where(Filing.accession_no == f["accession_no"]))
-        if row is None:
-            row = Filing(accession_no=f["accession_no"], company_id=company.id)
-            session.add(row)
-        row.form = f["form"]
-        row.is_amendment = f["is_amendment"]
-        row.filing_date = f["filing_date"]
-        row.report_date = f["report_date"]
-        row.primary_document = f["primary_document"]
-        row.items = f["items"]
-        row.is_xbrl = f["is_xbrl"]
-        if f["primary_document"]:
-            row.url = document_url(info["cik"], f["accession_no"], f["primary_document"])
-
-    for metric, series in data["facts"].items():
-        for item in series:
-            row = session.scalar(select(FinancialFact).where(
-                FinancialFact.company_id == company.id,
-                FinancialFact.metric == metric,
-                FinancialFact.period_end == item["period_end"],
-            ))
-            if row is None:
-                row = FinancialFact(company_id=company.id, metric=metric,
-                                    period_end=item["period_end"])
-                session.add(row)
-            for key in ("tag", "unit", "value", "period_start", "fy", "fp", "form",
-                        "accession_no", "filed"):
-                setattr(row, key, item[key])
-    session.commit()
-    return company
+    derived_from, sic_description ve exchanges da saklanır (repository.save_collected).
+    """
+    return save_collected(session, data)
 
 
 def print_summary(data: dict) -> None:
@@ -105,14 +71,69 @@ def write_csv(path: str, rows: list[dict]) -> None:
                                      i["form"], i["accession_no"], i["filed"]])
 
 
+def _model_kind(name: str, fallback: str) -> str:
+    return "yedek model" if name == fallback or name.endswith("-lexicon") else "tam model"
+
+
+def print_analysis(summary: dict) -> None:
+    """--analyze özeti: kullanılan modeller, bölümler, risk farkı, skor."""
+    from .embeddings import HASHING_NAME
+    from .sentiment import LEXICON_NAME
+
+    sm, em = summary["sentiment_model"], summary["embedding_model"]
+    llm = summary.get("llm")
+    print("\nAnaliz")
+    print(f"  Duygu modeli : {sm} ({_model_kind(sm, LEXICON_NAME)})")
+    print(f"  Gömme modeli : {em} ({_model_kind(em, HASHING_NAME)})")
+    print("  LLM          : " + (f"{llm['provider']} / {llm['model']}" if llm
+                                 else "yok (soru-cevap çıkarımsal modda çalışır)"))
+    statuses = {"analyzed": "analiz edildi", "skipped": "önceden analiz edilmiş, atlandı",
+                "error": "HATA"}
+    for f in summary["filings"]:
+        filed = f["filing_date"].isoformat() if hasattr(f["filing_date"], "isoformat") \
+            else f["filing_date"]
+        detail = ""
+        if f["status"] == "analyzed":
+            detail = (f" — bölümler: {', '.join(f['sections']) or 'yok'}, "
+                      f"{f['sentences']} cümle, {f['chunks']} parça")
+        elif f["status"] == "error":
+            detail = f" — {f.get('error')}"
+        print(f"  {f['form']:<7} {filed} {f['accession_no']}: {statuses[f['status']]}{detail}")
+    n_sections = sum(len(f["sections"]) for f in summary["filings"])
+    print(f"  Toplam bölüm : {n_sections}")
+    risk = summary.get("risk")
+    if risk:
+        print(f"  Risk farkı   : {risk['added']} eklenen, {risk['removed']} çıkarılan, "
+              f"{risk['modified']} değişen, {risk['unchanged']} aynı paragraf")
+    else:
+        print("  Risk farkı   : yapılamadı (iki 10-K'nın Item 1A bölümü gerekli)")
+    score = summary.get("score") or {}
+    if score.get("total") is not None:
+        print(f"  Skor         : {score['total']:.1f} / 100 ({score['band']}, "
+              f"dönem sonu {score['as_of_period']}) — derecelendirme değildir")
+    else:
+        print("  Skor         : hesaplanamadı (yeterli veri yok)")
+    for w in summary.get("warnings") or []:
+        print(f"  Uyarı: {w}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SEC'ten şirket verisi çeker.")
     parser.add_argument("companies", nargs="+", help="Ticker veya CIK (ör. AAPL 320193)")
-    parser.add_argument("--years", type=int, default=3)
+    parser.add_argument("--years", type=int, default=3,
+                        help="Başvuru listesi için yıl (finansal kalemler bir yıl fazla)")
     parser.add_argument("--csv", help="Sonuçları CSV olarak da kaydet")
     parser.add_argument("--no-db", action="store_true", help="Veritabanına yazma")
+    parser.add_argument("--analyze", action="store_true",
+                        help="10-K/10-Q metinlerini indir; duygu, risk farkı, gömme ve skor üret")
+    parser.add_argument("--force", action="store_true",
+                        help="--analyze ile: önceden analiz edilmiş başvuruları yeniden işle")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if args.analyze and args.no_db:
+        print("--analyze veritabanı gerektirir; --no-db ile birlikte kullanılamaz.",
+              file=sys.stderr)
+        return 2
 
     try:
         client = SecClient(
@@ -140,10 +161,24 @@ def main(argv: list[str] | None = None) -> int:
             log.error("%s işlenemedi: %s", query, e)
             failed.append(query)
             continue
-        if session is not None:
-            save(session, data)
+        company = save(session, data) if session is not None else None
         print_summary(data)
         results.append(data)
+        if args.analyze and session is not None and company is not None:
+            from .jobs import run_analysis_for_company
+
+            def progress(step: str, _frac: float) -> None:
+                print(f"  … {step}")
+
+            try:
+                summary = run_analysis_for_company(session, client, company.id,
+                                                   progress=progress, force=args.force)
+            except Exception as e:  # analiz hatası diğer şirketleri durdurmasın
+                session.rollback()
+                log.error("%s analiz edilemedi: %s", query, e)
+                failed.append(query)
+                continue
+            print_analysis(summary)
 
     if args.csv and results:
         write_csv(args.csv, results)

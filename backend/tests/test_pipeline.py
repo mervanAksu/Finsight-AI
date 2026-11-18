@@ -24,6 +24,8 @@ def test_collect_end_to_end_with_fake_sec(fake_clock):
 
     assert data["company"]["name"] == "Example Corp"
     assert len(data["filings"]) == 4
-    assert [s["value"] for s in data["facts"]["revenue"]] == [1000, 1100, 1210]
+    # Kalemler years+1 dönem çekilir (ROA/ROE ortalaması için bir önceki mali yıl sonu).
+    assert [s["value"] for s in data["facts"]["revenue"]] == [905, 1000, 1100, 1210]
+    assert data["company"]["exchanges"] == ["Nasdaq"]
     assert client.request_count == 2  # eski başvuru dosyasına gerek yok
     assert all(h["User-Agent"] == UA for _, h in fetcher.calls)
