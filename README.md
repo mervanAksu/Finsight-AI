@@ -20,57 +20,92 @@ noktasıyla sunar.
 | Her değerin kaynağı: XBRL etiketi, form, accession numarası | NFR-06 |
 | 24 saatlik dosya önbelleği, tekrar çalıştırmada mükerrer kayıt yok | — |
 
-## Kurulum A: Python ile (en hızlı, Docker gerekmez)
+## Çalıştırma
 
-Python 3.11 veya üstü gerekir. Veritabanı olarak otomatik bir SQLite dosyası kullanılır.
+### A. Python ile (Docker gerekmez)
+
+Python 3.11 veya üstü gerekir. Veritabanı olarak otomatik bir SQLite dosyası (`finsight.db`)
+kullanılır; önceki sürümden kalan dosya ilk açılışta yeni sütun ve tablolarla yükseltilir.
 
 **Windows (PowerShell):**
 
 ```powershell
-cd finsight\backend
+cd finsight-ai\backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 $env:SEC_USER_AGENT = "FinSight-AI Ad Soyad eposta@ornek.com"
-python -m finsight.ingest AAPL MSFT KO --csv sonuc.csv
+python -m finsight.ingest MSFT --analyze      # veri çek + metin analizi + skor
 uvicorn finsight.api:app --reload
 ```
 
 **macOS / Linux:**
 
 ```bash
-cd finsight/backend
+cd finsight-ai/backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export SEC_USER_AGENT="FinSight-AI Ad Soyad eposta@ornek.com"
-python -m finsight.ingest AAPL MSFT KO --csv sonuc.csv
+python -m finsight.ingest MSFT --analyze      # veri çek + metin analizi + skor
 uvicorn finsight.api:app --reload
 ```
 
-Sonra tarayıcıda: <http://127.0.0.1:8000/docs> (Swagger arayüzü).
+- `python -m finsight.ingest AAPL MSFT` yalnızca finansal veriyi çeker; `--analyze` ayrıca son
+  iki 10-K ile son 10-Q'yu indirir, risk / MD&A bölümlerini ayıklar, cümle duygu analizi,
+  gömme (soru-cevap için), risk bölümü karşılaştırması ve skor üretir. Çıktıda hangi modellerin
+  kullanıldığı (FinBERT mi yedek sözlük mü, LLM var mı) yazılır. `--force` önceden analiz
+  edilmiş başvuruları yeniden işler.
+- Şirketler arayüzden de eklenebilir (arka plan işi: `POST /api/companies/{ticker}/ingest`).
 
-## Kurulum B: Docker Compose ile (PostgreSQL + pgvector)
+**Arayüz:** `cd frontend && npm install && npm run build` ile `frontend/dist` üretildiyse
+arayüz API ile aynı adresten sunulur: <http://127.0.0.1:8000>. Geliştirme için
+`npm run dev` → <http://127.0.0.1:5173> (API'ye `http://127.0.0.1:8000` üzerinden bağlanır).
+Swagger: <http://127.0.0.1:8000/docs>.
+
+**İsteğe bağlı ML paketleri (FinBERT, çok dilli gömme):** kurulmazsa sistem yedek modellerle
+(`lexicon-fallback`, `hashing-fallback`) çalışır ve bunu `/api/health` yanıtında belirtir.
 
 ```bash
-cd finsight
-cp .env.example .env          # Windows: copy .env.example .env  → sonra SEC_USER_AGENT'ı düzenle
-docker compose up -d --build
-docker compose run --rm api python -m finsight.ingest AAPL MSFT KO
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-ml.txt     # ilk çalıştırmada ~0,9 GB model indirilir
 ```
 
-API: <http://localhost:8000/docs>
+**LLM anahtarı (isteğe bağlı):** soru-cevap LLM olmadan da çalışır (ilgili alıntıları kaynak
+numarasıyla gösterir). LLM ile özet cevap için `.env` veya ortamda
+`ANTHROPIC_API_KEY=...` (ya da `OPENAI_API_KEY=...`, yerel sunucu için `OPENAI_BASE_URL`)
+tanımlayın; model `FINSIGHT_LLM_MODEL` ile değiştirilebilir. Tüm değişkenler: `.env.example`.
 
-## Uç noktalar
+### B. Docker Compose ile (PostgreSQL + pgvector, arayüz dahil)
+
+```bash
+cd finsight-ai
+cp .env.example .env          # Windows: copy .env.example .env  → SEC_USER_AGENT'ı düzenle
+docker compose up -d --build  # ML paketleriyle: INSTALL_ML=1 docker compose up -d --build
+docker compose run --rm api python -m finsight.ingest MSFT --analyze
+```
+
+Arayüz: <http://localhost:8000> · API: <http://localhost:8000/api/health> ·
+Swagger: <http://localhost:8000/docs>
+
+### Uç noktalar (tümü `/api` önekli; şekiller: `docs/api-contract.md`)
 
 | Yöntem | Yol | Açıklama |
 | --- | --- | --- |
-| GET | `/health` | Servis durumu |
-| GET | `/companies` | İşlenmiş şirketler |
-| GET | `/companies/{ticker}/filings?form=10-K&limit=50` | Başvuru listesi |
-| GET | `/companies/{ticker}/facts?metric=revenue` | Finansal kalemler ve kaynakları |
-
-`metric` değerleri: `revenue`, `net_income`, `operating_cash_flow`, `total_assets`,
-`total_liabilities`, `stockholders_equity`.
+| GET | `/api/health` | Durum, sürüm, kullanılan modeller |
+| GET | `/api/companies` | İşlenmiş şirketler (skor özetiyle) |
+| GET | `/api/companies/search?q=micro` | SEC ticker listesinde arama |
+| POST | `/api/companies/{ticker}/ingest` | Arka planda veri çekme + analiz (202, iş kimliği) |
+| GET | `/api/jobs/{job_id}` | İş durumu ve ilerleme |
+| GET | `/api/companies/{ticker}/overview` | Özet: skor, ana kalemler, ton, risk değişimi |
+| GET | `/api/companies/{ticker}/facts?metric=revenue` | Finansal kalemler ve kaynakları |
+| GET | `/api/companies/{ticker}/ratios` | 10 finansal oran (son 3 mali yıl) |
+| GET | `/api/companies/{ticker}/score` | Açıklanabilir 100 puanlık skor |
+| GET | `/api/companies/{ticker}/filings?form=10-K` | Başvuru listesi (8-K madde etiketleriyle) |
+| GET | `/api/companies/{ticker}/sentiment` | Risk ve MD&A bölümlerinin tonu |
+| GET | `/api/companies/{ticker}/risk-changes` | İki 10-K arasında risk paragrafı farkı |
+| POST | `/api/companies/{ticker}/ask` | Kaynak gösteren soru-cevap |
+| GET | `/api/compare?tickers=AAPL,MSFT` | 2–4 şirket karşılaştırması |
+| GET | `/api/companies/{ticker}/export.csv` | CSV dışa aktarım (UTF-8 BOM) |
 
 ## Testler
 

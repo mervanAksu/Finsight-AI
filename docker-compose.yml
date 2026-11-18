@@ -15,15 +15,23 @@ services:
       retries: 10
 
   api:
-    build: ./backend
+    # Kök Dockerfile: arayüz derlenir ve http://localhost:8000 adresinden API ile birlikte sunulur.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_ML: ${INSTALL_ML:-0}
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg2://finsight:${POSTGRES_PASSWORD:-finsight_dev}@db:5432/finsight
       SEC_CACHE_DIR: /app/.sec_cache
+      FINSIGHT_DOCUMENTS_DIR: /app/.sec_cache/documents
+      HF_HOME: /app/.hf_cache
     ports:
       - "8000:8000"
     volumes:
       - seccache:/app/.sec_cache
+      - hfcache:/app/.hf_cache
     depends_on:
       db:
         condition: service_healthy
@@ -31,3 +39,4 @@ services:
 volumes:
   pgdata:
   seccache:
+  hfcache:

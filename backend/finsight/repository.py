@@ -94,6 +94,12 @@ def list_companies(session: Session) -> list[dict]:
     return out
 
 
+def is_company_analyzed(session: Session, company_id: int) -> bool:
+    """Şirketin en az bir başvurusunda metin analizi yapılmış mı."""
+    return session.scalar(select(Filing.id).where(
+        Filing.company_id == company_id, Filing.analyzed.is_(True)).limit(1)) is not None
+
+
 def all_tickers(session: Session) -> set[str]:
     return {t.upper() for t in session.scalars(select(Company.ticker)).all() if t}
 
@@ -294,8 +300,11 @@ def delete_filing_analysis(session: Session, filing_id: int) -> None:
     """Başvurunun bölüm / parça / gömme / duygu kayıtlarını siler (commit etmez).
 
     Yabancı anahtar zorlamasından bağımsız olsun diye alt tablolardan başlayarak açık DELETE.
+    synchronize_session="fetch": silinen satırların nesneleri oturumdan da çıkarılır; aksi
+    halde aynı oturumda yeniden yazarken (SQLite kimlikleri yeniden kullanabilir) eski nesne
+    ile yeni nesne aynı kimliğe çakışır.
     """
-    opts = {"synchronize_session": False}
+    opts = {"synchronize_session": "fetch"}
     section_ids = _section_ids(filing_id)
     chunk_ids = select(TextChunk.id).where(TextChunk.section_id.in_(section_ids))
     session.execute(delete(ChunkEmbedding).where(ChunkEmbedding.chunk_id.in_(chunk_ids)),
@@ -441,7 +450,7 @@ def load_chunks_for_rag(session: Session, company_id: int, embedding_model: str)
 def save_risk_comparison(session: Session, company_id: int, old_filing_id: int,
                          new_filing_id: int, comparison: dict) -> int:
     """compare_risk_sections çıktısını yazar; aynı başvuru çiftinin eski kaydı silinir."""
-    opts = {"synchronize_session": False}
+    opts = {"synchronize_session": "fetch"}
     old_ids = select(RiskComparison.id).where(
         RiskComparison.company_id == company_id,
         RiskComparison.old_filing_id == old_filing_id,

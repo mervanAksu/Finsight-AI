@@ -181,7 +181,8 @@ def overview(ticker: str, session: Session = Depends(get_session)) -> dict:
     return views.overview_view(
         company, repo.load_facts(session, cid), repo.load_latest_score(session, cid),
         repo.load_filings(session, cid, limit=views.LATEST_FILINGS),
-        repo.load_sentiment_sections(session, cid), repo.load_risk(session, cid))
+        repo.load_sentiment_sections(session, cid), repo.load_risk(session, cid),
+        analyzed=repo.is_company_analyzed(session, cid))
 
 
 @router.get("/companies/{ticker}/facts")

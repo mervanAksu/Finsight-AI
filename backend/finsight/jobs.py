@@ -386,7 +386,9 @@ def run_ingest_job(job_id: int, ticker: str, analyze: bool = True, *,
 
                 run_analysis_for_company(session, client, company_id, progress=progress,
                                          warn=warn, documents_dir=documents_dir)
-            else:
+            elif repo.is_company_analyzed(session, company_id):
+                # Analiz yoksa skor üretilmez (sözleşme: skor analiz yoksa null); önceden
+                # analiz edilmiş şirkette yeni finansal verilerle skor güncellenir.
                 update(step="Skor hesaplanıyor", progress=0.9)
                 compute_and_save_score(session, company_id)
             update(status="done", step="Tamamlandı", progress=1.0, finished_at=utcnow())

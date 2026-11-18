@@ -1,3 +1,5 @@
+# Eski (yalnızca backend) imaj. Önerilen: depo kökündeki Dockerfile (arayüz + backend tek imaj):
+#   docker build -t finsight-ai .   (depo kökünden)
 FROM python:3.12-slim
 
 WORKDIR /app

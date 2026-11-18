@@ -29,7 +29,7 @@ import numpy as np
 
 from . import DISCLAIMER
 from .analyze import latest_annual_summaries
-from .edgar import item_label, split_items
+from .edgar import item_label, pad_cik, split_items
 from .ratios import RATIO_DEFS
 from .scoring import WEIGHTS_VERSION
 from .sentiment import summarize
@@ -40,9 +40,7 @@ KEY_METRICS = ("revenue", "net_income", "operating_cash_flow", "total_assets",
 LATEST_FILINGS = 5
 EXPORT_COLUMNS = ("ticker", "cik", "section", "key", "label", "period_start", "period_end",
                   "value", "unit", "status", "xbrl_tag", "form", "accession_no", "filed")
-SCORE_NOT_COMPUTED = ("Skor henüz hesaplanmadı: şirket için analiz çalıştırılmadı veya "
-                      "yeterli finansal veri yok.")
-EMPTY_RISK_COUNTS = None  # karşılaştırma yoksa sayılar uydurulmaz (0 ≠ eksik veri)
+ZERO_RISK_COUNTS = {"added": 0, "removed": 0, "modified": 0, "unchanged": 0}
 
 
 # --------------------------------------------------------------------------- JSON güvenliği
@@ -127,8 +125,22 @@ def filing_ref(filing: dict | None) -> dict | None:
     }
 
 
-def source_view(item: dict) -> dict:
-    """Bir FactItem'in kaynağı (NFR-06). Türetilmiş değerde xbrl_tag "derived"."""
+def filing_folder_url(cik, accession_no: str | None) -> str | None:
+    """Başvuru klasörü: https://www.sec.gov/Archives/edgar/data/{cik sıfırsız}/{accession tiresiz}/"""
+    if cik is None or not accession_no:
+        return None
+    try:
+        cik_int = int(pad_cik(cik))
+    except ValueError:
+        return None
+    return f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_no.replace('-', '')}/"
+
+
+def source_view(item: dict, cik=None) -> dict:
+    """Bir FactItem'in kaynağı (NFR-06). Türetilmiş değerde xbrl_tag "derived".
+
+    url: başvuru klasörü (cik verilmişse; sözleşme v1.1).
+    """
     tag = item.get("tag")
     derived = tag == DERIVED_TAG
     return {
@@ -137,21 +149,28 @@ def source_view(item: dict) -> dict:
         "accession_no": item.get("accession_no"),
         "filed": _iso(item.get("filed")),
         "derived_from": list(item.get("derived_from") or []) if derived else None,
+        "url": filing_folder_url(cik, item.get("accession_no")),
     }
 
 
 # --------------------------------------------------------------------------- finansal
 
 
-def _fact_values(series: Sequence[dict]) -> list[dict]:
-    ordered = sorted(series, key=lambda i: i["period_end"])
+def _valued(series: Sequence[dict]) -> list[dict]:
+    """Değeri olan dönemler, eskiden yeniye (değersiz dönem listelenmez; sözleşme v1.1)."""
+    return sorted((i for i in series if _num(i.get("value")) is not None),
+                  key=lambda i: i["period_end"])
+
+
+def _fact_values(series: Sequence[dict], cik=None) -> list[dict]:
+    ordered = _valued(series)
     changes = yoy_ratio(ordered)
     return [{
         "period_start": _iso(item.get("period_start")),
         "period_end": _iso(item["period_end"]),
         "value": _num(item.get("value")),
         "yoy": _num(change),
-        "source": source_view(item),
+        "source": source_view(item, cik),
     } for item, change in zip(ordered, changes)]
 
 
@@ -166,7 +185,7 @@ def facts_view(company: dict, facts: dict[str, list[dict]], metric: str | None =
             "metric": key,
             "label": METRIC_LABELS.get(key, key),
             "kind": "instant" if METRICS[key][1] else "duration",
-            "values": _fact_values(facts.get(key) or []),
+            "values": _fact_values(facts.get(key) or [], company.get("cik")),
         })
     return json_safe({"company": company_view(company), "metrics": metrics,
                       "disclaimer": DISCLAIMER})
@@ -193,7 +212,7 @@ def score_view(score: dict | None) -> dict:
     if not score:
         return {"total": None, "band": None, "as_of_period": None,
                 "weights_version": WEIGHTS_VERSION, "components": [],
-                "missing_components": [], "explanation": SCORE_NOT_COMPUTED,
+                "missing_components": [], "explanation": None,
                 "disclaimer": DISCLAIMER}
     out = {
         "total": score.get("total"),
@@ -208,11 +227,11 @@ def score_view(score: dict | None) -> dict:
     return json_safe(out)
 
 
-def key_metrics(facts: dict[str, list[dict]]) -> list[dict]:
+def key_metrics(facts: dict[str, list[dict]], cik=None) -> list[dict]:
     """Genel bakıştaki ana kalemler (sözleşmedeki sıra), son dönem değeri ve YoY."""
     out = []
     for key in KEY_METRICS:
-        series = sorted(facts.get(key) or [], key=lambda i: i["period_end"])
+        series = _valued(facts.get(key) or [])
         entry = {"metric": key, "label": METRIC_LABELS.get(key, key), "value": None,
                  "period_end": None, "yoy": None, "source": None, "reason": "veri yok"}
         if series:
@@ -221,7 +240,7 @@ def key_metrics(facts: dict[str, list[dict]]) -> list[dict]:
                 "value": _num(latest.get("value")),
                 "period_end": _iso(latest["period_end"]),
                 "yoy": _num(yoy_ratio(series)[-1]),
-                "source": source_view(latest),
+                "source": source_view(latest, cik),
                 "reason": None,
             })
         out.append(entry)
@@ -295,8 +314,9 @@ def sentiment_summary_view(sections: Sequence[dict]) -> dict | None:
 
 
 def risk_counts(risk: dict | None) -> dict | None:
+    """Genel bakış risk özeti: karşılaştırma yoksa None (sayılar uydurulmaz)."""
     if not risk or not risk.get("counts"):
-        return EMPTY_RISK_COUNTS
+        return None
     c = risk["counts"]
     return {k: int(c.get(k) or 0) for k in ("added", "removed", "modified", "unchanged")}
 
@@ -305,9 +325,10 @@ _CHANGE_ORDER = {"added": 0, "modified": 1, "removed": 2}
 
 
 def risk_view(risk: dict | None) -> dict:
-    """GET /risk-changes: iki 10-K yoksa old_filing/new_filing None, counts None, changes []."""
+    """GET /risk-changes: karşılaştırma yoksa old/new_filing None, counts 0, changes []
+    (sözleşme v1.1; arayüz old_filing null kontrolüyle "karşılaştırma yok" gösterir)."""
     if not risk:
-        return {"old_filing": None, "new_filing": None, "counts": EMPTY_RISK_COUNTS,
+        return {"old_filing": None, "new_filing": None, "counts": dict(ZERO_RISK_COUNTS),
                 "changes": [], "disclaimer": DISCLAIMER}
     changes = [c for c in risk.get("changes") or [] if c.get("change_type") in _CHANGE_ORDER]
     # Kararlı sıralama: tür sırası (added → modified → removed), tür içinde kayıt sırası.
@@ -315,7 +336,7 @@ def risk_view(risk: dict | None) -> dict:
     return json_safe({
         "old_filing": filing_ref(risk.get("old_filing")),
         "new_filing": filing_ref(risk.get("new_filing")),
-        "counts": risk_counts(risk),
+        "counts": risk_counts(risk) or dict(ZERO_RISK_COUNTS),
         "changes": [{"change_type": c["change_type"], "old_text": c.get("old_text"),
                      "new_text": c.get("new_text"), "similarity": _num(c.get("similarity"))}
                     for c in changes],
@@ -328,16 +349,22 @@ def risk_view(risk: dict | None) -> dict:
 
 def overview_view(company: dict, facts: dict[str, list[dict]], score: dict | None,
                   filings: Sequence[dict], sentiment: Sequence[dict],
-                  risk: dict | None) -> dict:
-    """GET /overview. `filings` yeniden eskiye sıralı olmalıdır (ilk 5'i gösterilir)."""
+                  risk: dict | None, analyzed: bool | None = None) -> dict:
+    """GET /overview. `filings` yeniden eskiye sıralı olmalıdır (ilk 5'i gösterilir).
+
+    analyzed: metin analizi yapılmış mı (verilmezse duygu bölümü varlığından çıkarılır).
+    """
+    if analyzed is None:
+        analyzed = bool(sentiment) or any(f.get("analyzed") for f in filings)
     score_part = None
     if score:
         score_part = {"total": _num(score.get("total")), "band": score.get("band"),
                       "as_of_period": _iso(score.get("as_of_period"))}
     return json_safe({
         "company": company_view(company),
+        "analyzed": bool(analyzed),
         "score": score_part,
-        "key_metrics": key_metrics(facts),
+        "key_metrics": key_metrics(facts, company.get("cik")),
         "latest_filings": [filing_ref(f) for f in list(filings)[:LATEST_FILINGS]],
         "sentiment_summary": sentiment_summary_view(sentiment),
         "risk_summary": risk_counts(risk),
@@ -411,12 +438,13 @@ def export_rows(company: dict, facts: dict[str, list[dict]], ratios: dict,
                 score: dict | None) -> list[dict]:
     """FR-16: kalemler, oranlar ve skor satırları (EXPORT_COLUMNS anahtarlarıyla).
 
-    Eksik değer boş hücre olarak yazılır (0 değil); status "missing".
+    Eksik değer boş hücre olarak yazılır (0 değil); status "missing". Skor yalnızca analiz
+    edilmiş şirkette bulunur; score None ise yalnızca fact + ratio satırları üretilir.
     """
     base = {"ticker": company.get("ticker"), "cik": company.get("cik")}
     rows: list[dict] = []
     for metric in METRICS:
-        for item in sorted(facts.get(metric) or [], key=lambda i: i["period_end"]):
+        for item in _valued(facts.get(metric) or []):
             src = source_view(item)
             rows.append({**base, "section": "fact", "key": metric,
                          "label": METRIC_LABELS.get(metric, metric),

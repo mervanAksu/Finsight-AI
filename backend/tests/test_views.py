@@ -28,7 +28,7 @@ from finsight.xbrl import METRICS, extract_all, yoy_ratio
 COMPANY_KEYS = {"ticker", "cik", "name", "sic", "sic_description", "fiscal_year_end",
                 "exchanges"}
 FILING_REF_KEYS = {"accession_no", "form", "filing_date", "report_date", "url"}
-SOURCE_KEYS = {"xbrl_tag", "form", "accession_no", "filed", "derived_from"}
+SOURCE_KEYS = {"xbrl_tag", "form", "accession_no", "filed", "derived_from", "url"}
 
 COMPANY = {"id": 1, "ticker": "EXJN", "cik": "0000000002", "name": "Example June Corp",
            "sic": "7372", "sic_description": "Services-Prepackaged Software",
@@ -132,11 +132,13 @@ def test_company_and_filing_ref_shapes():
 
 
 def test_source_view_direct_and_derived(facts):
-    direct = source_view(facts["revenue"][-1])
+    direct = source_view(facts["revenue"][-1], "0000000002")
     assert set(direct) == SOURCE_KEYS
     assert direct == {"xbrl_tag": "us-gaap:Revenues", "form": "10-K",
                       "accession_no": "0000000002-25-000040", "filed": "2025-08-01",
-                      "derived_from": None}
+                      "derived_from": None,
+                      "url": "https://www.sec.gov/Archives/edgar/data/2/000000000225000040/"}
+    assert source_view(facts["revenue"][-1])["url"] is None  # CIK bilinmiyorsa
     derived_item = facts["total_liabilities"][0]
     assert derived_item["tag"] == "derived"
     derived = source_view(derived_item)
@@ -169,6 +171,16 @@ def test_facts_view_all_metrics_shape_yoy_and_kind(facts):
     gp = next(m for m in body["metrics"] if m["metric"] == "gross_profit")
     assert gp["values"][0]["source"]["xbrl_tag"] == "derived"
     assert gp["values"][-1]["source"]["xbrl_tag"] == "us-gaap:GrossProfit"
+
+
+def test_facts_view_omits_periods_without_value(facts):
+    series = [dict(i) for i in facts["revenue"]]
+    series[1]["value"] = None  # 2023 değeri yok
+    body = facts_view(COMPANY, {"revenue": series}, "revenue")
+    values = body["metrics"][0]["values"]
+    assert [v["period_end"] for v in values] == ["2022-06-30", "2024-06-30", "2025-06-30"]
+    assert all(v["value"] is not None for v in values)
+    assert values[0]["source"]["url"].startswith("https://www.sec.gov/Archives/edgar/data/2/")
 
 
 def test_facts_view_single_metric_and_empty_series():
@@ -208,6 +220,8 @@ def test_score_view_with_and_without_score(score):
     assert set(comp["indicators"][0]) >= {"key", "label", "value", "display", "points"}
     empty = score_view(None)
     assert empty["total"] is None and empty["components"] == []
+    assert empty["band"] is None and empty["as_of_period"] is None
+    assert empty["explanation"] is None
     assert empty["weights_version"] == "v1-2026-11" and empty["disclaimer"] == DISCLAIMER
     # JSON'dan geri okunmuş skor (tarihler metin) de aynı şekli üretir
     roundtrip = json.loads(json.dumps(json_safe(score)))
@@ -222,9 +236,10 @@ def test_overview_view_key_metrics_order_latest_values_and_summaries(
     filings = [Q_NEW, K_NEW, K_OLD]
     body = overview_view(COMPANY, facts, score, filings, sentiment_sections, risk)
     strict_json(body)
-    assert set(body) == {"company", "score", "key_metrics", "latest_filings",
+    assert set(body) == {"company", "analyzed", "score", "key_metrics", "latest_filings",
                          "sentiment_summary", "risk_summary", "analysis_updated_at",
                          "disclaimer"}
+    assert body["analyzed"] is True
     assert body["score"] == {"total": score["total"], "band": score["band"],
                              "as_of_period": "2025-06-30"}
     assert [m["metric"] for m in body["key_metrics"]] == list(KEY_METRICS) == [
@@ -235,6 +250,7 @@ def test_overview_view_key_metrics_order_latest_values_and_summaries(
     assert rev["value"] == 5_500_000_000 and rev["period_end"] == "2025-06-30"
     assert rev["yoy"] == pytest.approx(0.1)
     assert set(rev["source"]) == SOURCE_KEYS
+    assert rev["source"]["url"].endswith("/edgar/data/2/000000000225000040/")
     assert [f["accession_no"] for f in body["latest_filings"]] == [
         Q_NEW["accession_no"], K_NEW["accession_no"], K_OLD["accession_no"]]
     ss = body["sentiment_summary"]
@@ -251,6 +267,7 @@ def test_overview_without_analysis_has_nulls_and_missing_metric_reason():
     facts = {"revenue": extract_all(load("companyfacts_full_example.json"))["revenue"]}
     body = overview_view({**COMPANY, "analysis_updated_at": None}, facts, None, [], [], None)
     strict_json(body)
+    assert body["analyzed"] is False
     assert body["score"] is None and body["sentiment_summary"] is None
     assert body["risk_summary"] is None and body["analysis_updated_at"] is None
     ni = body["key_metrics"][1]
@@ -352,9 +369,10 @@ def test_risk_view_with_and_without_comparison(risk):
         {"change_type": "added", "old_text": None, "new_text": "n", "similarity": None}]}
     assert [c["change_type"] for c in risk_view(reordered)["changes"]] == [
         "added", "modified", "removed"]
-    none = risk_view(None)
+    none = risk_view(None)  # sözleşme v1.1: karşılaştırma yoksa sayılar 0
     assert none["old_filing"] is None and none["new_filing"] is None
-    assert none["changes"] == [] and none["counts"] is None
+    assert none["changes"] == []
+    assert none["counts"] == {"added": 0, "removed": 0, "modified": 0, "unchanged": 0}
 
 
 # --------------------------------------------------------------------------- compare / liste / iş
