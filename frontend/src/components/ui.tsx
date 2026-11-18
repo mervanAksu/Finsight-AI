@@ -236,7 +236,7 @@ export function shortAccession(acc: string): string {
 export function SourceChip({ source, cik, align }: { source: Source | null; cik: string; align?: TipAlign }) {
   const { t } = useI18n();
   if (!source) return null;
-  const url = edgarFilingUrl(cik, source.accession_no);
+  const url = source.url || edgarFilingUrl(cik, source.accession_no);
   return (
     <span className="source-chip-wrap">
       <Tip

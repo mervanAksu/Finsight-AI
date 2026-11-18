@@ -2,7 +2,16 @@
 // Cevaptaki [n] atıfları tıklanabilir rozettir; ilgili kaynak kartını vurgular.
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
-import { LuCircleAlert, LuExternalLink, LuInfo, LuSearchX, LuSendHorizontal, LuTrash2 } from "react-icons/lu";
+import {
+  LuCircleAlert,
+  LuExternalLink,
+  LuInfo,
+  LuSearchX,
+  LuSendHorizontal,
+  LuShieldAlert,
+  LuTrash2,
+  LuTriangleAlert,
+} from "react-icons/lu";
 import { api } from "../../api";
 import { Disclaimer, Panel, cx, errorMessage } from "../../components/ui";
 import { fmtDate, fmtNumber, fmtPercent } from "../../format";
@@ -204,6 +213,20 @@ function Answer({ response, turnId }: { response: AskResponse; turnId: number })
   return (
     <div className={cx("msg msg-bot", notFound && "is-notfound")}>
       <span className="msg-who">{t("ask.assistant")}</span>
+      {response.advice_refused === true && (
+        <p className="msg-note is-advice" role="note">
+          <LuShieldAlert aria-hidden="true" />
+          {t("ask.adviceNote")}
+        </p>
+      )}
+      {response.warning && (
+        <p className="msg-note is-warning" role="note">
+          <LuTriangleAlert aria-hidden="true" />
+          <span>
+            <b>{t("ask.warningLabel")}:</b> {response.warning}
+          </span>
+        </p>
+      )}
       {response.mode === "extractive" && (
         <p className="msg-note">
           <LuInfo aria-hidden="true" />

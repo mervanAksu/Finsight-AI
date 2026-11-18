@@ -28,6 +28,8 @@ export interface Source {
   accession_no: string;
   filed: ISODate;
   derived_from: string[] | null;
+  /** Başvuru klasörü (sözleşme v1.1); yoksa edgarFilingUrl ile kurulur. */
+  url?: string | null;
 }
 
 export interface ApiErrorBody {
@@ -87,6 +89,8 @@ export interface Job {
   started_at: ISODateTime | null;
   finished_at: ISODateTime | null;
   request_count: number;
+  /** İşi durdurmayan adım uyarıları (sözleşmeye ek alan). */
+  warnings?: string[];
 }
 
 // GET /api/companies/{ticker}/overview
@@ -108,9 +112,12 @@ export interface KeyMetric {
   metric: MetricKey | string;
   label: string;
   value: number | null;
-  period_end: ISODate;
+  /** Kalemin hiç değeri yoksa null (backend views.key_metrics). */
+  period_end: ISODate | null;
   yoy: number | null;
   source: Source | null;
+  /** Değer yoksa neden (ör. "veri yok"). */
+  reason?: string | null;
 }
 export interface ScoreSummary {
   total: number | null;
@@ -131,6 +138,8 @@ export interface RiskCounts {
 }
 export interface Overview {
   company: Company;
+  /** Metin analizi yapılmış mı (sözleşme v1.1). Eski sahte veride bulunmayabilir. */
+  analyzed?: boolean;
   score: ScoreSummary | null;
   key_metrics: KeyMetric[];
   latest_filings: FilingRef[];
@@ -197,6 +206,8 @@ export interface ScoreIndicator {
   value: number | null;
   display: string;
   points: number | null;
+  reason?: string | null;
+  threshold?: string;
 }
 export interface ScoreComponent {
   key: string;
@@ -243,7 +254,8 @@ export interface SentimentSection {
   positive: number;
   negative: number;
   neutral: number;
-  net_tone: number;
+  /** Bölümde cümle yoksa null (sentiment.summarize). */
+  net_tone: number | null;
   top_negative: ScoredSentence[];
   top_positive: ScoredSentence[];
 }
@@ -292,6 +304,10 @@ export interface AskResponse {
   model: string | null;
   latency_ms: number;
   disclaimer: string;
+  /** Soru yatırım tavsiyesi niyeti taşıyorsa true; cevabın başında sabit ret cümlesi vardır. */
+  advice_refused?: boolean;
+  /** Ör. parçalar farklı bir gömme modeliyle oluşturulmuşsa yeniden analiz uyarısı. */
+  warning?: string | null;
 }
 
 // GET /api/compare

@@ -142,6 +142,7 @@ function CompanyCard({ company }: { company: CompanyListItem }) {
           {company.score && (
             <span className={`band-pill tone-${scoreTone(total)}`}>{bandLabel(lang, company.score.band)}</span>
           )}
+          {!company.analyzed && <span className="band-pill tone-muted">{t("home.textNotAnalyzed")}</span>}
         </p>
         <p className="company-card-name">{company.name}</p>
         <p className="company-card-meta">{company.sic_description ?? "—"}</p>

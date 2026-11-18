@@ -72,7 +72,11 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
         {score.state.status === "error" && <ErrorCard error={score.state.error} onRetry={score.reload} />}
         {score.state.status === "success" && (
           <>
-            {score.state.data.total === null && <p className="muted-note">{t("overview.noScore")}</p>}
+            {score.state.data.total === null && (
+              <p className="muted-note">
+                {t(overview.analyzed === false ? "overview.noScoreNotAnalyzed" : "overview.noScore")}
+              </p>
+            )}
             <ol className="components">
               {score.state.data.components.map((c) => (
                 <ComponentRow key={c.key} component={c} />

@@ -109,7 +109,8 @@ function SentimentPanel({ data }: { data: SentimentResponse }) {
               </p>
               {group.map((s) => {
                 const id = sectionId(s);
-                const tone = s.net_tone > 0.05 ? "positive" : s.net_tone < -0.05 ? "negative" : "muted";
+                const net = s.net_tone ?? 0; // cümlesiz bölümde null
+                const tone = net > 0.05 ? "positive" : net < -0.05 ? "negative" : "muted";
                 return (
                   <button
                     key={id}
