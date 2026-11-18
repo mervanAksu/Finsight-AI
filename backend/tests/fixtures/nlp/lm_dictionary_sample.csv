@@ -1,0 +1,6 @@
+Word,Seq_num,Word Count,Word Proportion,Average Proportion,Std Dev,Doc Count,Negative,Positive,Uncertainty,Litigious,Strong_Modal,Weak_Modal,Constraining,Complexity,Syllables,Source
+ZORPLE,1,10,0,0,0,5,0,2009,0,0,0,0,0,0,2,12of12inf
+BLARGH,2,10,0,0,0,5,2009,0,0,0,0,0,0,0,1,12of12inf
+FLIMSY,3,10,0,0,0,5,2011,0,0,0,0,0,0,0,2,12of12inf
+GROWTH,4,10,0,0,0,5,0,0,0,0,0,0,0,0,2,12of12inf
+REMOVED,5,10,0,0,0,5,-2020,0,0,0,0,0,0,0,2,12of12inf

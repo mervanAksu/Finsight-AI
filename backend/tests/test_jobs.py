@@ -5,6 +5,7 @@ FR-15 (arka plan işi), NFR-02 (paylaşılan hız sınırı), NFR-10 (gizli bilg
 """
 
 import pytest
+from pathlib import Path
 
 pytest.importorskip("sqlalchemy")
 
@@ -89,7 +90,7 @@ def test_ingest_job_end_to_end_steps_progress_and_results(factory, monkeypatch, 
         filings = {f["accession_no"]: f for f in repo.load_filings(s, company["id"])}
         assert {a for a, f in filings.items() if f["analyzed"]} == {ACC_K_NEW, ACC_K_OLD, ACC_Q}
         codes = sorted((f.accession_no, sec_.item_code) for sec_, f in s.execute(
-            select(FilingSection, Filing).join(Filing)).tuples())
+            select(FilingSection, Filing).join(Filing)))
         assert codes == sorted([(ACC_K_NEW, "1A"), (ACC_K_NEW, "7"), (ACC_K_OLD, "1A"),
                                 (ACC_K_OLD, "7"), (ACC_Q, "1A"), (ACC_Q, "2")])
         assert count(s, SentimentResult) > 0
@@ -261,7 +262,9 @@ def test_store_document_write_failure_keeps_hash(tmp_path):
     assert meta["local_path"] is None and meta["size_bytes"] == 7 and len(meta["sha256"]) == 64
     ok = jobs.store_document(b"<html/>", "1", "0000000001-26-000010", "../x.htm",
                              documents_dir=str(tmp_path / "docs"))
-    assert ok["local_path"].endswith("000000000126000010/x.htm")  # yol dışına çıkılmaz
+    # yol dışına çıkılmaz; Windows'ta ayırıcı "\\" olduğundan parçalarla karşılaştırılır
+    assert Path(ok["local_path"]).parts[-2:] == ("000000000126000010", "x.htm")
+    assert Path(ok["local_path"]).resolve().is_relative_to((tmp_path / "docs").resolve())
 
 
 def test_models_are_loaded_once_per_process(monkeypatch):

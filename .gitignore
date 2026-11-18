@@ -8,3 +8,5 @@ __pycache__/
 .coverage
 htmlcov/
 *.csv
+# Test verisi CSV'leri depoda kalmalı
+!backend/tests/fixtures/**/*.csv

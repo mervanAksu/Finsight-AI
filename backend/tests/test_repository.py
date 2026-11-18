@@ -257,7 +257,8 @@ def test_same_cik_tickers_both_resolve_company(session, data):
 def test_ticker_change_and_requested_ticker_added(session, data):
     """K3: istenen ticker SEC listesinde olmasa da tickers'a eklenir; birincil ticker SEC'in
     güncel listesinde artık yoksa (ticker değişikliği) yenisiyle değiştirilir."""
-    legacy = {**data, "company": {**data["company"], "ticker": "OLDT"}}  # tickers alanı yok
+    legacy_company = {k: v for k, v in data["company"].items() if k != "tickers"}
+    legacy = {**data, "company": {**legacy_company, "ticker": "OLDT"}}  # tickers alanı yok
     company = repo.save_collected(session, legacy)
     assert repo.load_company(session, "OLDT")["tickers"] == ["OLDT"]
     renamed = {**data, "company": {**data["company"], "ticker": "NEWT", "tickers": ["NEWT"]}}

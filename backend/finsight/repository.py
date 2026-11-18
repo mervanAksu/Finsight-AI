@@ -106,7 +106,7 @@ def list_companies(session: Session) -> list[dict]:
     companies = session.scalars(select(Company).order_by(Company.ticker, Company.id)).all()
     last_dates = dict(session.execute(
         select(Filing.company_id, func.max(Filing.filing_date)).group_by(Filing.company_id)
-    ).tuples().all())
+    ).all())
     analyzed_ids = set(session.scalars(
         select(Filing.company_id).where(Filing.analyzed.is_(True)).distinct()).all())
     out = []
@@ -434,7 +434,7 @@ def load_sentiment_sections(session: Session, company_id: int) -> list[dict]:
         select(FilingSection, Filing).join(Filing, Filing.id == FilingSection.filing_id)
         .where(Filing.company_id == company_id, Filing.analyzed.is_(True))
         .order_by(Filing.filing_date, Filing.accession_no, FilingSection.char_start)
-    ).tuples().all()
+    ).all()
     if not rows:
         return []
     by_section: dict[int, list[SentimentResult]] = {}
@@ -483,7 +483,7 @@ def load_chunks_for_rag(session: Session, company_id: int, embedding_model: str)
         .join(Filing, Filing.id == FilingSection.filing_id)
         .where(Filing.company_id == company_id, ChunkEmbedding.model_name == embedding_model)
         .order_by(Filing.filing_date, FilingSection.char_start, TextChunk.chunk_index)
-    ).tuples().all()
+    ).all()
     out = []
     for chunk, emb, section, filing in rows:
         out.append({
