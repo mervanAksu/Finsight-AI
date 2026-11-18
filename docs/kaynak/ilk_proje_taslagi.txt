@@ -1,0 +1,58 @@
+1. Projenin kesin tanımı
+Proje adı
+FinSight AI: Yapay Zekâ Destekli Finansal Rapor Analiz ve Risk Değerlendirme Platformu
+Temel amaç
+Kullanıcı bir Amerikan şirketini seçtiğinde sistem:
+- SEC üzerinden 10-K, 10-Q ve 8-K raporlarını bulacak.
+- XBRL verilerinden gelir, kâr, borç ve nakit akışı gibi değerleri çıkaracak.
+- Dönemler arasındaki değişimleri hesaplayacak.
+- Finansal metinlerde duygu ve risk analizi yapacak.
+- Kullanıcının sorularını rapordaki ilgili bölümleri kaynak göstererek cevaplayacak.
+- Açıklanabilir bir finansal sağlık ve risk skoru oluşturacak.
+SEC’in submissions ve companyfacts servisleri şirket başvurularını ve XBRL verilerini JSON olarak, API anahtarı gerektirmeden sunuyor. Uygulamanın tanımlayıcı bir User-Agent göndermesi ve saniyede 10 istek sınırına uyması gerekiyor. Developer Resources
+Dönem içinde tamamlanacak kapsam
+İlk sürümde:
+- Yalnızca ABD şirketleri
+- En az 10 şirket
+- 10-K, 10-Q ve 8-K formları
+- Son 3 yıllık finansal karşılaştırma
+- 8-10 temel finansal oran
+- FinBERT duygu analizi
+- Risk bölümlerinin karşılaştırılması
+- Kaynak gösteren soru-cevap
+- 100 üzerinden açıklanabilir şirket skoru
+- Web arayüzü
+- Docker ile çalıştırılabilir sistem
+İlk sürümde yapılmayacaklar:
+- Gerçek parayla alım-satım
+- Kesin hisse fiyatı tahmini
+- Mobil uygulama
+- Bütün borsa şirketlerini aynı anda tarama
+- Çok karmaşık portföy optimizasyonu
+- Finansal tavsiye verme
+2. Önerilen teknik yapı
+Katman	Teknoloji
+Frontend	React veya Next.js
+Backend	Python FastAPI
+Veritabanı	PostgreSQL
+Vektör arama	pgvector
+Finansal veri	SEC EDGAR ve XBRL API
+NLP	FinBERT
+RAG	Sentence Transformers + LLM
+Test	Pytest ve FastAPI TestClient
+Dağıtım	Docker Compose
+Grafikler	Recharts veya Plotly
+
+
+ProsusAI FinBERT modeli doğrudan finansal duygu sınıflandırması için kullanılabilir. Hugging Face FastAPI tarafında API testleri pytest ve TestClient ile yapılabilir. FastAPI
+#chatgpt-mermaid-_r_143_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(237, 237, 237);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-_r_143_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-_r_143_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-_r_143_ .error-icon{fill:rgb(48, 48, 48);}#chatgpt-mermaid-_r_143_ .error-text{fill:rgb(237, 237, 237);stroke:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-_r_143_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-_r_143_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-_r_143_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-_r_143_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-_r_143_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-_r_143_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_143_ .marker.cross{stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_143_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-_r_143_ p{margin:0;}#chatgpt-mermaid-_r_143_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ .cluster-label text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ .cluster-label span{color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-_r_143_ .label text,#chatgpt-mermaid-_r_143_ span{fill:rgb(237, 237, 237);color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ .node rect,#chatgpt-mermaid-_r_143_ .node circle,#chatgpt-mermaid-_r_143_ .node ellipse,#chatgpt-mermaid-_r_143_ .node polygon,#chatgpt-mermaid-_r_143_ .node path{fill:rgb(9, 23, 44);stroke:rgb(31, 78, 148);stroke-width:1px;}#chatgpt-mermaid-_r_143_ .rough-node .label text,#chatgpt-mermaid-_r_143_ .node .label text,#chatgpt-mermaid-_r_143_ .image-shape .label,#chatgpt-mermaid-_r_143_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-_r_143_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-_r_143_ .rough-node .label,#chatgpt-mermaid-_r_143_ .node .label,#chatgpt-mermaid-_r_143_ .image-shape .label,#chatgpt-mermaid-_r_143_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-_r_143_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-_r_143_ .root .anchor path{fill:rgb(175, 175, 175)!important;stroke-width:0;stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_143_ .arrowheadPath{fill:rgb(175, 175, 175);}#chatgpt-mermaid-_r_143_ .edgePath .path{stroke:rgb(175, 175, 175);stroke-width:1px;}#chatgpt-mermaid-_r_143_ .flowchart-link{stroke:rgb(175, 175, 175);fill:none;}#chatgpt-mermaid-_r_143_ .edgeLabel{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-_r_143_ .edgeLabel p{background-color:rgb(0, 0, 0);}#chatgpt-mermaid-_r_143_ .edgeLabel rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-_r_143_ .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#chatgpt-mermaid-_r_143_ .cluster rect{fill:rgb(48, 48, 48);stroke:rgba(255, 255, 255, 0.15);stroke-width:1px;}#chatgpt-mermaid-_r_143_ .cluster text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ .cluster span{color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(48, 48, 48);border:1px solid rgba(255, 255, 255, 0.15);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-_r_143_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(237, 237, 237);}#chatgpt-mermaid-_r_143_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-_r_143_ .icon-shape,#chatgpt-mermaid-_r_143_ .image-shape{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-_r_143_ .icon-shape p,#chatgpt-mermaid-_r_143_ .image-shape p{background-color:rgb(0, 0, 0);padding:2px;}#chatgpt-mermaid-_r_143_ .icon-shape .label rect,#chatgpt-mermaid-_r_143_ .image-shape .label rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-_r_143_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-_r_143_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-_r_143_ .node .neo-node{stroke:rgb(31, 78, 148);}#chatgpt-mermaid-_r_143_ [data-look="neo"].node rect,#chatgpt-mermaid-_r_143_ [data-look="neo"].cluster rect,#chatgpt-mermaid-_r_143_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-_r_143_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_143_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-_r_143_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-_r_143_-gradient);stroke-width:1px;}#chatgpt-mermaid-_r_143_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_143_ [data-look="neo"].node .neo-line path{stroke:rgb(31, 78, 148);filter:none;}#chatgpt-mermaid-_r_143_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-_r_143_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_143_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-_r_143_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-_r_143_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_143_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-_r_143_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_143_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(153, 206, 255);}#chatgpt-mermaid-_r_143_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(153, 206, 255);}#chatgpt-mermaid-_r_143_ .node tspan[font-weight="normal"],#chatgpt-mermaid-_r_143_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-_r_143_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-width:1px;}#chatgpt-mermaid-_r_143_ .node rect,#chatgpt-mermaid-_r_143_ .node circle,#chatgpt-mermaid-_r_143_ .node ellipse,#chatgpt-mermaid-_r_143_ .node polygon,#chatgpt-mermaid-_r_143_ .node path{fill:rgb(0, 40, 77);stroke:rgba(255, 255, 255, 0.1);stroke-width:1px;}#chatgpt-mermaid-_r_143_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-_r_143_ .node.mermaid-decision .label-container{fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-dasharray:2,2;}#chatgpt-mermaid-_r_143_ .edgePaths .flowchart-link{stroke:rgb(175, 175, 175);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-_r_143_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_143_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}SEC EDGAR ve XBRLVeri toplama ve temizlemePostgreSQL ve pgvectorFinBERT RAG ve skor motoruFastAPI ve React arayüzü
+
+
+
+
+3. On dört haftalık çalışma takvimi
+Haftalar	Aşama	Teslimat
+1-3	Analiz ve tasarım	Rapor ve Sunum 1
+4-6	Veri altyapısı ve finansal analiz	Rapor ve Sunum 2
+7-10	Yapay zekâ, RAG ve arayüz	Rapor ve Sunum 3
+11-14	Test, değerlendirme ve final	Rapor ve Sunum 4
