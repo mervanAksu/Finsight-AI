@@ -1,0 +1,7 @@
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "B"]
+# B008: FastAPI'nin Depends/Query kalıbı. B905: farklı uzunlukta zip bilinçli kullanılıyor.
+ignore = ["E501", "B008", "B905"]
