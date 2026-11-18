@@ -1,0 +1,113 @@
+// Üst başlık (logo, arama, karşılaştır, dil, tema) ve alt bilgi (uyarı + modeller).
+import { LuGitCompareArrows, LuMoon, LuSun } from "react-icons/lu";
+import { api } from "../api";
+import { useI18n } from "../i18n";
+import type { Lang } from "../i18n";
+import { useAsync } from "../lib/useAsync";
+import { hrefFor, navigate } from "../router";
+import type { Route } from "../router";
+import { CompanySearch } from "./CompanySearch";
+import { cx } from "./ui";
+
+export type Theme = "light" | "dark";
+
+export function Logo() {
+  return (
+    <svg className="logo-mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+      <rect width="28" height="28" rx="7" className="logo-bg" />
+      <path d="M8 19.5V14M14 19.5V8.5M20 19.5v-3.5" className="logo-bars" />
+    </svg>
+  );
+}
+
+export function Header({
+  route,
+  theme,
+  onToggleTheme,
+}: {
+  route: Route;
+  theme: Theme;
+  onToggleTheme: () => void;
+}) {
+  const { t, lang, setLang } = useI18n();
+  const langs: Lang[] = ["tr", "en"];
+  return (
+    <header className="topbar">
+      <div className="topbar-inner">
+        <a className="brand" href={hrefFor({ name: "home" })} aria-label={`${t("app.name")}, ${t("nav.home")}`}>
+          <Logo />
+          <span className="brand-name">{t("app.name")}</span>
+        </a>
+        {route.name !== "home" && (
+          <div className="topbar-search">
+            <CompanySearch
+              label={t("home.searchLabel")}
+              onSelect={(r) => navigate({ name: "company", ticker: r.ticker, tab: "overview" })}
+            />
+          </div>
+        )}
+        <nav className="topbar-nav" aria-label={t("nav.main")}>
+          <a
+            className={cx("nav-link", route.name === "compare" && "is-active")}
+            href={hrefFor({ name: "compare", tickers: [] })}
+            aria-current={route.name === "compare" ? "page" : undefined}
+          >
+            <LuGitCompareArrows aria-hidden="true" />
+            <span>{t("nav.compare")}</span>
+          </a>
+          <div className="lang-switch" role="group" aria-label={t("header.language")}>
+            {langs.map((l) => (
+              <button
+                key={l}
+                type="button"
+                className={cx("lang-btn", lang === l && "is-active")}
+                aria-pressed={lang === l}
+                onClick={() => setLang(l)}
+                lang={l}
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onToggleTheme}
+            aria-label={theme === "dark" ? t("header.themeToLight") : t("header.themeToDark")}
+            title={theme === "dark" ? t("header.themeToLight") : t("header.themeToDark")}
+          >
+            {theme === "dark" ? <LuSun aria-hidden="true" /> : <LuMoon aria-hidden="true" />}
+          </button>
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+export function Footer() {
+  const { t } = useI18n();
+  const { state } = useAsync((signal) => api.health(signal), []);
+  return (
+    <footer className="footer">
+      <div className="footer-inner">
+        <p className="footer-disclaimer">
+          <strong>{t("disclaimer.short")}</strong> {t("disclaimer.full")}
+        </p>
+        <div className="footer-meta">
+          <span>{t("footer.source")}</span>
+          {state.status === "success" && (
+            <span>
+              {t("footer.models")}: {t("footer.sentiment")} {state.data.models.sentiment}; {t("footer.embedding")}{" "}
+              {state.data.models.embedding.split("/").pop()}; {t("footer.llm")}{" "}
+              {state.data.models.llm.enabled ? state.data.models.llm.model : t("footer.llmOff")}
+            </span>
+          )}
+          {state.status === "error" && <span className="footer-warn">{t("footer.apiDown")}</span>}
+          <span>
+            {t("footer.project")} · v{state.status === "success" ? state.data.version : "—"}
+          </span>
+        </div>
+      </div>
+    </footer>
+  );
+}
