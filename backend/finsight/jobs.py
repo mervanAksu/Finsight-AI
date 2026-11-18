@@ -15,17 +15,19 @@ import importlib.util
 import logging
 import os
 import threading
+import time
 from collections.abc import Callable
 from datetime import date
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import repository as repo
-from .analyze import (analyze_sections, compare_risk, compute_text_signals,
+from .analyze import (TIMING_STEPS, analyze_sections, compare_risk, compute_text_signals,
                       default_chunk_words, embed_sections, latest_annual_summaries,
-                      latest_two_annual, score_company, select_filings_for_analysis)
-from .config import (ConfigError, get_cache_dir, get_documents_dir, get_max_rps,
-                     get_user_agent)
+                      latest_two_annual, score_company, select_filings_for_analysis,
+                      sentiment_stats)
+from .config import (ConfigError, analyze_quarterly_enabled, get_cache_dir,
+                     get_documents_dir, get_max_rps, get_user_agent)
 from .edgar import build_ticker_map
 from .embeddings import DEFAULT_ST_MODEL, HASHING_NAME, Embedder, get_embedder
 from .llm import LLMClient, LLMError, get_llm_client
@@ -33,8 +35,8 @@ from .models import utcnow
 from .pipeline import collect
 from .rate_limiter import RateLimiter
 from .sec_client import FileCache, SecClient, SecError
-from .sentiment import (FINBERT_NAME, LEXICON_NAME, LM_LEXICON_NAME, SentimentModel,
-                        get_sentiment_model)
+from .sentiment import (LEXICON_NAME, LM_LEXICON_NAME, SentimentModel,
+                        configured_finbert_name, get_sentiment_model)
 from .views import current_sentiment_model, sentiment_sections
 
 log = logging.getLogger(__name__)
@@ -133,7 +135,7 @@ def model_status() -> dict:
         sentiment_name = sentiment.name
     elif os.getenv("FINSIGHT_SENTIMENT_MODEL", "").strip().lower() != "lexicon" \
             and _has_module("transformers"):
-        sentiment_name = FINBERT_NAME
+        sentiment_name = configured_finbert_name()
     else:
         sentiment_name = LM_LEXICON_NAME if os.getenv("LM_DICTIONARY_PATH") else LEXICON_NAME
     if embedder is not None:
@@ -245,14 +247,34 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
                              sentiment_model: SentimentModel | None = None,
                              embedder: Embedder | None = None,
                              documents_dir: str | None = None,
-                             force: bool = False) -> dict:
+                             force: bool = False,
+                             sentence_cache: bool = True,
+                             analyze_quarterly: bool | None = None) -> dict:
     """Seçilen başvuruları analiz eder, risk farkını ve skoru yazar; özet döndürür.
 
     progress(step, frac): frac 0–1 (analiz bölümünün içindeki oran).
     Aynı başvuru aynı duygu ve gömme modeliyle analiz edildiyse atlanır (force=False).
     Hiçbir başvuru analiz edilemezse (ör. tüm belgeler 404) risk karşılaştırması, skor ve
     ``analysis_updated_at`` güncellenmez; uyarı eklenir (K2).
+
+    sentence_cache=True (varsayılan): şirketin aynı duygu modeliyle önceden kaydedilmiş cümle
+    sonuçları ve bu çalıştırmada önce analiz edilen başvuruların sonuçları yeniden kullanılır
+    (eski/yeni 10-K risk bölümlerinin çoğu aynıdır). force=True iken de geçerlidir; modelin
+    gerçek hızını ölçmek için kapatın (CLI: --no-sentence-cache).
+    analyze_quarterly: None → ``FINSIGHT_ANALYZE_10Q`` (varsayılan açık).
+
+    Özet ``timings`` (adım → sn, bkz. TIMING_STEPS), ``total_seconds`` ve ``sentiment_stats``
+    (cümle, modele giden, önbellek isabeti, yinelenen, sn, cümle/sn) içerir.
     """
+    started = time.perf_counter()
+    timings = {key: 0.0 for key, _ in TIMING_STEPS}
+    totals: dict = {}
+
+    def timed(key: str, since: float) -> float:
+        now = time.perf_counter()
+        timings[key] += now - since
+        return now
+
     report = progress or (lambda _step, _frac: None)
     company = repo.load_company_by_id(session, company_id)
     if company is None:
@@ -260,14 +282,19 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
     # O2: ilk çalıştırmada FinBERT / sentence-transformers yüklemesi dakikalar sürebilir;
     # kullanıcı işin takıldığını sanmasın.
     report("Modeller yükleniyor", 0.0)
+    t = time.perf_counter()
     sm = sentiment_model or get_sentiment()
     emb = embedder or get_embedder_cached()
     llm = get_llm()
+    timed("model_load", t)
     report(f"Modeller hazır ({sm.name}, {emb.name})", 0.0)
+    include_quarterly = analyze_quarterly_enabled() if analyze_quarterly is None \
+        else analyze_quarterly
     summary: dict = {
         "sentiment_model": sm.name, "embedding_model": emb.name,
         "llm": {"provider": llm.provider, "model": llm.model} if llm else None,
-        "filings": [], "warnings": [], "risk": None, "score": None,
+        "filings": [], "warnings": [], "notes": [], "risk": None, "score": None,
+        "quarterly_analysis": include_quarterly,
     }
 
     def warning(message: str) -> None:
@@ -276,9 +303,22 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
         if warn is not None:
             warn(message)
 
-    selected = select_filings_for_analysis(repo.load_filings(session, company_id))
+    def finish() -> dict:
+        summary["timings"] = {k: round(v, 3) for k, v in timings.items()}
+        summary["total_seconds"] = round(time.perf_counter() - started, 3)
+        summary["sentiment_stats"] = sentiment_stats(
+            totals, cache_enabled=sentence_cache, cache_preloaded=preloaded)
+        return summary
+
+    all_filings = repo.load_filings(session, company_id)
+    selected = select_filings_for_analysis(all_filings, include_quarterly=include_quarterly)
+    if not include_quarterly and select_filings_for_analysis(all_filings) != selected:
+        summary["notes"].append("Hızlı mod (FINSIGHT_ANALYZE_10Q=0): en son 10-Q listelendi "
+                                "ama analiz edilmedi.")
     if not selected:
         warning("Analiz edilecek 10-K / 10-Q başvurusu bulunamadı.")
+    cache: dict[str, dict] | None = None
+    preloaded = 0
     n = max(len(selected), 1)
     for i, filing in enumerate(selected):
         label = _filing_label(filing)
@@ -290,20 +330,43 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
             entry["status"] = "skipped"
             report(f"Önceden analiz edilmiş, atlandı ({label})", (i + 1) / n * 0.8)
             continue
+        if sentence_cache and cache is None:
+            t = time.perf_counter()
+            try:
+                cache = repo.load_sentence_predictions(session, company_id, sm.name)
+            except Exception as exc:  # önbellek yalnızca hızlandırır; okunamazsa boş başla
+                session.rollback()
+                log.warning("Cümle önbelleği okunamadı (%s); boş önbellekle devam ediliyor.",
+                            type(exc).__name__)
+                cache = {}
+            preloaded = len(cache)
+            timed("cache_load", t)
         try:
             report(f"Belge indiriliyor ({label})", i / n * 0.8)
+            t = time.perf_counter()
             body = client.document(company["cik"], filing["accession_no"],
                                    filing["primary_document"])
             document = store_document(body, company["cik"], filing["accession_no"],
                                       filing["primary_document"], documents_dir)
+            timed("download", t)
             report(f"Bölümler ve duygu analizi ({label})", (i + 0.3) / n * 0.8)
-            sections = analyze_sections(body, filing["form"], sentiment_model=sm)
+            stats: dict = {}
+            sections = analyze_sections(body, filing["form"], sentiment_model=sm,
+                                        prediction_cache=cache, stats=stats)
+            for key in ("html_to_text", "sections", "sentiment"):
+                timings[key] += float(stats.get(f"{key}_s", 0.0))
+            for key in ("sentences", "predicted", "cache_hits", "duplicates", "sentiment_s"):
+                totals[key] = totals.get(key, 0) + stats.get(key, 0)
+            entry["sentiment"] = sentiment_stats(stats, cache_enabled=sentence_cache)
             report(f"Gömme ({label})", (i + 0.7) / n * 0.8)
+            t = time.perf_counter()
             embed_sections(sections, embedder=emb)
+            t = timed("embedding", t)
             saved = repo.save_analysis_document(session, filing["id"], {
                 "sections": sections, "sentiment_model": sm.name, "embedding_model": emb.name,
                 "embedding_dim": emb.dim, "chunk_words": default_chunk_words(emb),
             }, document=document)
+            timed("save", t)
             entry.update(saved)
             if not saved["sections"]:
                 warning(f"{label}: risk / MD&A bölümü bulunamadı.")
@@ -317,9 +380,10 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
     if not any(f["status"] in ("analyzed", "skipped") for f in summary["filings"]):
         # K2: analiz edilen başvuru yoksa eski/eksik verilerle skor yazılmaz.
         warning("Hiçbir başvuru analiz edilemedi; risk karşılaştırması ve skor güncellenmedi.")
-        return summary
+        return finish()
 
     report("Risk karşılaştırması", 0.85)
+    t = time.perf_counter()
     old, new = latest_two_annual(selected)
     if old is not None and new is not None:
         try:
@@ -335,13 +399,16 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
             warning(f"Risk karşılaştırması: {safe_error(exc)}")
     else:
         warning("Risk karşılaştırması için iki 10-K yok.")
+    timed("risk", t)
 
     report("Skor hesaplanıyor", 0.95)
+    t = time.perf_counter()
     score = compute_and_save_score(session, company_id)
     repo.touch_analysis(session, company_id)
+    timed("score", t)
     summary["score"] = {"total": score.get("total"), "band": score.get("band"),
                         "as_of_period": score.get("as_of_period")}
-    return summary
+    return finish()
 
 
 # --------------------------------------------------------------------------- arka plan işi

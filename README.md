@@ -127,6 +127,8 @@ uvicorn finsight.api:app --reload
   iki 10-K ile son 10-Q'yu indirir, bölümleri ayıklar, duygu analizi, gömme, risk
   karşılaştırması ve skor üretir. Çıktıda hangi modellerin kullanıldığı yazılır. `--force`
   önceden analiz edilmiş başvuruları yeniden işler. Bir şirketteki hata diğerlerini durdurmaz.
+  Özetin sonunda adım başına süreler ve duygu analizi hızı (cümle/sn) yazılır; bkz.
+  [Performans](#performans).
 - Şirketler arayüzden de eklenebilir ("Analiz et" düğmesi → arka plan işi).
 
 **Arayüz:** `cd frontend && npm install && npm run build` ile `frontend/dist` üretildiyse
@@ -215,6 +217,74 @@ kurulu ortamda çalıştırın.
   her soruda numpy ile hesaplanır (kosinüs). Veritabanında vektör araması (pgvector) Aşama 4
   seçeneğidir. Eski ve yeni 10-K'da birebir aynı paragraflar tek kaynak olarak gösterilir.
 - **Skor:** oranlar + metin sinyalleri, ağırlıkları `scoring.py`'de; her bileşen gerekçesiyle.
+
+## Performans
+
+### Neden yavaş?
+
+FinBERT (BERT-base, ~110 milyon parametre) GPU olmadan her cümle için tam bir transformer
+çalıştırır. Örnek ölçüm (4 çekirdekli dizüstü, MSFT, `--analyze --force`, eski kod):
+3 başvuruda ~2.155 cümle ve 213 parça, toplam ~349 sn. Gömme birkaç saniye sürer; zamanın
+büyük kısmı FinBERT'tir. `--analyze` çıktısı artık bunu doğrudan gösterir:
+
+```
+  Adım süreleri:
+    Model yükleme                   …  sn
+    Belge indirme                   …
+    HTML → metin / Bölüm ayıklama   …
+    Duygu analizi                   …  <- en uzun
+    Gömme / Veritabanı / Risk / Skor …
+  Duygu        : 2155 cümle, … sn, … cümle/sn
+                 modele giden …, önbellekten …, yinelenen …; model hızı … cümle/sn
+```
+
+### Ne yapıldı?
+
+Doğruluğu değiştirmeyen iyileştirmeler (varsayılan **açık**):
+
+| İyileştirme | Ne yapar | Beklenen etki |
+| --- | --- | --- |
+| Cümle önbelleği | Aynı şirketin aynı duygu modeliyle daha önce analiz edilmiş cümleleri (boşlukları normalize edilmiş metin → etiket, skor) ve aynı çalıştırmada önce işlenen başvuruların sonuçlarını yeniden kullanır. Belge içindeki yinelenen cümleler bir kez tahmin edilir. | Eski ve yeni 10-K'nın risk bölümleri büyük ölçüde aynıdır; ikinci 10-K'da tekrar eden cümle oranı kadar (tahmini %40–70) tasarruf. `--force` ile yeniden analizde duygu adımı neredeyse sıfırlanır. |
+| Sıralı dinamik dolgu | Cümleler belirteç uzunluğuna göre sıralanıp `padding="longest"` ile gruplanır, sonuçlar orijinal sıraya geri yerleştirilir. | Eski yöntemde her grup içindeki en uzun cümleye kadar dolgu yapılıyordu; sıralama boşa giden hesabı azaltır (tipik 1,5–2,5x, ölçülecek). |
+| `torch.inference_mode()` + doğrudan model | Hattın (pipeline) ek yükü ve otomatik türev kaydı yok. | Küçük (%5–15). |
+| Grup boyutu 32 | `FINSIGHT_FINBERT_BATCH` ile değiştirilebilir. | Donanıma bağlı. |
+
+Doğruluğu etkileyebilecek ayarlar (varsayılan **kapalı**, ölçüm aracıyla doğrulanınca açın):
+
+| Ortam değişkeni | Varsayılan | Açıklama |
+| --- | --- | --- |
+| `FINSIGHT_FINBERT_QUANTIZE=1` | kapalı | `nn.Linear` katmanları int8 dinamik kuantizasyon (CPU'da tipik 1,5–2,5x). Hata olursa uyarıyla normal modele düşer. Model adı `ProsusAI/finbert+int8` olarak kaydedilir. |
+| `FINSIGHT_FINBERT_MAX_LENGTH` | 512 | Daha kısa değer (ör. 256) uzun cümleleri keser. Sıralı dolgu kısa cümleleri zaten 512'ye doldurmadığı için kazanç yalnızca 256 token'ı aşan cümle oranı kadardır. Ad `…+len256` olur. |
+| `FINSIGHT_TORCH_THREADS` | torch varsayılanı | CPU iş parçacığı sayısı; 4 çekirdekli işlemcide 4 ve 8'i deneyin. |
+| `FINSIGHT_FINBERT_BATCH` | 32 | Grup boyutu. |
+| `FINSIGHT_ANALYZE_10Q=0` | 1 | **Hızlı mod:** en son 10-Q başvuru listesinde görünür ama metni indirilip analiz edilmez (cümlelerin yaklaşık üçte biri). Risk karşılaştırması ve skor yalnızca 10-K'lara dayandığı için etkilenmez; 10-Q duygu bölümü güncellenmez. |
+
+Kuantizasyon veya kısa `max_length` açıldığında model adı değiştiği için önceki sonuçlarla
+karışmaz: başvurular yeni adla yeniden analiz edilir ve cümle önbelleği ayrı tutulur.
+
+### Ölçüm
+
+```powershell
+cd backend
+# 1) Adım süreleri: önbelleksiz (modelin gerçek hızı) ve önbellekli çalıştırma
+python -m finsight.ingest MSFT --analyze --force --no-sentence-cache
+python -m finsight.ingest MSFT --analyze --force
+# 2) Yapılandırma karşılaştırması (veritabanındaki MSFT cümlelerinden 500 örnek)
+python -m finsight.bench_sentiment MSFT --limit 500
+python -m finsight.bench_sentiment MSFT --limit 500 --threads 4
+```
+
+`bench_sentiment` aynı cümle örneğinde şunları karşılaştırır: **(a)** eski yöntem (pipeline,
+sırasız, batch 16), **(b)** yeni varsayılan, **(c)** yeni + int8, **(d)** yeni + max_length 256.
+Her biri için toplam süre, cümle/sn, (a)'ya göre hızlanma, (a)'ya göre etiket uyumu (%) ve
+sınıf bazında karışıklık tablosu ile token uzunluğu dağılımı (64/128/256/512'yi aşan cümle
+sayısı) yazılır. torch/transformers kurulu değilse anlaşılır bir mesajla çıkar.
+
+**Açma ölçütü:** (c) veya (d), (a) ile etiket uyumu **≥ %97** ve (b)'ye göre hızlanması
+**≥ 1,2x** ise ilgili ayarın açılması önerilir (araç bu kararı "Öneri" satırında yazar). Ayrıca
+karışıklık tablosunda olumsuz → olumlu gibi zıt yönlü değişimlerin çok az olduğuna bakın; skorun
+metin sinyali net tona (olumlu − olumsuz) dayanır. Dizüstü bilgisayarda prize takılı ve yüksek
+performans güç modunda ölçün; termal kısma nedeniyle iki kez çalıştırıp ikinci sonucu kullanın.
 
 ## Bilinen sınırlar
 

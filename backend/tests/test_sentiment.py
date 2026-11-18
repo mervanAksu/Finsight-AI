@@ -107,28 +107,39 @@ def test_get_sentiment_model_env_forces_lexicon(monkeypatch):
 
 
 def test_get_sentiment_model_uses_finbert_when_available(monkeypatch):
-    class FakePipe:
-        def __call__(self, texts, **kwargs):
-            self.kwargs = kwargs
-            return [{"label": "LABEL_1", "score": 0.91} for _ in texts]
+    """FinBERT AutoTokenizer + AutoModel ile yüklenir (sahte torch/transformers, ağsız)."""
+    from fake_finbert import FakeModel, FakeTokenizer, fake_torch_module
 
-    fake_pipe = FakePipe()
     seen = {}
 
-    def fake_pipeline(task, **kwargs):
-        seen["task"], seen["kwargs"] = task, kwargs
-        return fake_pipe
+    class AutoTokenizer:
+        @staticmethod
+        def from_pretrained(name):
+            seen["tokenizer"] = name
+            return FakeTokenizer()
+
+    class AutoModelForSequenceClassification:
+        @staticmethod
+        def from_pretrained(name):
+            seen["model"] = name
+            return FakeModel(fixed_label=1)  # id2label[1] = "negative"
 
     class FakeTransformers:
-        pipeline = staticmethod(fake_pipeline)
+        pass
 
+    FakeTransformers.AutoTokenizer = AutoTokenizer
+    FakeTransformers.AutoModelForSequenceClassification = AutoModelForSequenceClassification
     monkeypatch.setitem(sys.modules, "transformers", FakeTransformers)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module())
+    for name in ("FINSIGHT_FINBERT_BATCH", "FINSIGHT_FINBERT_MAX_LENGTH",
+                 "FINSIGHT_FINBERT_QUANTIZE", "FINSIGHT_TORCH_THREADS"):
+        monkeypatch.delenv(name, raising=False)
     model = get_sentiment_model()
     assert model.name == "ProsusAI/finbert"
-    assert seen["task"] == "text-classification"
-    assert seen["kwargs"]["model"] == "ProsusAI/finbert" and seen["kwargs"]["device"] == -1
-    assert model.predict(["Sales fell."]) == [{"label": "negative", "score": 0.91}]
-    assert fake_pipe.kwargs == {"batch_size": 16, "truncation": True, "max_length": 512}
+    assert seen == {"tokenizer": "ProsusAI/finbert", "model": "ProsusAI/finbert"}
+    assert model.batch_size == 32 and model.max_length == 512
+    [pred] = model.predict(["Sales fell."])
+    assert pred["label"] == "negative" and 0.5 < pred["score"] <= 1.0
     assert model.predict([]) == []
 
 

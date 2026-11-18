@@ -73,6 +73,7 @@ Ortak nesneler:
             "llm": {"provider": "anthropic", "model": "claude-haiku-5-5", "enabled": true}}}
 ```
 Yedek modeller kullanılıyorsa adlar `"lexicon-fallback"`, `"hashing-fallback"`; LLM yoksa `{"provider": "none", "model": null, "enabled": false}`.
+FinBERT doğruluğu etkileyebilecek bir ayarla çalışıyorsa duygu modeli adına ek gelir: `"ProsusAI/finbert+int8"` (int8 kuantizasyon), `"ProsusAI/finbert+len256"` (max_length 256). Varsayılan ayarlarda ad `"ProsusAI/finbert"`dir. Bu, `/sentiment` ve `sentiment_summary` içindeki `model` alanı için de geçerlidir.
 
 ## GET /api/companies
 İşlenmiş şirketler, ticker sırasıyla.

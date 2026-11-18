@@ -27,6 +27,7 @@ from finsight.sec_client import SecError  # noqa: E402
 @pytest.fixture(autouse=True)
 def light_models(monkeypatch, tmp_path):
     monkeypatch.setenv("FINSIGHT_DOCUMENTS_DIR", str(tmp_path / "docs"))
+    monkeypatch.delenv("FINSIGHT_ANALYZE_10Q", raising=False)
     use_light_models()
     yield
     jobs.reset_models()
@@ -239,6 +240,138 @@ def test_run_analysis_for_company_summary(factory, tmp_path):
     assert [f["status"] for f in summary["filings"]] == ["analyzed"] * 3
     assert summary["risk"]["added"] >= 1 and summary["score"]["total"] is not None
     assert (tmp_path / "d").exists()
+
+
+class CountingSentiment:
+    """Modele giden cümleleri sayan sözlük modeli sarmalayıcısı (adı lexicon-fallback)."""
+
+    def __init__(self):
+        from finsight.sentiment import LexiconModel
+
+        self._inner = LexiconModel(dictionary_path="")
+        self.name = self._inner.name
+        self.seen: list[str] = []
+
+    def predict(self, sentences):
+        self.seen.extend(sentences)
+        return self._inner.predict(sentences)
+
+
+def _analyze(factory, sec, tmp_path, **kwargs) -> dict:
+    with factory() as s:
+        company = repo.load_company(s, TICKER)
+        return jobs.run_analysis_for_company(s, sec(), company["id"],
+                                             documents_dir=str(tmp_path / "d"), **kwargs)
+
+
+def test_summary_has_step_timings_and_sentiment_rate(factory, tmp_path):
+    sec = FakeSec()
+    run(factory, sec, analyze=False)
+    summary = _analyze(factory, sec, tmp_path)
+    timings = summary["timings"]
+    assert set(timings) == {key for key, _ in jobs.TIMING_STEPS}
+    assert all(v >= 0 for v in timings.values())
+    # adımlar ayrık aralıklardır; yuvarlama (3 basamak) payı bırakılır
+    assert summary["total_seconds"] >= sum(timings.values()) - 0.01
+    st = summary["sentiment_stats"]
+    total_sentences = sum(f["sentences"] for f in summary["filings"])
+    assert st["sentences"] == total_sentences > 0
+    assert st["predicted"] + st["cache_hits"] + st["duplicates"] == st["sentences"]
+    assert st["cache_enabled"] is True and st["cache_preloaded"] == 0
+    for f in summary["filings"]:
+        assert f["sentiment"]["sentences"] == f["sentences"]
+    assert summary["quarterly_analysis"] is True and summary["notes"] == []
+
+
+def test_second_10k_reuses_sentence_results_within_run(factory, tmp_path):
+    """Eski 10-K önce analiz edilir; yeni 10-K'daki aynı cümleler modele gitmez."""
+    sec = FakeSec()
+    run(factory, sec, analyze=False)
+    model = CountingSentiment()
+    summary = _analyze(factory, sec, tmp_path, sentiment_model=model)
+    by_acc = {f["accession_no"]: f for f in summary["filings"]}
+    old, new = by_acc[ACC_K_OLD], by_acc[ACC_K_NEW]
+    assert old["sentiment"]["cache_hits"] == 0
+    assert new["sentiment"]["cache_hits"] > 0
+    assert new["sentiment"]["predicted"] < new["sentences"]
+    assert any(s.startswith(ADDED_RISK_PREFIX) for s in model.seen)  # yeni cümle tahmin edildi
+    assert len(model.seen) == len(set(model.seen))  # hiçbir cümle iki kez modele gitmedi
+
+
+def test_force_rerun_uses_saved_sentence_cache_unless_disabled(factory, tmp_path):
+    sec = FakeSec()
+    run(factory, sec, analyze=False)
+    _analyze(factory, sec, tmp_path)
+    with factory() as s:
+        before = {(r.sentence, r.label, r.score) for r in s.scalars(select(SentimentResult))}
+
+    cached_model = CountingSentiment()
+    summary = _analyze(factory, sec, tmp_path, sentiment_model=cached_model, force=True)
+    assert [f["status"] for f in summary["filings"]] == ["analyzed"] * 3
+    assert cached_model.seen == []  # aynı model + aynı metin → modele hiç gidilmedi
+    st = summary["sentiment_stats"]
+    assert st["predicted"] == 0 and st["cache_preloaded"] > 0
+    with factory() as s:
+        after = {(r.sentence, r.label, r.score) for r in s.scalars(select(SentimentResult))}
+    assert after == before  # sonuçlar değişmedi
+
+    uncached = CountingSentiment()
+    summary = _analyze(factory, sec, tmp_path, sentiment_model=uncached, force=True,
+                       sentence_cache=False)
+    st = summary["sentiment_stats"]
+    assert st["cache_enabled"] is False and st["cache_hits"] == 0
+    assert len(uncached.seen) == st["predicted"] > 0
+
+
+def test_sentence_cache_ignores_other_models(factory, tmp_path):
+    sec = FakeSec()
+    run(factory, sec, analyze=False)
+    _analyze(factory, sec, tmp_path)
+    other = CountingSentiment()
+    other.name = "other-sentiment-model"
+    summary = _analyze(factory, sec, tmp_path, sentiment_model=other)
+    assert summary["sentiment_stats"]["cache_preloaded"] == 0
+    assert other.seen  # farklı model: önbellek kullanılmadı
+
+
+def test_analyze_10q_disabled_lists_but_does_not_analyze(factory, tmp_path, monkeypatch):
+    monkeypatch.setenv("FINSIGHT_ANALYZE_10Q", "0")
+    sec = FakeSec()
+    run(factory, sec, analyze=False)
+    summary = _analyze(factory, sec, tmp_path)
+    assert [f["accession_no"] for f in summary["filings"]] == [ACC_K_OLD, ACC_K_NEW]
+    assert summary["quarterly_analysis"] is False
+    assert any("FINSIGHT_ANALYZE_10Q=0" in n for n in summary["notes"])
+    assert summary["warnings"] == []
+    assert doc_url(ACC_Q) not in sec.document_calls()
+    assert summary["risk"] is not None and summary["score"]["total"] is not None
+    with factory() as s:
+        company = repo.load_company(s, TICKER)
+        quarterly = repo.load_filings(s, company["id"], form="10-Q")
+        assert [f["accession_no"] for f in quarterly] == [ACC_Q]  # listede duruyor
+        assert quarterly[0]["analyzed"] is False
+
+
+def test_ingest_cli_prints_step_timings_and_sentiment_rate(monkeypatch, tmp_path, capsys):
+    from finsight import ingest
+    from finsight.rate_limiter import RateLimiter
+    from finsight.sec_client import SecClient
+
+    sec = FakeSec()
+    monkeypatch.setenv("SEC_USER_AGENT", "FinSight-AI Test test@example.com")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'cli.db'}")
+    monkeypatch.setenv("SEC_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("FINSIGHT_DOCUMENTS_DIR", str(tmp_path / "docs"))
+    monkeypatch.setattr(ingest, "SecClient", lambda ua, **_kw: SecClient(
+        ua, fetcher=sec.fetcher, limiter=RateLimiter(8, clock=sec.clock, sleep=sec.clock.sleep),
+        sleep=lambda _s: None))
+    assert ingest.main([TICKER, "--analyze", "--no-sentence-cache"]) == 0
+    out = capsys.readouterr().out
+    assert "Adım süreleri:" in out
+    for _key, label in jobs.TIMING_STEPS:
+        assert label in out
+    assert "Duygu        :" in out and "cümle/sn" in out
+    assert "cümle önbelleği kapalı" in out
 
 
 # --------------------------------------------------------------------------- yardımcılar

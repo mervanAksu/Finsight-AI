@@ -3,12 +3,14 @@
 Kullanım:
     python -m finsight.ingest AAPL MSFT --years 3 --csv cikti.csv
     python -m finsight.ingest MSFT --analyze
+    python -m finsight.ingest MSFT --analyze --force --no-sentence-cache   # model hızını ölç
 
 Her şirket için SEC'ten şunları çeker ve veritabanına yazar:
 - şirket bilgisi ve 10-K / 10-Q / 8-K başvuru listesi (submissions)
 - son N+1 mali yılın temel kalemleri (companyfacts; ortalama oranlar için bir yıl fazla)
 --analyze ile ayrıca son iki 10-K ve son 10-Q indirilip bölüm, duygu, gömme, risk farkı ve
-skor üretilir (jobs.run_analysis_for_company).
+skor üretilir (jobs.run_analysis_for_company). Özet, adım başına süreleri ve duygu analizi
+hızını (cümle/sn) gösterir; darboğaz bu satırlardan okunur (README "Performans").
 """
 
 import argparse
@@ -113,8 +115,50 @@ def print_analysis(summary: dict) -> None:
               f"dönem sonu {score['as_of_period']}) — derecelendirme değildir")
     else:
         print("  Skor         : hesaplanamadı veya güncellenmedi (uyarılara bakın)")
+    for note in summary.get("notes") or []:
+        print(f"  Not: {note}")
     for w in summary.get("warnings") or []:
         print(f"  Uyarı: {w}")
+    print_timings(summary)
+
+
+def _fmt_rate(value) -> str:
+    return f"{value:.1f} cümle/sn" if value else "- cümle/sn"
+
+
+def print_timings(summary: dict) -> None:
+    """Adım başına süre + duygu hızı satırı (darboğazın kanıtı)."""
+    from .analyze import TIMING_STEPS
+
+    timings = summary.get("timings") or {}
+    total = float(summary.get("total_seconds") or 0.0)
+    if not timings:
+        return
+    print("  Adım süreleri:")
+    longest = max(timings, key=lambda k: timings[k]) if timings else None
+    for key, label in TIMING_STEPS:
+        seconds = float(timings.get(key, 0.0))
+        share = f"{100 * seconds / total:5.1f}%" if total > 0 else "    -"
+        mark = "  <- en uzun" if key == longest and seconds > 0 else ""
+        print(f"    {label:<26}{seconds:9.1f} sn {share}{mark}")
+    print(f"    {'Toplam (analiz)':<26}{total:9.1f} sn")
+    st = summary.get("sentiment_stats") or {}
+    if st:
+        print(f"  Duygu        : {st.get('sentences', 0)} cümle, {st.get('seconds', 0):.1f} sn, "
+              f"{_fmt_rate(st.get('sentences_per_second'))}")
+        cache = "açık" if st.get("cache_enabled") else "kapalı (--no-sentence-cache)"
+        print(f"                 modele giden {st.get('predicted', 0)}, önbellekten "
+              f"{st.get('cache_hits', 0)}, yinelenen {st.get('duplicates', 0)}; "
+              f"model hızı {_fmt_rate(st.get('model_sentences_per_second'))}; "
+              f"cümle önbelleği {cache}"
+              + (f" ({st.get('cache_preloaded', 0)} kayıtlı cümle)"
+                 if st.get("cache_enabled") else ""))
+    for f in summary.get("filings") or []:
+        fs = f.get("sentiment")
+        if fs:
+            print(f"    {f['form']:<7} {f['accession_no']}: {fs['sentences']} cümle, "
+                  f"modele {fs['predicted']}, önbellek {fs['cache_hits']}, "
+                  f"{fs['seconds']:.1f} sn")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -128,6 +172,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="10-K/10-Q metinlerini indir; duygu, risk farkı, gömme ve skor üret")
     parser.add_argument("--force", action="store_true",
                         help="--analyze ile: önceden analiz edilmiş başvuruları yeniden işle")
+    parser.add_argument("--no-sentence-cache", action="store_true",
+                        help="--analyze ile: önceki cümle duygu sonuçlarını kullanma "
+                             "(modelin gerçek hızını ölçmek için)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if args.analyze and args.no_db:
@@ -174,7 +221,8 @@ def main(argv: list[str] | None = None) -> int:
 
             try:
                 summary = run_analysis_for_company(session, client, company.id,
-                                                   progress=progress, force=args.force)
+                                                   progress=progress, force=args.force,
+                                                   sentence_cache=not args.no_sentence_cache)
             except Exception as e:  # analiz hatası diğer şirketleri durdurmasın
                 session.rollback()
                 log.error("%s analiz edilemedi: %s", query, e)

@@ -122,3 +122,10 @@ def get_frontend_dist() -> str | None:
 def get_documents_dir() -> str:
     """İndirilen rapor belgelerinin (10-K/10-Q HTML) saklandığı klasör."""
     return os.getenv("FINSIGHT_DOCUMENTS_DIR") or os.path.join(get_cache_dir(), "documents")
+
+
+def analyze_quarterly_enabled() -> bool:
+    """``FINSIGHT_ANALYZE_10Q`` (varsayılan 1). 0/false/no/off → "hızlı mod": en son 10-Q
+    başvuru listesinde görünür ama metni indirilip duygu/gömme analizi yapılmaz."""
+    raw = os.getenv("FINSIGHT_ANALYZE_10Q", "").strip().lower()
+    return raw not in ("0", "false", "no", "off", "hayir", "hayır")

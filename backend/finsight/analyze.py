@@ -7,7 +7,8 @@ FR-11 (skorun metin sinyalleri). Veritabanı ve ağ erişimi yoktur; ``jobs.py``
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+import time
+from collections.abc import Iterable, MutableMapping, Sequence
 from datetime import date, datetime
 
 import numpy as np
@@ -16,7 +17,7 @@ from .embeddings import HASHING_NAME, Embedder
 from .ratios import compute_ratios
 from .risk_diff import compare_risk_sections
 from .scoring import compute_score
-from .sentiment import SentimentModel, summarize
+from .sentiment import SentimentModel, normalize_sentence, summarize
 from .text_extract import chunk_text, content_sentences, extract_sections, html_to_text
 
 # NLP ölçümü: hashing gömücüsünde benzerlik sinyali parça uzunluğunun kareköküyle düşer;
@@ -80,14 +81,19 @@ def _pick(filings: Iterable[dict], base: str, count: int) -> list[dict]:
     return candidates[:count]
 
 
-def select_filings_for_analysis(filings: list[dict]) -> list[dict]:
+def select_filings_for_analysis(filings: list[dict], *,
+                                include_quarterly: bool = True) -> list[dict]:
     """Analiz edilecek başvurular: en son iki 10-K + en son 10-Q (eskiden yeniye).
 
+    - ``include_quarterly=False`` ("hızlı mod", ``FINSIGHT_ANALYZE_10Q=0``): 10-Q seçilmez;
+      başvuru listesinde görünür ama metni indirilip analiz edilmez.
     - Orijinal başvuru tercih edilir; ``10-K/A`` / ``10-Q/A`` yalnızca aynı dönem için orijinal
       yoksa seçilir (değişiklik başvuruları çoğu zaman yalnızca Part III içerir).
     - ``primary_document`` alanı olup boş olan başvurular atlanır.
     """
-    selected = _pick(filings, ANNUAL_FORM, 2) + _pick(filings, QUARTERLY_FORM, 1)
+    selected = _pick(filings, ANNUAL_FORM, 2)
+    if include_quarterly:
+        selected += _pick(filings, QUARTERLY_FORM, 1)
     return sorted(selected, key=_sort_key)
 
 
@@ -109,20 +115,124 @@ def default_chunk_words(embedder: Embedder) -> int:
         else DEFAULT_CHUNK_WORDS
 
 
-def analyze_sections(html: bytes | str, form: str, *, sentiment_model: SentimentModel) -> list[dict]:
+PredictionCache = MutableMapping[str, dict]
+
+
+def _add(stats: dict | None, key: str, value: float) -> None:
+    if stats is not None:
+        stats[key] = stats.get(key, 0) + value
+
+
+def predict_with_cache(model: SentimentModel, sentences: Sequence[str], *,
+                       cache: PredictionCache | None = None,
+                       stats: dict | None = None) -> list[dict]:
+    """Cümle duygu tahmini; yinelenen ve önceden tahmin edilmiş cümleler modele gitmez.
+
+    - Anahtar ``normalize_sentence`` (yalnızca boşluk normalizasyonu): aynı anahtar modele
+      aynı girdiyi verir, dolayısıyla sonucu değiştirmez.
+    - ``cache`` (anahtar → {label, score}) verilirse önce ona bakılır ve yeni tahminler ona
+      yazılır (aynı şirketin önceki başvuruları / aynı çalıştırmadaki önceki başvurular).
+      Önbellek tek bir duygu modeline aittir; çağıran farklı modellerin sonuçlarını karıştırmaz.
+    - Bir çağrıdaki yinelenen cümleler her durumda bir kez tahmin edilir.
+    - Modele tek toplu çağrı gider (sıralı gruplama modelin içinde yapılır).
+
+    ``stats`` sayaçları: sentences, predicted, cache_hits, duplicates, sentiment_s.
+    """
+    started = time.perf_counter()
+    known: PredictionCache = cache if cache is not None else {}
+    keys = [normalize_sentence(s) for s in sentences]
+    todo_keys: list[str] = []
+    todo_texts: list[str] = []
+    seen: set[str] = set()
+    hits = duplicates = 0
+    for key, sentence in zip(keys, sentences):
+        if key in seen:
+            duplicates += 1
+            continue
+        seen.add(key)
+        if key in known:
+            hits += 1
+        else:
+            todo_keys.append(key)
+            todo_texts.append(sentence)
+    if todo_texts:
+        predictions = model.predict(todo_texts)
+        if len(predictions) != len(todo_texts):
+            raise ValueError("Duygu modeli cümle sayısı kadar tahmin döndürmedi")
+        for key, p in zip(todo_keys, predictions):
+            known[key] = {"label": p["label"], "score": float(p["score"])}
+    _add(stats, "sentences", len(keys))
+    _add(stats, "predicted", len(todo_texts))
+    _add(stats, "cache_hits", hits)
+    _add(stats, "duplicates", duplicates)
+    _add(stats, "sentiment_s", time.perf_counter() - started)
+    return [dict(known[k]) for k in keys]
+
+
+# Adım süreleri (sn) — ingest CLI özetinde bu sırayla ve bu adlarla yazılır.
+TIMING_STEPS: tuple[tuple[str, str], ...] = (
+    ("model_load", "Model yükleme"),
+    ("download", "Belge indirme"),
+    ("html_to_text", "HTML → metin"),
+    ("sections", "Bölüm ayıklama"),
+    ("cache_load", "Cümle önbelleği yükleme"),
+    ("sentiment", "Duygu analizi"),
+    ("embedding", "Gömme"),
+    ("save", "Veritabanına yazma"),
+    ("risk", "Risk karşılaştırması"),
+    ("score", "Skor"),
+)
+
+
+def _rate(count: float, seconds: float) -> float | None:
+    return round(count / seconds, 2) if seconds > 0 and count else None
+
+
+def sentiment_stats(stats: dict, *, cache_enabled: bool, cache_preloaded: int = 0) -> dict:
+    """analyze.predict_with_cache sayaçlarından duygu özeti (cümle/sn dahil)."""
+    seconds = float(stats.get("sentiment_s", 0.0))
+    sentences = int(stats.get("sentences", 0))
+    predicted = int(stats.get("predicted", 0))
+    return {
+        "sentences": sentences,
+        "predicted": predicted,
+        "cache_hits": int(stats.get("cache_hits", 0)),
+        "duplicates": int(stats.get("duplicates", 0)),
+        "seconds": round(seconds, 3),
+        # Etkin hız: tüm cümleler / süre; model hızı: modele giden cümleler / süre.
+        "sentences_per_second": _rate(sentences, seconds),
+        "model_sentences_per_second": _rate(predicted, seconds),
+        "cache_enabled": cache_enabled,
+        "cache_preloaded": cache_preloaded,
+    }
+
+
+def analyze_sections(html: bytes | str, form: str, *, sentiment_model: SentimentModel,
+                     prediction_cache: PredictionCache | None = None,
+                     stats: dict | None = None) -> list[dict]:
     """HTML → bölümler (belge sırasıyla) + cümle duyguları + özet. Gömme yapılmaz.
 
-    Duygu tahmini bölüm başına tek toplu (batch) çağrıyla yapılır.
+    Duygu tahmini belge başına tek toplu (batch) çağrıyla yapılır; yinelenen cümleler ve
+    ``prediction_cache``'te bulunanlar modele gönderilmez (bkz. predict_with_cache).
+    ``stats`` verilirse adım süreleri (html_to_text_s, sections_s, sentiment_s) ve duygu
+    sayaçları eklenir.
     """
+    t0 = time.perf_counter()
     text = html_to_text(html)
+    t1 = time.perf_counter()
+    _add(stats, "html_to_text_s", t1 - t0)
     sections = sorted(extract_sections(text, form).values(), key=lambda s: s["char_start"])
+    # Alt başlıklar ("Risks Related to Our Business") duygu cümlesi sayılmaz (R2).
+    per_section = [content_sentences(sec["text"]) for sec in sections]
+    _add(stats, "sections_s", time.perf_counter() - t1)
+    flat = [s for sentences in per_section for s in sentences]
+    flat_predictions = predict_with_cache(sentiment_model, flat, cache=prediction_cache,
+                                          stats=stats) if flat else []
     out = []
-    for sec in sections:
-        # Alt başlıklar ("Risks Related to Our Business") duygu cümlesi sayılmaz (R2).
-        sentences = content_sentences(sec["text"])
-        predictions = sentiment_model.predict(sentences) if sentences else []
-        if len(predictions) != len(sentences):
-            raise ValueError("Duygu modeli cümle sayısı kadar tahmin döndürmedi")
+    offset = 0
+    for sec, sentences in zip(sections, per_section):
+        predictions = flat_predictions[offset:offset + len(sentences)]
+        offset += len(sentences)
         out.append({
             "item_code": sec["item_code"],
             "title": sec["title"],
@@ -159,7 +269,8 @@ def embed_sections(sections: list[dict], *, embedder: Embedder,
 
 
 def analyze_document(html: bytes | str, form: str, *, sentiment_model: SentimentModel,
-                     embedder: Embedder, chunk_words: int | None = None) -> dict:
+                     embedder: Embedder, chunk_words: int | None = None,
+                     prediction_cache: PredictionCache | None = None) -> dict:
     """Bir başvuru belgesinin tam analizi.
 
     Dönüş: ``{"sections": [{item_code, title, text, char_start, char_end, word_count,
@@ -167,7 +278,8 @@ def analyze_document(html: bytes | str, form: str, *, sentiment_model: Sentiment
     embedding}]}], "sentiment_model", "embedding_model", "embedding_dim", "chunk_words"}``.
     """
     words = chunk_words or default_chunk_words(embedder)
-    sections = analyze_sections(html, form, sentiment_model=sentiment_model)
+    sections = analyze_sections(html, form, sentiment_model=sentiment_model,
+                                prediction_cache=prediction_cache)
     embed_sections(sections, embedder=embedder, chunk_words=words)
     return {
         "sections": sections,

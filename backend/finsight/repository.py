@@ -20,6 +20,7 @@ from .models import (ChunkEmbedding, Company, CompanyScore, Filing, FilingDocume
                      FilingSection, FinancialFact, IngestionJob, QALog, RiskChange,
                      RiskComparison, SentimentResult, TextChunk, utcnow)
 from .scoring import WEIGHTS_VERSION
+from .sentiment import LABELS, normalize_sentence
 from .text_extract import SECTION_TITLES
 from .views import json_safe
 
@@ -458,6 +459,44 @@ def load_sentiment_sections(session: Session, company_id: int) -> list[dict]:
             "sentences": [{"index": r.sentence_index, "sentence": r.sentence, "label": r.label,
                            "score": float(r.score)} for r in results],
         })
+    return out
+
+
+def load_sentence_predictions(session: Session, company_id: int,
+                              model_name: str) -> dict[str, dict]:
+    """Şirketin `model_name` ile kaydedilmiş cümle duyguları: normalize metin → {label, score}.
+
+    analyze.predict_with_cache için önbellek: aynı model + aynı metin = aynı sonuç, bu yüzden
+    yeni (veya --force ile yeniden) analiz edilen başvurularda tekrar eden cümleler modele
+    gönderilmez. Yalnızca bu modelin satırları okunur; farklı model adları karışmaz.
+    """
+    stmt = (select(SentimentResult.sentence, SentimentResult.label, SentimentResult.score)
+            .join(FilingSection, FilingSection.id == SentimentResult.section_id)
+            .join(Filing, Filing.id == FilingSection.filing_id)
+            .where(Filing.company_id == company_id, SentimentResult.model_name == model_name)
+            .order_by(SentimentResult.id))
+    out: dict[str, dict] = {}
+    for sentence, label, score in session.execute(stmt):
+        key = normalize_sentence(sentence or "")
+        if key and key not in out and label in LABELS and score is not None:
+            out[key] = {"label": label, "score": float(score)}
+    return out
+
+
+def load_company_sentences(session: Session, company_id: int) -> list[str]:
+    """Şirketin kayıtlı tüm (farklı) duygu cümleleri, kayıt sırasıyla (bench_sentiment)."""
+    stmt = (select(SentimentResult.sentence)
+            .join(FilingSection, FilingSection.id == SentimentResult.section_id)
+            .join(Filing, Filing.id == FilingSection.filing_id)
+            .where(Filing.company_id == company_id)
+            .order_by(SentimentResult.id))
+    seen: set[str] = set()
+    out: list[str] = []
+    for sentence in session.scalars(stmt):
+        key = normalize_sentence(sentence or "")
+        if key and key not in seen:
+            seen.add(key)
+            out.append(sentence)
     return out
 
 

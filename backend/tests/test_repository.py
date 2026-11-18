@@ -29,7 +29,7 @@ from finsight.models import (ChunkEmbedding, Company, CompanyScore, Filing,  # n
 from finsight.pipeline import collect  # noqa: E402
 from finsight.risk_diff import compare_risk_sections  # noqa: E402
 from finsight.scoring import compute_score  # noqa: E402
-from finsight.sentiment import LexiconModel  # noqa: E402
+from finsight.sentiment import LexiconModel, normalize_sentence  # noqa: E402
 
 KESTREL_10K = pathlib.Path(__file__).parent / "fixtures" / "nlp" / "kestrel_10k.html"
 
@@ -151,6 +151,28 @@ def test_save_analysis_document_and_reanalysis_replaces_rows(session, data):
     assert doc.sha256 == "cd" and doc.local_path is None
     assert repo.load_section_text(session, filing["id"], "1A").startswith("Risks Related")
     assert repo.load_section_text(session, filing["id"], "99") is None
+
+
+def test_load_sentence_predictions_filters_company_and_model(session, data):
+    """Cümle önbelleği: yalnızca bu şirketin, bu duygu modeliyle kaydedilmiş sonuçları."""
+    company = repo.save_collected(session, data)
+    filing = repo.load_filings(session, company.id, form="10-K")[-1]
+    result = analysis()
+    repo.save_analysis_document(session, filing["id"], result)
+    sentences = [x for sec in result["sections"] for x in sec["sentences"]]
+    unique = {normalize_sentence(x["sentence"]) for x in sentences}
+
+    cache = repo.load_sentence_predictions(session, company.id, "lexicon-fallback")
+    assert set(cache) == unique
+    first = sentences[0]
+    assert cache[normalize_sentence(first["sentence"])] == {
+        "label": first["label"], "score": pytest.approx(first["score"])}
+    assert repo.load_sentence_predictions(session, company.id, "ProsusAI/finbert") == {}
+    assert repo.load_sentence_predictions(session, company.id + 999, "lexicon-fallback") == {}
+
+    texts = repo.load_company_sentences(session, company.id)
+    assert len(texts) == len(unique)
+    assert {normalize_sentence(t) for t in texts} == unique
 
 
 def test_sentiment_sections_and_rag_chunks(session, data):

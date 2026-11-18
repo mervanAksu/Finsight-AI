@@ -14,7 +14,7 @@ from finsight.analyze import (CHUNK_OVERLAP_WORDS, DEFAULT_CHUNK_WORDS, HASHING_
                               select_filings_for_analysis)
 from finsight.edgar import parse_filings
 from finsight.embeddings import HashingEmbedder
-from finsight.sentiment import LexiconModel
+from finsight.sentiment import LexiconModel, normalize_sentence
 from finsight.xbrl import extract_all
 
 NLP = pathlib.Path(__file__).parent / "fixtures" / "nlp"
@@ -119,8 +119,9 @@ def test_analyze_document_10k_sections_sentiment_and_chunks():
     assert result["embedding_model"] == "hashing-fallback"
     assert result["embedding_dim"] == embedder.dim
     assert result["chunk_words"] == HASHING_CHUNK_WORDS
-    # Duygu tahmini bölüm başına tek toplu çağrı
-    assert model.calls == [len(s["sentences"]) for s in sections]
+    # Duygu tahmini belge başına tek toplu çağrı; yinelenen cümleler bir kez tahmin edilir
+    unique = {normalize_sentence(x["sentence"]) for s in sections for x in s["sentences"]}
+    assert model.calls == [len(unique)]
 
     risk = sections[0]
     assert risk["title"] == "Risk Faktörleri"

@@ -1,7 +1,8 @@
 """Cümle düzeyinde finansal duygu (ton) analizi (FR-08).
 
-- `FinBertModel`: ProsusAI/finbert (transformers, CPU). İsteğe bağlı ağır bağımlılık;
-  yalnızca kurucu içinde içe aktarılır.
+- `FinBertModel`: ProsusAI/finbert (torch + transformers, CPU). İsteğe bağlı ağır bağımlılık;
+  yalnızca kurucu içinde içe aktarılır. Uzunluğa göre sıralı dinamik dolgulu gruplar,
+  inference_mode; isteğe bağlı int8 / kısa max_length (README "Performans").
 - `LexiconModel`: transformers yoksa yedek. Finans odaklı küçük gömülü sözlük
   (Loughran-McDonald yaklaşımından esinlenen ama listesi bu projede yazılmış kısa bir
   sözlük). `LM_DICTIONARY_PATH` ortam değişkeni Loughran-McDonald Master Dictionary
@@ -19,6 +20,8 @@ import os
 import re
 from collections.abc import Sequence
 from typing import Protocol
+
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -44,34 +47,212 @@ _FINBERT_LABEL_MAP = {
     "label_0": "positive", "label_1": "negative", "label_2": "neutral",
 }
 
+DEFAULT_FINBERT_BATCH = 32
+DEFAULT_FINBERT_MAX_LENGTH = 512  # BERT-base üst sınırı; doğruluğu korumak için varsayılan
+MIN_FINBERT_MAX_LENGTH = 16
+
+
+def _env_int(name: str, default: int | None) -> int | None:
+    """Pozitif tam sayı ortam değişkeni; boş/geçersiz ise varsayılan (uyarıyla)."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        log.warning("%s tam sayı olmalı (%r); varsayılan kullanılıyor.", name, raw)
+        return default
+    if value < 1:
+        log.warning("%s pozitif olmalı (%r); varsayılan kullanılıyor.", name, raw)
+        return default
+    return value
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def normalize_sentence(sentence: str) -> str:
+    """Önbellek anahtarı: boşluklar tek boşluğa indirgenir, baş/son boşluk atılır.
+
+    BERT belirteçleyicisi metni boşluklardan böldüğü için boşluk farkı modele aynı girdiyi
+    verir; harf, noktalama ve Unicode biçimi DEĞİŞTİRİLMEZ (aynı anahtar = aynı model girdisi).
+    """
+    return " ".join(sentence.split())
+
+
+def finbert_variant_name(base: str, max_length: int, quantized: bool) -> str:
+    """Model adı + doğruluğu etkileyebilecek ayarların izi.
+
+    Varsayılan ayarlarda (512, kuantizasyonsuz) ad değişmez ("ProsusAI/finbert"). int8 veya
+    kısaltılmış max_length sonuçları ayrı model adıyla kaydedilir; böylece cümle önbelleği ve
+    "aynı modelle analiz edildi" denetimi farklı ayarların sonuçlarını karıştırmaz.
+    """
+    name = base
+    if quantized:
+        name += "+int8"
+    if max_length != DEFAULT_FINBERT_MAX_LENGTH:
+        name += f"+len{max_length}"
+    return name
+
+
+def finbert_max_length_from_env() -> int:
+    value = _env_int("FINSIGHT_FINBERT_MAX_LENGTH", DEFAULT_FINBERT_MAX_LENGTH)
+    assert value is not None
+    return max(MIN_FINBERT_MAX_LENGTH, min(DEFAULT_FINBERT_MAX_LENGTH, value))
+
+
+def configured_finbert_name(base: str = FINBERT_NAME) -> str:
+    """Ortam değişkenlerine göre FinBERT'in kaydedileceği ad (modeli YÜKLEMEDEN, /health)."""
+    return finbert_variant_name(base, finbert_max_length_from_env(),
+                                _env_flag("FINSIGHT_FINBERT_QUANTIZE"))
+
+
+def length_sorted_batches(lengths: Sequence[int], batch_size: int) -> list[list[int]]:
+    """Cümle indekslerini belirteç uzunluğuna göre (uzundan kısaya, eşitlikte orijinal sıra)
+    sıralayıp ``batch_size``'lık gruplara böler.
+
+    Benzer uzunluktaki cümleler aynı gruba düştüğü için ``padding="longest"`` ile grup içi
+    dolgu (padding) en aza iner. En uzun grup başta işlenir: bellek sorunu varsa hemen görülür.
+    """
+    if batch_size < 1:
+        raise ValueError("batch_size en az 1 olmalı")
+    order = sorted(range(len(lengths)), key=lambda i: (-int(lengths[i]), i))
+    return [order[i:i + batch_size] for i in range(0, len(order), batch_size)]
+
+
+def restore_order(batches: Sequence[Sequence[int]], batch_outputs: Sequence[Sequence],
+                  n: int) -> list:
+    """``length_sorted_batches`` gruplarının çıktılarını orijinal cümle sırasına yerleştirir."""
+    if len(batches) != len(batch_outputs):
+        raise ValueError("Grup ve çıktı sayıları eşit olmalı")
+    out: list = [None] * n
+    filled = [False] * n
+    for indices, outputs in zip(batches, batch_outputs):
+        if len(indices) != len(outputs):
+            raise ValueError("Grup çıktısı grup boyutuyla eşleşmiyor")
+        for i, value in zip(indices, outputs):
+            if filled[i]:
+                raise ValueError(f"İndeks iki kez dolduruldu: {i}")
+            out[i] = value
+            filled[i] = True
+    if not all(filled):
+        raise ValueError("Bazı cümlelerin tahmini eksik")
+    return out
+
+
+def _label_list(config) -> list[str]:
+    """model.config.id2label → indeks sırasıyla proje etiketleri (bilinmeyen → neutral)."""
+    id2label = dict(getattr(config, "id2label", None) or {})
+    n = len(id2label) or int(getattr(config, "num_labels", 0) or 3)
+    labels = []
+    for i in range(n):
+        raw = id2label.get(i, id2label.get(str(i), f"LABEL_{i}"))
+        labels.append(_FINBERT_LABEL_MAP.get(str(raw).lower(), "neutral"))
+    return labels
+
+
+def _to_numpy(logits) -> np.ndarray:
+    if hasattr(logits, "detach"):  # torch.Tensor
+        logits = logits.detach().float().cpu().numpy()
+    return np.asarray(logits, dtype=np.float64)
+
+
+def _softmax_top(logits, labels: Sequence[str]) -> list[dict]:
+    arr = _to_numpy(logits)
+    if arr.ndim == 1:
+        arr = arr[None, :]
+    arr = arr - arr.max(axis=1, keepdims=True)
+    probs = np.exp(arr)
+    probs /= probs.sum(axis=1, keepdims=True)
+    best = probs.argmax(axis=1)
+    return [{"label": labels[b] if b < len(labels) else "neutral", "score": float(probs[k, b])}
+            for k, b in enumerate(best)]
+
+
+def _quantize_dynamic(torch, model):
+    """nn.Linear katmanlarını int8 dinamik kuantize eder (CPU). Hata yükseltebilir."""
+    ao = getattr(getattr(torch, "ao", None), "quantization", None)
+    fn = getattr(ao, "quantize_dynamic", None)
+    if fn is None:  # eski torch sürümleri
+        fn = torch.quantization.quantize_dynamic
+    return fn(model, {torch.nn.Linear}, dtype=torch.qint8)
+
 
 class FinBertModel:
-    """transformers `text-classification` hattı ile FinBERT (CPU)."""
+    """FinBERT (ProsusAI/finbert) — CPU, doğrudan AutoTokenizer + AutoModel ile.
+
+    Hız iyileştirmeleri (doğruluğu değiştirmez, varsayılan açık):
+    - ``torch.inference_mode()`` (otomatik türev kaydı yok),
+    - cümleler belirteç uzunluğuna göre sıralanıp ``padding="longest"`` ile gruplanır
+      (kısa cümleler 512'ye kadar doldurulmaz), sonuçlar orijinal sıraya geri yerleştirilir,
+    - grup boyutu 32 (``FINSIGHT_FINBERT_BATCH``), iş parçacığı sayısı
+      ``FINSIGHT_TORCH_THREADS`` (verilmezse torch varsayılanı).
+
+    Doğruluğu etkileyebilecek ayarlar (varsayılan KAPALI; ``bench_sentiment`` ile ölçün):
+    - ``FINSIGHT_FINBERT_MAX_LENGTH`` (varsayılan 512),
+    - ``FINSIGHT_FINBERT_QUANTIZE=1``: nn.Linear int8 dinamik kuantizasyon; hata olursa
+      uyarıyla normal modele düşülür.
+    Bu ikisi değiştirilirse model adına "+int8" / "+len256" eklenir (bkz. finbert_variant_name).
+    """
 
     name = FINBERT_NAME
 
-    def __init__(self, model_name: str = FINBERT_NAME, batch_size: int = 16) -> None:
-        from transformers import pipeline  # ağır bağımlılık: lazy import
+    def __init__(self, model_name: str = FINBERT_NAME, batch_size: int | None = None, *,
+                 max_length: int | None = None, quantize: bool | None = None,
+                 threads: int | None = None, tokenizer=None, model=None) -> None:
+        import torch  # ağır bağımlılık: lazy import
 
-        self.name = model_name
-        self.batch_size = batch_size
-        self._pipe = pipeline(
-            "text-classification", model=model_name, tokenizer=model_name, device=-1
-        )
+        self._torch = torch
+        self.base_name = model_name
+        self.batch_size = batch_size or _env_int("FINSIGHT_FINBERT_BATCH", DEFAULT_FINBERT_BATCH) \
+            or DEFAULT_FINBERT_BATCH
+        if max_length is None:
+            max_length = finbert_max_length_from_env()
+        self.max_length = max(MIN_FINBERT_MAX_LENGTH, min(DEFAULT_FINBERT_MAX_LENGTH,
+                                                          int(max_length)))
+        threads = threads if threads is not None else _env_int("FINSIGHT_TORCH_THREADS", None)
+        if threads:
+            torch.set_num_threads(int(threads))
+        if tokenizer is None or model is None:
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+            if tokenizer is None:
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+            if model is None:
+                model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        model.eval()
+        self.quantized = False
+        if quantize if quantize is not None else _env_flag("FINSIGHT_FINBERT_QUANTIZE"):
+            try:
+                model = _quantize_dynamic(torch, model)
+                self.quantized = True
+            except Exception as exc:  # desteklenmeyen platform / torch sürümü
+                log.warning("FinBERT int8 kuantizasyonu yapılamadı (%s: %s); normal model "
+                            "kullanılıyor.", type(exc).__name__, exc)
+        self._tokenizer = tokenizer
+        self._model = model
+        self._labels = _label_list(getattr(model, "config", None))
+        self.name = finbert_variant_name(model_name, self.max_length, self.quantized)
+
+    def token_lengths(self, sentences: Sequence[str]) -> list[int]:
+        """Kesme (truncation) sonrası özel belirteçler dahil uzunluklar."""
+        enc = self._tokenizer(list(sentences), truncation=True, max_length=self.max_length)
+        return [len(ids) for ids in enc["input_ids"]]
 
     def predict(self, sentences: Sequence[str]) -> list[dict]:
         if not sentences:
             return []
-        raw = self._pipe(
-            list(sentences), batch_size=self.batch_size, truncation=True, max_length=512
-        )
-        out = []
-        for r in raw:
-            if isinstance(r, list):  # bazı sürümler top_k ile liste döndürür
-                r = max(r, key=lambda x: x["score"])
-            label = _FINBERT_LABEL_MAP.get(str(r["label"]).lower(), "neutral")
-            out.append({"label": label, "score": float(r["score"])})
-        return out
+        texts = list(sentences)
+        batches = length_sorted_batches(self.token_lengths(texts), self.batch_size)
+        outputs = []
+        with self._torch.inference_mode():
+            for indices in batches:
+                enc = self._tokenizer([texts[i] for i in indices], truncation=True,
+                                      max_length=self.max_length, padding="longest",
+                                      return_tensors="pt")
+                outputs.append(_softmax_top(self._model(**enc).logits, self._labels))
+        return restore_order(batches, outputs, len(texts))
 
 
 # --------------------------------------------------------------------------- sözlük modeli
