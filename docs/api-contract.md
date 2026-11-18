@@ -187,6 +187,10 @@ Gövde: `{"question": "Tedarik zinciri riskleri nasıl değişti?"}` (1–500 ka
  "model": "claude-haiku-5-5", "latency_ms": 2140, "disclaimer": "..."}
 ```
 `mode`: `llm` (LLM cevabı) | `extractive` (LLM yok; en ilgili alıntılar) | `not_found`.
+`advice_refused` (bool, her zaman var): soru yatırım tavsiyesi niyeti taşıyorsa `true`; cevabın
+başına sabit ret cümlesi eklenir, yalnızca rapor olguları verilir. `warning` (isteğe bağlı
+string): ör. parçalar farklı bir gömme modeliyle oluşturulmuşsa yeniden analiz uyarısı.
+LLM cevabındaki tavsiye cümleleri ve atıfsız sayısal cümleler sunucuda ayıklanır.
 `found=false` iken `answer` "Bu bilgi işlenen raporlarda bulunamadı." anlamında bir cümledir ve `sources` boştur.
 
 ## GET /api/compare?tickers=AAPL,MSFT

@@ -12,7 +12,7 @@ UA = "FinSight-AI Test test@example.com"
 
 
 def load(name: str) -> dict:
-    return json.loads((FIXTURES / name).read_text())
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 class FakeClock:

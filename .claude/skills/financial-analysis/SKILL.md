@@ -26,7 +26,13 @@ Değişiklik gerekiyorsa önce bu dosya güncellenir.
 | stockholders_equity | anlık | StockholdersEquity, StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest | — |
 
 - Yalnızca `form ∈ {10-K, 10-K/A}` kayıtları; süreli kalemde 330–400 gün; anlık kalemde `start` yok.
-- Aynı dönem için: önce daha öncelikli etiket, sonra en son `filed`.
+- **Birincil etiket kuralı:** her kalem için birincil etiket, adaylar arasında en son
+  `period_end`'e sahip etikettir (eşitlikte tablodaki öncelik sırası). Önce birincil etiketin
+  tüm dönemleri alınır; birincilde olmayan dönemler için öncelik sırasıyla diğer etiketlere
+  düşülür. (Gerekçe: etiket geçişinde şirket eski yılı yeni etiketle yeniden düzenlenmiş
+  karşılaştırma değeri olarak raporlar; eski etiketteki farklı tanımlı değer yerine aynı
+  tanımlı değer kullanılır ve YoY tutarlı olur.)
+- Aynı dönem için: önce birincil etiket, sonra öncelik sırası, aynı etikette en son `filed`.
 - Türetilmiş değerler `tag = "derived"` ve `derived_from` (kullanılan etiketler) ile işaretlenir;
   kaynak accession, türetmede kullanılan **en son** başvurununkidir.
 - Ortalama hesapları için bilanço kalemleri bir yıl fazla (son 4 dönem sonu) çekilir.
@@ -34,9 +40,14 @@ Değişiklik gerekiyorsa önce bu dosya güncellenir.
 ## 2. Oranlar
 
 Değerler **ham oran** olarak saklanır (0.253 = %25,3). `unit`: `"percent"` veya `"times"`.
-Aynı `period_end` (mali yıl sonu) için hesaplanır. Ortalama = (dönem sonu + bir önceki mali
-yıl sonu) / 2; önceki dönem yoksa dönem sonu değeri kullanılır ve `note` alanına
-"ortalama yerine dönem sonu değeri" yazılır.
+Dönemler: revenue ∪ net_income ∪ total_assets mali yıl sonlarının birleşimi; birbirine 30
+günden yakın tarihler tek dönemdir (en son tarih tutulur), son `periods` dönem alınır.
+Her kalem dönemin `period_end`'ine ±7 gün toleransla (en yakın) eşlenir (52–53 haftalık yıl,
+gelir 28 Aralık / bilanço 31 Aralık). Ortalama = (dönem sonu + bir önceki mali yıl sonu) / 2
+(önceki = 330–400 gün önce); önceki dönem yoksa dönem sonu değeri kullanılır ve `note`
+alanına "ortalama yerine dönem sonu değeri" yazılır. ROE'de önceki dönem özkaynağı ≤ 0 ise
+ortalama yerine dönem sonu değeri kullanılır; `note`: "önceki dönem özkaynağı negatif;
+ortalama yerine dönem sonu değeri".
 
 | key | Ad | Formül | unit | Yüksek iyi mi |
 | --- | --- | --- | --- | --- |
@@ -60,7 +71,8 @@ Hesaplanamama kuralları (değer `None`, `status = "missing"`, `reason` dolu):
 - Birden fazla girdi eksikse neden virgülle birleşir: "eksik veri: operating_cash_flow, capex".
 - Eksik oranlarda da bulunan girdiler `inputs` içinde listelenir (izlenebilirlik).
 
-Dönemsel değişim (YoY): `(cur − prev) / |prev|`; `prev` 0 veya yoksa `None`.
+Dönemsel değişim (YoY): `(cur − prev) / |prev|`; `prev` 0 veya yoksa `None`. İki öğenin
+`period_end` farkı 330–400 gün değilse (eksik yıl, mali yıl sonu değişimi) de `None`.
 (Not: mevcut `xbrl.yoy_changes` yüzde döndürür ve negatif tabanda `None` verir; yeni kod
 oran döndürür ve mutlak değerle böler. Bu fark API'de belgelenir.)
 
@@ -81,7 +93,7 @@ mali yıl içindir.
 | leverage (Kaldıraç ve borç) | 20 | debt_to_equity lin(3.0, 0.5) (ters); liabilities_to_assets lin(0.9, 0.3) (ters); özkaynak ≤ 0 ise bileşen puanı 0 |
 | liquidity (Likidite) | 15 | current_ratio lin(0.5, 2.0) |
 | cash_quality (Nakit akışı kalitesi) | 15 | ocf_to_net_income lin(0, 1.2) — net kâr ≤ 0 ise: OCF > 0 → 50, değilse 0; fcf_margin lin(−0.05, 0.15) |
-| growth (Büyüme) | 10 | revenue YoY lin(−0.10, 0.15); net_income YoY lin(−0.20, 0.20) |
+| growth (Büyüme) | 10 | revenue YoY lin(−0.10, 0.15); net_income YoY lin(−0.20, 0.20) — önceki yıl net kârı ≤ 0 ise net kâr büyüme göstergesi yok (zarardan kâra geçişte yüzde anlamlı değil; `reason` dolu, bileşen yalnızca gelir büyümesiyle hesaplanır) |
 | text_tone (Metin tonu) | 10 | son 10-K MD&A net tonu lin(−0.40, 0.20); MD&A yoksa risk bölümü net tonu lin(−0.80, −0.20) |
 | risk_change (Risk değişimi) | 5 | son iki 10-K arasında eklenen risk paragrafı sayısı lin(15, 0) (ters) |
 

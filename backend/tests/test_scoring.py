@@ -240,3 +240,18 @@ def test_text_tone_falls_back_to_risk_section():
 def test_text_signals_none_is_accepted():
     r = score_for(one_year(**CLEAN), None)
     assert "text_tone" in r["missing_components"]
+
+
+def test_growth_uses_tolerant_period_matching():
+    # D1: gelir/net kâr 28 Aralık (52–53 hafta), bilanço 31 Aralık → aynı dönem; büyüme hesaplanır.
+    flow, prev_flow, bs = date(2024, 12, 28), date(2023, 12, 30), date(2024, 12, 31)
+    facts = {"revenue": [fact("revenue", prev_flow, 900), fact("revenue", flow, 1000)],
+             "net_income": [fact("net_income", prev_flow, 80), fact("net_income", flow, 100)],
+             "total_assets": [fact("total_assets", bs, 2000)],
+             "stockholders_equity": [fact("stockholders_equity", bs, 800)]}
+    result = compute_score(compute_ratios(facts), facts, NO_SIGNALS)
+    assert result["as_of_period"] in (bs, bs.isoformat())
+    growth = comp(result, "growth")
+    assert ind(growth, "revenue_yoy")["value"] == pytest.approx(100 / 900)
+    assert ind(growth, "net_income_yoy")["value"] == pytest.approx(0.25)
+    assert ind(comp(result, "profitability"), "roa")["value"] == pytest.approx(100 / 2000)

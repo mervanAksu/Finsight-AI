@@ -43,7 +43,9 @@ description: SEC EDGAR'a (submissions, companyfacts, belge arşivi) erişen veya
 | 10-Q | Part II, Item 1A | Part I, Item 2, Item 3'e kadar |
 | 8-K | — | `items` alanındaki madde numaraları (2.02 faaliyet sonuçları, 5.02 yönetici değişikliği …) |
 
-Başlıklar içindekiler tablosunda da geçer: ilk eşleşme genelde içindekilerdir. En güvenli
-yöntem, her "Item X" başlık adayından bir sonraki bitiş başlığına kadar olan metni alıp
-**en uzun** adayı seçmektir. Küçük şirketler (smaller reporting company) Item 1A'yı
+Başlıklar içindekiler tablosunda da geçer: ilk eşleşme genelde içindekilerdir. Kural
+(`text_extract.py`): yalnızca **başlık benzeri** satırlar aday olur (≤ 150 karakter, başlıktan
+sonra virgül/küçük harfle devam eden cümle yok, önceki satırın devamı değil — "see Item 1A of
+this report" gibi çapraz atıflar elenir). Bitişine 50 kelimeden az olan aday içindekiler
+sayılır; kalanlardan **ilki** seçilir, hiçbiri yoksa en uzun adaya düşülür. Küçük şirketler (smaller reporting company) Item 1A'yı
 "Not applicable" diye geçebilir; bu durumda bölüm boş kabul edilir.
