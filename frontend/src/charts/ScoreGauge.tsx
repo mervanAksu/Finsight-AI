@@ -5,7 +5,7 @@ import { fmtScore, scoreTone } from "../format";
 import type { Tone } from "../format";
 import { bandLabel, useI18n } from "../i18n";
 
-const BANDS: Array<{ from: number; to: number; tone: Tone; name: string }> = [
+export const BANDS: Array<{ from: number; to: number; tone: Tone; name: string }> = [
   { from: 0, to: 45, tone: "negative", name: "Zayıf" },
   { from: 45, to: 60, tone: "warning", name: "İzlenmeli" },
   { from: 60, to: 75, tone: "accent", name: "Dengeli" },
@@ -126,7 +126,7 @@ export function ScoreRing({ total, size = 56, stroke = 5 }: { total: number | nu
             d={gen({ innerRadius: r - stroke / 2, outerRadius: r + stroke / 2, startAngle: 0, endAngle: end }) ?? ""}
           />
         )}
-        <text className="ring-text" textAnchor="middle" dy="0.35em">
+        <text className="ring-text" textAnchor="middle" dy="0.35em" style={{ fontSize: Math.round(size * 0.3) }}>
           {total === null ? "—" : Math.round(total)}
         </text>
       </g>

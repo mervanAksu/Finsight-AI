@@ -1,6 +1,7 @@
 // Kelime düzeyinde fark (LCS). Risk paragraflarının eski/yeni sürümlerini vurgulamak için.
 
-export type DiffOp = { type: "same" | "add" | "del"; text: string };
+/** `same` işlemlerinde `oldText` eski metindeki karşılığıdır (noktalama farkı olabilir). */
+export type DiffOp = { type: "same" | "add" | "del"; text: string; oldText?: string };
 
 /** Metni kelimelere ve aradaki boşluklara ayırır; boşluklar önceki kelimeye eklenir. */
 function tokenize(text: string): string[] {
@@ -29,16 +30,20 @@ export function wordDiff(oldText: string, newText: string): DiffOp[] | null {
     }
   }
   const ops: DiffOp[] = [];
-  const push = (type: DiffOp["type"], text: string) => {
+  const push = (type: DiffOp["type"], text: string, oldText?: string) => {
     const last = ops[ops.length - 1];
-    if (last && last.type === type) last.text += text;
-    else ops.push({ type, text });
+    if (last && last.type === type) {
+      last.text += text;
+      if (oldText !== undefined) last.oldText = (last.oldText ?? "") + oldText;
+    } else {
+      ops.push(oldText !== undefined ? { type, text, oldText } : { type, text });
+    }
   };
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
     if (an[i] === bn[j]) {
-      push("same", b[j]);
+      push("same", b[j], a[i]);
       i++;
       j++;
     } else if (dp[i + 1][j] >= dp[i][j + 1]) {

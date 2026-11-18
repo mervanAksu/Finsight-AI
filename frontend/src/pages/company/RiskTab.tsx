@@ -254,6 +254,19 @@ function ChangeItem({ change }: { change: RiskChange }) {
   );
 }
 
+/** Vurguyu yalnızca kelimelere uygular; sondaki boşluk vurgunun dışında kalır. */
+function Mark({ text, kind }: { text: string; kind: "add" | "del" }) {
+  const m = /^([\s\S]*?)(\s*)$/.exec(text);
+  const body = m ? m[1] : text;
+  const tail = m ? m[2] : "";
+  return (
+    <>
+      {kind === "del" ? <del className="w-del">{body}</del> : <ins className="w-add">{body}</ins>}
+      {tail}
+    </>
+  );
+}
+
 function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
   const { t } = useI18n();
   const ops = wordDiff(oldText, newText);
@@ -266,13 +279,7 @@ function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
             ? ops
                 .filter((o) => o.type !== "add")
                 .map((o, i) =>
-                  o.type === "del" ? (
-                    <del key={i} className="w-del">
-                      {o.text}
-                    </del>
-                  ) : (
-                    <span key={i}>{o.text}</span>
-                  ),
+                  o.type === "del" ? <Mark key={i} text={o.text} kind="del" /> : <span key={i}>{o.oldText ?? o.text}</span>,
                 )
             : oldText}
         </p>
@@ -283,15 +290,7 @@ function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
           {ops
             ? ops
                 .filter((o) => o.type !== "del")
-                .map((o, i) =>
-                  o.type === "add" ? (
-                    <ins key={i} className="w-add">
-                      {o.text}
-                    </ins>
-                  ) : (
-                    <span key={i}>{o.text}</span>
-                  ),
-                )
+                .map((o, i) => (o.type === "add" ? <Mark key={i} text={o.text} kind="add" /> : <span key={i}>{o.text}</span>))
             : newText}
         </p>
       </div>

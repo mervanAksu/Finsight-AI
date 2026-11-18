@@ -38,10 +38,12 @@ export function FilingsTab({ ticker }: { ticker: string }) {
               <thead>
                 <tr>
                   <th scope="col">{t("filings.form")}</th>
-                  <th scope="col">{t("filings.filed")}</th>
+                  <th scope="col">
+                    {t("filings.filed")}
+                    <span className="th-sub">{t("filings.accession")}</span>
+                  </th>
                   <th scope="col">{t("filings.period")}</th>
                   <th scope="col">{t("filings.items")}</th>
-                  <th scope="col">{t("filings.accession")}</th>
                   <th scope="col" className="center">
                     {t("filings.analyzed")}
                   </th>
@@ -56,7 +58,10 @@ export function FilingsTab({ ticker }: { ticker: string }) {
                     <td>
                       <FormBadge form={f.form} />
                     </td>
-                    <td className="nowrap">{fmtDate(f.filing_date)}</td>
+                    <td className="nowrap">
+                      <span className="cell-main">{fmtDate(f.filing_date)}</span>
+                      <span className="cell-sub">{f.accession_no}</span>
+                    </td>
                     <td className="nowrap">{fmtDate(f.report_date)}</td>
                     <td>
                       {f.items.length > 0 ? (
@@ -71,7 +76,6 @@ export function FilingsTab({ ticker }: { ticker: string }) {
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td className="mono-num nowrap">{f.accession_no}</td>
                     <td className="center">
                       {f.analyzed ? (
                         <span className="ok-mark">

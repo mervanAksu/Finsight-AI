@@ -1,5 +1,5 @@
 // Ortak küçük bileşenler: kart, iskelet, hata/boş durumları, uyarı, kaynak çipi, ipucu.
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { LuArrowDownRight, LuArrowUpRight, LuCircleAlert, LuExternalLink, LuInfo, LuMinus, LuRefreshCw } from "react-icons/lu";
 import { ApiError, edgarFilingUrl } from "../api";
@@ -20,7 +20,6 @@ interface PanelProps {
   children: ReactNode;
   className?: string;
   id?: string;
-  as?: "section" | "div";
 }
 
 export function Panel({ title, subtitle, actions, children, className, id }: PanelProps) {
@@ -132,7 +131,17 @@ export function Disclaimer({ text }: { text?: string | null }) {
 }
 
 // ------------------------------------------------------------------ İpucu
+// Balon `position: fixed` ile yerleşir; böylece kaydırılabilir tablo kapsayıcıları
+// (overflow) tarafından kırpılmaz. Fare ve klavye odağıyla açılır.
 type TipAlign = "center" | "start" | "end";
+const TIP_W = 280;
+
+interface TipPos {
+  left: number;
+  top: number;
+  below: boolean;
+  shift: string;
+}
 
 export function Tip({
   content,
@@ -146,12 +155,64 @@ export function Tip({
   className?: string;
 }) {
   const id = useId();
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const [pos, setPos] = useState<TipPos | null>(null);
+
+  const show = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const below = r.top < 140;
+    const top = below ? r.bottom + 8 : r.top - 8;
+    const margin = 12;
+    let left: number;
+    let shift: string;
+    if (align === "start") {
+      left = Math.max(margin, Math.min(r.left, vw - TIP_W - margin));
+      shift = "0";
+    } else if (align === "end") {
+      left = Math.min(vw - margin, Math.max(r.right, TIP_W + margin));
+      shift = "-100%";
+    } else {
+      left = Math.max(TIP_W / 2 + margin, Math.min(r.left + r.width / 2, vw - TIP_W / 2 - margin));
+      shift = "-50%";
+    }
+    setPos({ left, top, below, shift });
+  };
+  const hide = () => setPos(null);
+
+  useEffect(() => {
+    if (!pos) return undefined;
+    window.addEventListener("scroll", hide, { passive: true, capture: true });
+    window.addEventListener("resize", hide);
+    return () => {
+      window.removeEventListener("scroll", hide, { capture: true });
+      window.removeEventListener("resize", hide);
+    };
+  }, [pos]);
+
   return (
-    <span className={cx("tip", `tip-${align}`, className)}>
-      <span className="tip-trigger" tabIndex={0} aria-describedby={id}>
+    <span className={cx("tip", className)} onMouseEnter={show} onMouseLeave={hide}>
+      <span
+        ref={triggerRef}
+        className="tip-trigger"
+        tabIndex={0}
+        aria-describedby={id}
+        onFocus={show}
+        onBlur={hide}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") hide();
+        }}
+      >
         {children}
       </span>
-      <span role="tooltip" id={id} className="tip-bubble">
+      <span
+        role="tooltip"
+        id={id}
+        className={cx("tip-bubble", pos && "is-open", pos?.below && "is-below")}
+        style={pos ? { left: pos.left, top: pos.top, transform: `translate(${pos.shift}, ${pos.below ? "0" : "-100%"})` } : undefined}
+      >
         {content}
       </span>
     </span>

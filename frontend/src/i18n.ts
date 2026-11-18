@@ -120,6 +120,7 @@ const tr = {
   "overview.noRisk": "Karşılaştırılacak iki 10-K raporu yok.",
   "overview.noScore": "Skor hesaplanamadı: kullanılabilen bileşen ağırlığı yetersiz.",
   "overview.toneScale": "−1 tamamen olumsuz, +1 tamamen olumlu",
+  "overview.bandsLabel": "Skor bantları",
 
   "fin.grewBy": "{label} {n} yılda {pct} arttı",
   "fin.fellBy": "{label} {n} yılda {pct} azaldı",
@@ -351,6 +352,7 @@ const en: Record<MsgKey, string> = {
   "overview.noRisk": "There are no two 10-K reports to compare.",
   "overview.noScore": "Score not computed: not enough component weight available.",
   "overview.toneScale": "−1 fully negative, +1 fully positive",
+  "overview.bandsLabel": "Score bands",
 
   "fin.grewBy": "{label} rose {pct} over {n} years",
   "fin.fellBy": "{label} fell {pct} over {n} years",
@@ -511,6 +513,22 @@ const METRIC_EN: Record<string, string> = {
   stockholders_equity: "Stockholders' equity",
 };
 
+// Oran girdilerinde (inputs) yalnızca anahtar geldiği için Türkçe etiketler de tutulur.
+const METRIC_TR: Record<string, string> = {
+  revenue: "Gelir",
+  cost_of_revenue: "Satışların maliyeti",
+  gross_profit: "Brüt kâr",
+  operating_income: "Faaliyet kârı",
+  net_income: "Net kâr",
+  operating_cash_flow: "İşletme nakit akışı",
+  capex: "Yatırım harcamaları",
+  total_assets: "Toplam varlıklar",
+  current_assets: "Dönen varlıklar",
+  current_liabilities: "Kısa vadeli yükümlülükler",
+  total_liabilities: "Toplam yükümlülükler",
+  stockholders_equity: "Özkaynak",
+};
+
 const RATIO_EN: Record<string, string> = {
   gross_margin: "Gross margin",
   operating_margin: "Operating margin",
@@ -548,7 +566,8 @@ const SECTION_EN: Record<string, string> = {
 };
 
 export function metricLabel(lang: Lang, key: string, fallback: string): string {
-  return lang === "en" ? (METRIC_EN[key] ?? fallback) : fallback;
+  if (lang === "en") return METRIC_EN[key] ?? fallback;
+  return fallback === key ? (METRIC_TR[key] ?? fallback) : fallback;
 }
 export function ratioLabel(lang: Lang, key: string, fallback: string): string {
   return lang === "en" ? (RATIO_EN[key] ?? fallback) : fallback;

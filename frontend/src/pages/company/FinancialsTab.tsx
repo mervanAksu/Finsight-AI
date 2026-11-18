@@ -221,7 +221,10 @@ function RatioRow({ ratio: r, periods, lang }: { ratio: Ratio; periods: string[]
   const nums = ordered.map((v) => (v && v.status === "ok" ? v.value : null));
   const last = nums[nums.length - 1];
   const prev = nums[nums.length - 2];
-  const delta = last !== null && last !== undefined && prev !== null && prev !== undefined ? last - prev : null;
+  const rawDelta = last !== null && last !== undefined && prev !== null && prev !== undefined ? last - prev : null;
+  // Gösterim hassasiyetinin altındaki farklar (0,00x / 0,0 puan) yatay kabul edilir.
+  const epsilon = r.unit === "percent" ? 0.0005 : 0.005;
+  const delta = rawDelta !== null && Math.abs(rawDelta) < epsilon ? 0 : rawDelta;
   const improving = delta === null || delta === 0 ? null : delta > 0 === r.higher_is_better;
   const label = ratioLabel(lang, r.key, r.label);
 

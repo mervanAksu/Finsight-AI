@@ -1,7 +1,7 @@
 // Özet sekmesi: skor göstergesi + bileşenler, 6 temel kalem, ton ve risk özeti, son başvurular.
 import { LuArrowRight, LuExternalLink } from "react-icons/lu";
 import { api } from "../../api";
-import { ScoreGauge } from "../../charts/ScoreGauge";
+import { BANDS, ScoreGauge } from "../../charts/ScoreGauge";
 import { ToneMeter } from "../../charts/small";
 import {
   DeltaBadge,
@@ -15,7 +15,7 @@ import {
   cx,
 } from "../../components/ui";
 import { fmtDate, fmtMoneyFull, fmtMoneyShort, fmtNumber, fmtScore, scoreTone } from "../../format";
-import { componentLabel, metricLabel, useI18n } from "../../i18n";
+import { bandLabel, componentLabel, metricLabel, useI18n } from "../../i18n";
 import type { Lang } from "../../i18n";
 import { useAsync } from "../../lib/useAsync";
 import { hrefFor } from "../../router";
@@ -32,7 +32,7 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
   return (
     <div className="grid-12">
       <Panel className="span-4 score-panel" title={t("overview.scoreTitle")}>
-        <ScoreGauge total={overview.score?.total ?? null} band={overview.score?.band ?? null} />
+        <ScoreGauge total={overview.score?.total ?? null} band={overview.score?.band ?? null} size={330} />
         <dl className="score-meta">
           <div>
             <dt className="sr-only">{t("common.period")}</dt>
@@ -45,6 +45,17 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
             </div>
           )}
         </dl>
+        <ul className="band-legend" aria-label={t("overview.bandsLabel")}>
+          {[...BANDS].reverse().map((b) => (
+            <li key={b.name} className={cx(`tone-${b.tone}`, overview.score?.band === b.name && "is-current")}>
+              <span className="band-swatch" aria-hidden="true" />
+              <span className="band-name">{bandLabel(lang, b.name)}</span>
+              <span className="band-range">
+                {b.to === 100 ? `≥ ${b.from}` : b.from === 0 ? `< ${b.to}` : `${b.from}–${b.to - 1}`}
+              </span>
+            </li>
+          ))}
+        </ul>
         <p className="score-note">{t("overview.scoreNote")}</p>
       </Panel>
 
@@ -130,40 +141,39 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
             <p className="muted-note">{t("overview.noRisk")}</p>
           )}
         </Panel>
+        <Panel
+          title={t("overview.latestFilings")}
+          actions={
+            <a className="text-link" href={hrefFor({ name: "company", ticker, tab: "filings" })}>
+              {t("overview.allFilings")}
+              <LuArrowRight aria-hidden="true" />
+            </a>
+          }
+        >
+          <ul className="filing-list">
+            {overview.latest_filings.map((f) => (
+              <li key={f.accession_no} className="filing-row">
+                <FormBadge form={f.form} />
+                <span className="filing-main">
+                  <span className="filing-date">{fmtDate(f.filing_date)}</span>
+                  <span className="filing-period">
+                    {t("filings.period")}: {fmtDate(f.report_date)} · {f.accession_no}
+                  </span>
+                </span>
+                <a
+                  className="icon-link"
+                  href={f.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t("common.openEdgar", { form: f.form })}
+                >
+                  <LuExternalLink aria-hidden="true" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       </div>
-
-      <Panel
-        className="span-12"
-        title={t("overview.latestFilings")}
-        actions={
-          <a className="text-link" href={hrefFor({ name: "company", ticker, tab: "filings" })}>
-            {t("overview.allFilings")}
-            <LuArrowRight aria-hidden="true" />
-          </a>
-        }
-      >
-        <ul className="filing-list">
-          {overview.latest_filings.map((f) => (
-            <li key={f.accession_no} className="filing-row">
-              <FormBadge form={f.form} />
-              <span className="filing-date">{fmtDate(f.filing_date)}</span>
-              <span className="filing-period">
-                {t("filings.period")}: {fmtDate(f.report_date)}
-              </span>
-              <span className="filing-acc">{f.accession_no}</span>
-              <a
-                className="icon-link"
-                href={f.url}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={t("common.openEdgar", { form: f.form })}
-              >
-                <LuExternalLink aria-hidden="true" />
-              </a>
-            </li>
-          ))}
-        </ul>
-      </Panel>
 
       <div className="span-12">
         <Disclaimer text={overview.disclaimer} />

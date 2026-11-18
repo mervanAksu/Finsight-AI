@@ -241,7 +241,7 @@ function Answer({ response, turnId }: { response: AskResponse; turnId: number })
 function SourceCard({ source: s, id, active }: { source: AskSource; id: string; active: boolean }) {
   const { t, lang } = useI18n();
   const [expanded, setExpanded] = useState(false);
-  const long = s.text.length > 260;
+  const long = s.text.length > 340;
   return (
     <li id={id} tabIndex={-1} className={cx("source-card", active && "is-highlight")}>
       <div className="source-head">

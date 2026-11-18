@@ -25,8 +25,26 @@ Ortak nesneler:
 
 // Source (sayısal değerin kaynağı)
 {"xbrl_tag": "us-gaap:NetIncomeLoss", "form": "10-K", "accession_no": "0000950170-25-100235",
- "filed": "2025-07-30", "derived_from": null}   // türetilmişse etiket listesi
+ "filed": "2025-07-30", "derived_from": null,   // türetilmişse xbrl_tag "derived" ve etiket listesi
+ "url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/"}  // başvuru klasörü
 ```
+
+### Netleştirmeler (v1.1)
+- Company alanlarından `sic`, `sic_description`, `fiscal_year_end` `null` olabilir; `exchanges` boş liste olabilir.
+- `/overview` yanıtında `analyzed: bool` alanı vardır (metin analizi yapılmış mı). Arama
+  sonuçlarındaki `ingested` = finansal veri çekilmiş; `analyzed` = metin analizi de yapılmış.
+- `/facts`: değeri olmayan dönem listede yer almaz (`value: null` gönderilmez).
+- `/score` hesaplanamamışsa: `total`, `band`, `as_of_period`, `explanation` `null`; `components` boş.
+  Gösterge anahtarları: oran anahtarları + `revenue_yoy`, `net_income_yoy`, `mdna_net_tone`,
+  `risk_net_tone`, `risk_added`. Göstergelerde ek alanlar: `reason`, `threshold`.
+- `/ask`: `model` LLM modunda LLM model adı, diğer modlarda gömme modeli adıdır.
+  Soru gövdesi geçersizse 422 (FastAPI doğrulama hatası, `detail` bir dizi olabilir).
+- `/compare`: finansal verisi çekilmiş her şirket karşılaştırılabilir (metin analizi gerekmez);
+  bilinmeyen ticker 404, 2–4 dışı sayıda ticker 400. Şirketlerin `period_end` değerleri farklı olabilir.
+- `/risk-changes`: karşılaştırma yoksa `old_filing` ve `new_filing` `null`, `counts` değerleri 0, `changes` boş.
+- `/export.csv`: bilinmeyen şirket 404; analiz yoksa yalnızca `fact` ve `ratio` satırları.
+- `/jobs`: `status = "error"` iken `progress` hatanın oluştuğu andaki değerdir.
+- Sunucu tarafı metinler (etiketler, açıklamalar, uyarı) Türkçedir; arayüz bilinen anahtarları kendi çevirir.
 
 ## GET /api/health
 ```json
