@@ -1,0 +1,2099 @@
+{
+ "company": {
+  "ticker": "EXMP",
+  "cik": "0009990001",
+  "name": "EXAMPLE CORP",
+  "sic": "7372",
+  "sic_description": "Services-Prepackaged Software",
+  "fiscal_year_end": "0630",
+  "exchanges": [
+   "Nasdaq"
+  ]
+ },
+ "overview": {
+  "company": {
+   "ticker": "EXMP",
+   "cik": "0009990001",
+   "name": "EXAMPLE CORP",
+   "sic": "7372",
+   "sic_description": "Services-Prepackaged Software",
+   "fiscal_year_end": "0630",
+   "exchanges": [
+    "Nasdaq"
+   ]
+  },
+  "score": {
+   "total": 84.8,
+   "band": "Güçlü",
+   "as_of_period": "2026-06-30"
+  },
+  "key_metrics": [
+   {
+    "metric": "revenue",
+    "label": "Gelir",
+    "value": 258600000000,
+    "period_end": "2026-06-30",
+    "yoy": 0.1498,
+    "source": {
+     "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+     "form": "10-K",
+     "accession_no": "0009990001-26-000213",
+     "filed": "2026-07-29",
+     "derived_from": null
+    }
+   },
+   {
+    "metric": "net_income",
+    "label": "Net kâr",
+    "value": 93700000000,
+    "period_end": "2026-06-30",
+    "yoy": 0.1413,
+    "source": {
+     "xbrl_tag": "us-gaap:NetIncomeLoss",
+     "form": "10-K",
+     "accession_no": "0009990001-26-000213",
+     "filed": "2026-07-29",
+     "derived_from": null
+    }
+   },
+   {
+    "metric": "operating_cash_flow",
+    "label": "İşletme nakit akışı",
+    "value": 124800000000,
+    "period_end": "2026-06-30",
+    "yoy": 0.1408,
+    "source": {
+     "xbrl_tag": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+     "form": "10-K",
+     "accession_no": "0009990001-26-000213",
+     "filed": "2026-07-29",
+     "derived_from": null
+    }
+   },
+   {
+    "metric": "total_assets",
+    "label": "Toplam varlıklar",
+    "value": 572400000000,
+    "period_end": "2026-06-30",
+    "yoy": 0.1653,
+    "source": {
+     "xbrl_tag": "us-gaap:Assets",
+     "form": "10-K",
+     "accession_no": "0009990001-26-000213",
+     "filed": "2026-07-29",
+     "derived_from": null
+    }
+   },
+   {
+    "metric": "total_liabilities",
+    "label": "Toplam yükümlülükler",
+    "value": 259800000000,
+    "period_end": "2026-06-30",
+    "yoy": 0.099,
+    "source": {
+     "xbrl_tag": "us-gaap:Liabilities",
+     "form": "10-K",
+     "accession_no": "0009990001-26-000213",
+     "filed": "2026-07-29",
+     "derived_from": null
+    }
+   },
+   {
+    "metric": "stockholders_equity",
+    "label": "Özkaynak",
+    "value": 312600000000,
+    "period_end": "2026-06-30",
+    "yoy": 0.2268,
+    "source": {
+     "xbrl_tag": "us-gaap:StockholdersEquity",
+     "form": "10-K",
+     "accession_no": "0009990001-26-000213",
+     "filed": "2026-07-29",
+     "derived_from": null
+    }
+   }
+  ],
+  "latest_filings": [
+   {
+    "accession_no": "0009990001-26-000374",
+    "form": "8-K",
+    "filing_date": "2026-10-28",
+    "report_date": "2026-10-28",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000374/0009990001-26-000374-index.htm"
+   },
+   {
+    "accession_no": "0009990001-26-000330",
+    "form": "10-Q",
+    "filing_date": "2026-10-28",
+    "report_date": "2026-09-30",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000330/0009990001-26-000330-index.htm"
+   },
+   {
+    "accession_no": "0009990001-26-000363",
+    "form": "8-K",
+    "filing_date": "2026-09-16",
+    "report_date": "2026-09-16",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000363/0009990001-26-000363-index.htm"
+   },
+   {
+    "accession_no": "0009990001-26-000214",
+    "form": "8-K",
+    "filing_date": "2026-07-29",
+    "report_date": "2026-07-29",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000214/0009990001-26-000214-index.htm"
+   },
+   {
+    "accession_no": "0009990001-26-000213",
+    "form": "10-K",
+    "filing_date": "2026-07-29",
+    "report_date": "2026-06-30",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm"
+   }
+  ],
+  "sentiment_summary": {
+   "filing": {
+    "accession_no": "0009990001-26-000213",
+    "form": "10-K",
+    "filing_date": "2026-07-29",
+    "report_date": "2026-06-30",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm"
+   },
+   "mdna_net_tone": 0.086,
+   "risk_net_tone": -0.521,
+   "model": "ProsusAI/finbert"
+  },
+  "risk_summary": {
+   "added": 3,
+   "removed": 1,
+   "modified": 4,
+   "unchanged": 112
+  },
+  "analysis_updated_at": "2026-11-17T21:40:00Z",
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "facts": {
+  "company": {
+   "ticker": "EXMP",
+   "cik": "0009990001",
+   "name": "EXAMPLE CORP",
+   "sic": "7372",
+   "sic_description": "Services-Prepackaged Software",
+   "fiscal_year_end": "0630",
+   "exchanges": [
+    "Nasdaq"
+   ]
+  },
+  "metrics": [
+   {
+    "metric": "revenue",
+    "label": "Gelir",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 196400000000,
+      "yoy": 0.1021,
+      "source": {
+       "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 224900000000,
+      "yoy": 0.1451,
+      "source": {
+       "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 258600000000,
+      "yoy": 0.1498,
+      "source": {
+       "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "cost_of_revenue",
+    "label": "Satışların maliyeti",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 61200000000,
+      "yoy": 0.0948,
+      "source": {
+       "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 68700000000,
+      "yoy": 0.1225,
+      "source": {
+       "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 77100000000,
+      "yoy": 0.1223,
+      "source": {
+       "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "gross_profit",
+    "label": "Brüt kâr",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 135200000000,
+      "yoy": 0.1055,
+      "source": {
+       "xbrl_tag": "us-gaap:GrossProfit",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 156200000000,
+      "yoy": 0.1553,
+      "source": {
+       "xbrl_tag": "us-gaap:GrossProfit",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 181500000000,
+      "yoy": 0.162,
+      "source": {
+       "xbrl_tag": "us-gaap:GrossProfit",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "operating_income",
+    "label": "Faaliyet kârı",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 81900000000,
+      "yoy": 0.1053,
+      "source": {
+       "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 99800000000,
+      "yoy": 0.2186,
+      "source": {
+       "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 117300000000,
+      "yoy": 0.1754,
+      "source": {
+       "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "net_income",
+    "label": "Net kâr",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 66900000000,
+      "yoy": 0.0896,
+      "source": {
+       "xbrl_tag": "us-gaap:NetIncomeLoss",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 82100000000,
+      "yoy": 0.2272,
+      "source": {
+       "xbrl_tag": "us-gaap:NetIncomeLoss",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 93700000000,
+      "yoy": 0.1413,
+      "source": {
+       "xbrl_tag": "us-gaap:NetIncomeLoss",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "operating_cash_flow",
+    "label": "İşletme nakit akışı",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 85600000000,
+      "yoy": 0.0288,
+      "source": {
+       "xbrl_tag": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 109400000000,
+      "yoy": 0.278,
+      "source": {
+       "xbrl_tag": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 124800000000,
+      "yoy": 0.1408,
+      "source": {
+       "xbrl_tag": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "capex",
+    "label": "Yatırım harcamaları",
+    "kind": "duration",
+    "values": [
+     {
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "value": 27400000000,
+      "yoy": 0.2398,
+      "source": {
+       "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "value": 41200000000,
+      "yoy": 0.5036,
+      "source": {
+       "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "value": 58300000000,
+      "yoy": 0.415,
+      "source": {
+       "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "total_assets",
+    "label": "Toplam varlıklar",
+    "kind": "instant",
+    "values": [
+     {
+      "period_start": null,
+      "period_end": "2024-06-30",
+      "value": 398600000000,
+      "yoy": 0.1321,
+      "source": {
+       "xbrl_tag": "us-gaap:Assets",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2025-06-30",
+      "value": 491200000000,
+      "yoy": 0.2323,
+      "source": {
+       "xbrl_tag": "us-gaap:Assets",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2026-06-30",
+      "value": 572400000000,
+      "yoy": 0.1653,
+      "source": {
+       "xbrl_tag": "us-gaap:Assets",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "current_assets",
+    "label": "Dönen varlıklar",
+    "kind": "instant",
+    "values": [
+     {
+      "period_start": null,
+      "period_end": "2024-06-30",
+      "value": 176900000000,
+      "yoy": 0.0505,
+      "source": {
+       "xbrl_tag": "us-gaap:AssetsCurrent",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2025-06-30",
+      "value": 152300000000,
+      "yoy": -0.1391,
+      "source": {
+       "xbrl_tag": "us-gaap:AssetsCurrent",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2026-06-30",
+      "value": 171600000000,
+      "yoy": 0.1267,
+      "source": {
+       "xbrl_tag": "us-gaap:AssetsCurrent",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "current_liabilities",
+    "label": "Kısa vadeli yükümlülükler",
+    "kind": "instant",
+    "values": [
+     {
+      "period_start": null,
+      "period_end": "2024-06-30",
+      "value": 102100000000,
+      "yoy": 0.0781,
+      "source": {
+       "xbrl_tag": "us-gaap:LiabilitiesCurrent",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2025-06-30",
+      "value": 121800000000,
+      "yoy": 0.1929,
+      "source": {
+       "xbrl_tag": "us-gaap:LiabilitiesCurrent",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2026-06-30",
+      "value": 139500000000,
+      "yoy": 0.1453,
+      "source": {
+       "xbrl_tag": "us-gaap:LiabilitiesCurrent",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "total_liabilities",
+    "label": "Toplam yükümlülükler",
+    "kind": "instant",
+    "values": [
+     {
+      "period_start": null,
+      "period_end": "2024-06-30",
+      "value": 204900000000,
+      "yoy": 0.0438,
+      "source": {
+       "xbrl_tag": "us-gaap:Liabilities",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2025-06-30",
+      "value": 236400000000,
+      "yoy": 0.1537,
+      "source": {
+       "xbrl_tag": "us-gaap:Liabilities",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2026-06-30",
+      "value": 259800000000,
+      "yoy": 0.099,
+      "source": {
+       "xbrl_tag": "us-gaap:Liabilities",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   },
+   {
+    "metric": "stockholders_equity",
+    "label": "Özkaynak",
+    "kind": "instant",
+    "values": [
+     {
+      "period_start": null,
+      "period_end": "2024-06-30",
+      "value": 193700000000,
+      "yoy": 0.2433,
+      "source": {
+       "xbrl_tag": "us-gaap:StockholdersEquity",
+       "form": "10-K",
+       "accession_no": "0009990001-24-000137",
+       "filed": "2024-07-30",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2025-06-30",
+      "value": 254800000000,
+      "yoy": 0.3154,
+      "source": {
+       "xbrl_tag": "us-gaap:StockholdersEquity",
+       "form": "10-K",
+       "accession_no": "0009990001-25-000175",
+       "filed": "2025-07-29",
+       "derived_from": null
+      }
+     },
+     {
+      "period_start": null,
+      "period_end": "2026-06-30",
+      "value": 312600000000,
+      "yoy": 0.2268,
+      "source": {
+       "xbrl_tag": "us-gaap:StockholdersEquity",
+       "form": "10-K",
+       "accession_no": "0009990001-26-000213",
+       "filed": "2026-07-29",
+       "derived_from": null
+      }
+     }
+    ]
+   }
+  ],
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "ratios": {
+  "company": {
+   "ticker": "EXMP",
+   "cik": "0009990001",
+   "name": "EXAMPLE CORP",
+   "sic": "7372",
+   "sic_description": "Services-Prepackaged Software",
+   "fiscal_year_end": "0630",
+   "exchanges": [
+    "Nasdaq"
+   ]
+  },
+  "periods": [
+   "2024-06-30",
+   "2025-06-30",
+   "2026-06-30"
+  ],
+  "ratios": [
+   {
+    "key": "gross_margin",
+    "label": "Brüt kâr marjı",
+    "formula": "Brüt kâr / Gelir",
+    "unit": "percent",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.6884,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 196400000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "gross_profit",
+        "value": 135200000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.6945,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 224900000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "gross_profit",
+        "value": 156200000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.7019,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 258600000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "gross_profit",
+        "value": 181500000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "operating_margin",
+    "label": "Faaliyet kâr marjı",
+    "formula": "Faaliyet kârı / Gelir",
+    "unit": "percent",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.417,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 196400000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "operating_income",
+        "value": 81900000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.4438,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 224900000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "operating_income",
+        "value": 99800000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.4536,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 258600000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "operating_income",
+        "value": 117300000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "net_margin",
+    "label": "Net kâr marjı",
+    "formula": "Net kâr / Gelir",
+    "unit": "percent",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.3406,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 196400000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "net_income",
+        "value": 66900000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.3651,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 224900000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "net_income",
+        "value": 82100000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.3623,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 258600000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "net_income",
+        "value": 93700000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "roa",
+    "label": "Aktif kârlılığı (ROA)",
+    "formula": "Net kâr / Ortalama toplam varlıklar",
+    "unit": "percent",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.1782,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 66900000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "total_assets",
+        "value": 398600000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.1845,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 82100000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "total_assets",
+        "value": 491200000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.1762,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 93700000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "total_assets",
+        "value": 572400000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "roe",
+    "label": "Özkaynak kârlılığı (ROE)",
+    "formula": "Net kâr / Ortalama özkaynak",
+    "unit": "percent",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.3828,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 66900000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 193700000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.3661,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 82100000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 254800000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.3303,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 93700000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 312600000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "current_ratio",
+    "label": "Cari oran",
+    "formula": "Dönen varlıklar / Kısa vadeli yükümlülükler",
+    "unit": "times",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 1.7326,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "current_assets",
+        "value": 176900000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "current_liabilities",
+        "value": 102100000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 1.2504,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "current_assets",
+        "value": 152300000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "current_liabilities",
+        "value": 121800000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 1.2301,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "current_assets",
+        "value": 171600000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "current_liabilities",
+        "value": 139500000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "debt_to_equity",
+    "label": "Borç / özkaynak",
+    "formula": "Toplam yükümlülükler / Özkaynak",
+    "unit": "times",
+    "higher_is_better": false,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 1.0578,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 204900000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 193700000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.9278,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 236400000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 254800000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.8311,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 259800000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 312600000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "liabilities_to_assets",
+    "label": "Yükümlülük / varlık",
+    "formula": "Toplam yükümlülükler / Toplam varlıklar",
+    "unit": "percent",
+    "higher_is_better": false,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.514,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 204900000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "total_assets",
+        "value": 398600000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.4813,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 236400000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "total_assets",
+        "value": 491200000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.4539,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 259800000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "total_assets",
+        "value": 572400000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "ocf_to_net_income",
+    "label": "Nakit akışı kalitesi",
+    "formula": "İşletme nakit akışı / Net kâr",
+    "unit": "times",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 1.2795,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "operating_cash_flow",
+        "value": 85600000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "net_income",
+        "value": 66900000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 1.3325,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "operating_cash_flow",
+        "value": 109400000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "net_income",
+        "value": 82100000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 1.3319,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "operating_cash_flow",
+        "value": 124800000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "net_income",
+        "value": 93700000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "fcf_margin",
+    "label": "Serbest nakit akışı marjı",
+    "formula": "(İşletme nakit akışı − Yatırım harcamaları) / Gelir",
+    "unit": "percent",
+    "higher_is_better": true,
+    "values": [
+     {
+      "period_end": "2024-06-30",
+      "value": 0.2963,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 196400000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "operating_cash_flow",
+        "value": 85600000000,
+        "accession_no": "0009990001-24-000137"
+       },
+       {
+        "metric": "capex",
+        "value": 27400000000,
+        "accession_no": "0009990001-24-000137"
+       }
+      ]
+     },
+     {
+      "period_end": "2025-06-30",
+      "value": 0.3032,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 224900000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "operating_cash_flow",
+        "value": 109400000000,
+        "accession_no": "0009990001-25-000175"
+       },
+       {
+        "metric": "capex",
+        "value": 41200000000,
+        "accession_no": "0009990001-25-000175"
+       }
+      ]
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.2572,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 258600000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "operating_cash_flow",
+        "value": 124800000000,
+        "accession_no": "0009990001-26-000213"
+       },
+       {
+        "metric": "capex",
+        "value": 58300000000,
+        "accession_no": "0009990001-26-000213"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "score": {
+  "total": 84.8,
+  "band": "Güçlü",
+  "as_of_period": "2026-06-30",
+  "weights_version": "v1-2026-11",
+  "components": [
+   {
+    "key": "profitability",
+    "label": "Kârlılık",
+    "weight": 25,
+    "score": 100.0,
+    "available": true,
+    "indicators": [
+     {
+      "key": "net_margin",
+      "label": "Net kâr marjı",
+      "value": 0.3623,
+      "display": "%36,2",
+      "points": 100.0
+     },
+     {
+      "key": "operating_margin",
+      "label": "Faaliyet kâr marjı",
+      "value": 0.4536,
+      "display": "%45,4",
+      "points": 100.0
+     },
+     {
+      "key": "roa",
+      "label": "ROA",
+      "value": 0.1762,
+      "display": "%17,6",
+      "points": 100.0
+     },
+     {
+      "key": "roe",
+      "label": "ROE",
+      "value": 0.3303,
+      "display": "%33,0",
+      "points": 100.0
+     }
+    ],
+    "explanation": "Net kâr marjı %36,2 → 100,0 puan; Faaliyet kâr marjı %45,4 → 100,0 puan; ROA %17,6 → 100,0 puan; ROE %33,0 → 100,0 puan. Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25."
+   },
+   {
+    "key": "leverage",
+    "label": "Kaldıraç ve borç",
+    "weight": 20,
+    "score": 80.5,
+    "available": true,
+    "indicators": [
+     {
+      "key": "debt_to_equity",
+      "label": "Borç / özkaynak",
+      "value": 0.8311,
+      "display": "0,83",
+      "points": 86.8
+     },
+     {
+      "key": "liabilities_to_assets",
+      "label": "Yükümlülük / varlık",
+      "value": 0.4539,
+      "display": "%45,4",
+      "points": 74.3
+     }
+    ],
+    "explanation": "Borç/özkaynak 0,83 (eşik 3,0–0,5, ters → 86,8 puan); yükümlülük/varlık %45,4 (eşik %90–%30, ters → 74,3 puan)."
+   },
+   {
+    "key": "liquidity",
+    "label": "Likidite",
+    "weight": 15,
+    "score": 48.7,
+    "available": true,
+    "indicators": [
+     {
+      "key": "current_ratio",
+      "label": "Cari oran",
+      "value": 1.2301,
+      "display": "1,23",
+      "points": 48.7
+     }
+    ],
+    "explanation": "Cari oran 1,23 (eşik 0,5–2,0 → 48,7 puan)."
+   },
+   {
+    "key": "cash_quality",
+    "label": "Nakit akışı kalitesi",
+    "weight": 15,
+    "score": 100.0,
+    "available": true,
+    "indicators": [
+     {
+      "key": "ocf_to_net_income",
+      "label": "Nakit akışı kalitesi",
+      "value": 1.3319,
+      "display": "1,33",
+      "points": 100.0
+     },
+     {
+      "key": "fcf_margin",
+      "label": "Serbest nakit akışı marjı",
+      "value": 0.2572,
+      "display": "%25,7",
+      "points": 100.0
+     }
+    ],
+    "explanation": "İşletme nakit akışı / net kâr 1,33 (eşik 0–1,2 → 100,0 puan); serbest nakit akışı marjı %25,7 (eşik −%5–%15 → 100,0 puan)."
+   },
+   {
+    "key": "growth",
+    "label": "Büyüme",
+    "weight": 10,
+    "score": 92.6,
+    "available": true,
+    "indicators": [
+     {
+      "key": "revenue_yoy",
+      "label": "Gelir değişimi",
+      "value": 0.1498,
+      "display": "%15,0",
+      "points": 99.9
+     },
+     {
+      "key": "net_income_yoy",
+      "label": "Net kâr değişimi",
+      "value": 0.1413,
+      "display": "%14,1",
+      "points": 85.3
+     }
+    ],
+    "explanation": "Gelir yıllık %15,0 (eşik −%10–%15 → 99,9 puan); net kâr yıllık %14,1 (eşik −%20–%20 → 85,3 puan)."
+   },
+   {
+    "key": "text_tone",
+    "label": "Metin tonu",
+    "weight": 10,
+    "score": 81.0,
+    "available": true,
+    "indicators": [
+     {
+      "key": "mdna_net_tone",
+      "label": "MD&A net tonu",
+      "value": 0.086,
+      "display": "0,086",
+      "points": 81.0
+     }
+    ],
+    "explanation": "Son 10-K MD&A net tonu 0,086 (eşik −0,40–0,20 → 81,0 puan)."
+   },
+   {
+    "key": "risk_change",
+    "label": "Risk değişimi",
+    "weight": 5,
+    "score": 80.0,
+    "available": true,
+    "indicators": [
+     {
+      "key": "risk_added",
+      "label": "Eklenen risk paragrafı",
+      "value": 3,
+      "display": "3",
+      "points": 80.0
+     }
+    ],
+    "explanation": "Son iki 10-K arasında 3 yeni risk paragrafı (eşik 15–0, ters → 80,0 puan)."
+   }
+  ],
+  "missing_components": [],
+  "explanation": "Toplam skor 7 bileşenin ağırlıklı ortalamasıdır (kullanılabilen ağırlık 100/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "filings": [
+  {
+   "accession_no": "0009990001-26-000374",
+   "form": "8-K",
+   "filing_date": "2026-10-28",
+   "report_date": "2026-10-28",
+   "items": [
+    "2.02",
+    "9.01"
+   ],
+   "item_labels": [
+    "Faaliyet sonuçları ve finansal durum",
+    "Finansal tablolar ve ekler"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000374/0009990001-26-000374-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-26-000330",
+   "form": "10-Q",
+   "filing_date": "2026-10-28",
+   "report_date": "2026-09-30",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000330/0009990001-26-000330-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-26-000363",
+   "form": "8-K",
+   "filing_date": "2026-09-16",
+   "report_date": "2026-09-16",
+   "items": [
+    "1.01",
+    "9.01"
+   ],
+   "item_labels": [
+    "Önemli kesin anlaşma yapılması",
+    "Finansal tablolar ve ekler"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000363/0009990001-26-000363-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-26-000214",
+   "form": "8-K",
+   "filing_date": "2026-07-29",
+   "report_date": "2026-07-29",
+   "items": [
+    "2.02",
+    "9.01"
+   ],
+   "item_labels": [
+    "Faaliyet sonuçları ve finansal durum",
+    "Finansal tablolar ve ekler"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000214/0009990001-26-000214-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-26-000213",
+   "form": "10-K",
+   "filing_date": "2026-07-29",
+   "report_date": "2026-06-30",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm",
+   "analyzed": true
+  },
+  {
+   "accession_no": "0009990001-26-000301",
+   "form": "10-Q",
+   "filing_date": "2026-04-29",
+   "report_date": "2026-03-31",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000301/0009990001-26-000301-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-26-000341",
+   "form": "8-K",
+   "filing_date": "2026-03-12",
+   "report_date": "2026-03-12",
+   "items": [
+    "5.02"
+   ],
+   "item_labels": [
+    "Yönetici veya direktör ayrılığı ya da ataması"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000341/0009990001-26-000341-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-26-000272",
+   "form": "10-Q",
+   "filing_date": "2026-01-28",
+   "report_date": "2025-12-31",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000272/0009990001-26-000272-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-25-000352",
+   "form": "8-K",
+   "filing_date": "2025-12-04",
+   "report_date": "2025-12-04",
+   "items": [
+    "5.07"
+   ],
+   "item_labels": [
+    "Hissedar oylamasına sunulan konular"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000352/0009990001-25-000352-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-25-000243",
+   "form": "10-Q",
+   "filing_date": "2025-10-29",
+   "report_date": "2025-09-30",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000243/0009990001-25-000243-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-25-000176",
+   "form": "8-K",
+   "filing_date": "2025-07-29",
+   "report_date": "2025-07-29",
+   "items": [
+    "2.02",
+    "9.01"
+   ],
+   "item_labels": [
+    "Faaliyet sonuçları ve finansal durum",
+    "Finansal tablolar ve ekler"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000176/0009990001-25-000176-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-25-000175",
+   "form": "10-K",
+   "filing_date": "2025-07-29",
+   "report_date": "2025-06-30",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000175/0009990001-25-000175-index.htm",
+   "analyzed": true
+  },
+  {
+   "accession_no": "0009990001-24-000138",
+   "form": "8-K",
+   "filing_date": "2024-07-30",
+   "report_date": "2024-07-30",
+   "items": [
+    "2.02",
+    "9.01"
+   ],
+   "item_labels": [
+    "Faaliyet sonuçları ve finansal durum",
+    "Finansal tablolar ve ekler"
+   ],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000124000138/0009990001-24-000138-index.htm",
+   "analyzed": false
+  },
+  {
+   "accession_no": "0009990001-24-000137",
+   "form": "10-K",
+   "filing_date": "2024-07-30",
+   "report_date": "2024-06-30",
+   "items": [],
+   "item_labels": [],
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000124000137/0009990001-24-000137-index.htm",
+   "analyzed": false
+  }
+ ],
+ "sentiment": {
+  "model": "ProsusAI/finbert",
+  "sections": [
+   {
+    "filing": {
+     "accession_no": "0009990001-25-000175",
+     "form": "10-K",
+     "filing_date": "2025-07-29",
+     "report_date": "2025-06-30",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000175/0009990001-25-000175-index.htm"
+    },
+    "item_code": "1A",
+    "title": "Risk Faktörleri",
+    "sentence_count": 640,
+    "positive": 38,
+    "negative": 402,
+    "neutral": 200,
+    "net_tone": -0.569,
+    "top_negative": [
+     {
+      "sentence": "Our cloud services may experience outages, data losses and disruptions that could harm our reputation and financial results.",
+      "score": 0.97
+     },
+     {
+      "sentence": "We may not realize the anticipated benefits of our acquisitions, which could adversely affect our operating results.",
+      "score": 0.95
+     },
+     {
+      "sentence": "Adverse economic or market conditions may harm our business.",
+      "score": 0.93
+     }
+    ],
+    "top_positive": [
+     {
+      "sentence": "Our diversified portfolio of products helps mitigate the impact of weakness in any single market.",
+      "score": 0.71
+     }
+    ]
+   },
+   {
+    "filing": {
+     "accession_no": "0009990001-25-000175",
+     "form": "10-K",
+     "filing_date": "2025-07-29",
+     "report_date": "2025-06-30",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000175/0009990001-25-000175-index.htm"
+    },
+    "item_code": "7",
+    "title": "Yönetimin Değerlendirmesi (MD&A)",
+    "sentence_count": 790,
+    "positive": 198,
+    "negative": 151,
+    "neutral": 441,
+    "net_tone": 0.059,
+    "top_negative": [
+     {
+      "sentence": "Operating expenses increased due to investments in cloud engineering and data center capacity.",
+      "score": 0.88
+     },
+     {
+      "sentence": "Foreign currency movements decreased revenue growth by approximately two points.",
+      "score": 0.86
+     }
+    ],
+    "top_positive": [
+     {
+      "sentence": "Revenue increased 14% driven by growth in our cloud and productivity offerings.",
+      "score": 0.96
+     },
+     {
+      "sentence": "Gross margin percentage increased slightly, reflecting improvement in cloud services.",
+      "score": 0.92
+     }
+    ]
+   },
+   {
+    "filing": {
+     "accession_no": "0009990001-26-000213",
+     "form": "10-K",
+     "filing_date": "2026-07-29",
+     "report_date": "2026-06-30",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm"
+    },
+    "item_code": "1A",
+    "title": "Risk Faktörleri",
+    "sentence_count": 668,
+    "positive": 41,
+    "negative": 389,
+    "neutral": 238,
+    "net_tone": -0.521,
+    "top_negative": [
+     {
+      "sentence": "Constraints in the supply of AI accelerators and data center capacity could delay our cloud expansion and increase costs.",
+      "score": 0.97
+     },
+     {
+      "sentence": "Evolving regulation of artificial intelligence could require significant changes to our products and expose us to penalties.",
+      "score": 0.96
+     },
+     {
+      "sentence": "Cyberattacks, including those that use generative AI tools, could lead to reduced revenue and increased costs.",
+      "score": 0.95
+     },
+     {
+      "sentence": "The loss of one or more large multi-year enterprise commitments could adversely affect our results.",
+      "score": 0.93
+     }
+    ],
+    "top_positive": [
+     {
+      "sentence": "Our investments in security engineering strengthen our ability to detect and respond to threats.",
+      "score": 0.68
+     }
+    ]
+   },
+   {
+    "filing": {
+     "accession_no": "0009990001-26-000213",
+     "form": "10-K",
+     "filing_date": "2026-07-29",
+     "report_date": "2026-06-30",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm"
+    },
+    "item_code": "7",
+    "title": "Yönetimin Değerlendirmesi (MD&A)",
+    "sentence_count": 812,
+    "positive": 210,
+    "negative": 140,
+    "neutral": 462,
+    "net_tone": 0.086,
+    "top_negative": [
+     {
+      "sentence": "Capital expenditures increased significantly to support demand for AI infrastructure, reducing free cash flow growth.",
+      "score": 0.91
+     },
+     {
+      "sentence": "Hardware revenue decreased 6% due to lower device demand.",
+      "score": 0.89
+     },
+     {
+      "sentence": "Operating expenses increased 9% driven by headcount growth in engineering.",
+      "score": 0.82
+     }
+    ],
+    "top_positive": [
+     {
+      "sentence": "Revenue increased 15% to $258.6 billion, driven by strong demand for our cloud platform.",
+      "score": 0.97
+     },
+     {
+      "sentence": "Operating income increased 18%, reflecting revenue growth and continued cost discipline.",
+      "score": 0.96
+     },
+     {
+      "sentence": "Commercial remaining performance obligation increased 21%, providing visibility into future revenue.",
+      "score": 0.93
+     }
+    ]
+   }
+  ],
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "risk_changes": {
+  "old_filing": {
+   "accession_no": "0009990001-25-000175",
+   "form": "10-K",
+   "filing_date": "2025-07-29",
+   "report_date": "2025-06-30",
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000125000175/0009990001-25-000175-index.htm"
+  },
+  "new_filing": {
+   "accession_no": "0009990001-26-000213",
+   "form": "10-K",
+   "filing_date": "2026-07-29",
+   "report_date": "2026-06-30",
+   "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm"
+  },
+  "counts": {
+   "added": 3,
+   "removed": 1,
+   "modified": 4,
+   "unchanged": 112
+  },
+  "changes": [
+   {
+    "change_type": "added",
+    "old_text": null,
+    "new_text": "We are increasingly dependent on third-party providers of specialized AI accelerators and data center capacity. Supply constraints, export restrictions, or price increases affecting these components could delay the expansion of our cloud services and increase our operating costs.",
+    "similarity": null
+   },
+   {
+    "change_type": "added",
+    "old_text": null,
+    "new_text": "New and evolving regulations governing artificial intelligence, including obligations related to transparency, risk assessment and model governance, could require significant changes to our products and expose us to fines or litigation if we fail to comply.",
+    "similarity": null
+   },
+   {
+    "change_type": "added",
+    "old_text": null,
+    "new_text": "A material portion of our revenue now derives from multi-year commitments by large enterprise customers. The loss or non-renewal of one or more of these commitments could adversely affect our results of operations.",
+    "similarity": null
+   },
+   {
+    "change_type": "modified",
+    "old_text": "Our international operations subject us to risks from changes in foreign currency exchange rates, which could reduce our reported revenue and operating income.",
+    "new_text": "Our international operations subject us to significant risks from changes in foreign currency exchange rates and capital controls, which could materially reduce our reported revenue, operating income and cash flows.",
+    "similarity": 0.78
+   },
+   {
+    "change_type": "modified",
+    "old_text": "Cyberattacks and security vulnerabilities could lead to reduced revenue, increased costs, liability claims, or harm to our reputation.",
+    "new_text": "Cyberattacks, including attacks by nation-state actors and attacks that use generative AI tools, and security vulnerabilities could lead to reduced revenue, increased costs, regulatory penalties, liability claims, or harm to our reputation.",
+    "similarity": 0.69
+   },
+   {
+    "change_type": "modified",
+    "old_text": "We face intense competition across all markets for our products and services, which may lead to lower revenue or operating margins.",
+    "new_text": "We face intense and rapidly evolving competition across all markets for our products and services, including from new entrants offering AI-based alternatives, which may lead to lower revenue or operating margins.",
+    "similarity": 0.74
+   },
+   {
+    "change_type": "modified",
+    "old_text": "Our hardware products depend on a limited number of contract manufacturers located primarily in Asia.",
+    "new_text": "Our hardware and devices depend on a limited number of contract manufacturers, some of which are located in regions affected by geopolitical tension and trade restrictions.",
+    "similarity": 0.61
+   },
+   {
+    "change_type": "removed",
+    "old_text": "The transition of our workforce to hybrid working arrangements may disrupt our operations and make it more difficult to retain key employees.",
+    "new_text": null,
+    "similarity": null
+   }
+  ],
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "ask": [
+  {
+   "keywords": [
+    "tedarik",
+    "supply",
+    "çip",
+    "donanım",
+    "risk"
+   ],
+   "answer": "Şirket, en son 10-K raporunda özel yapay zekâ hızlandırıcıları ve veri merkezi kapasitesi sağlayan üçüncü taraflara bağımlılığının arttığını yeni bir risk olarak eklemiştir; tedarik kısıtları veya ihracat kısıtlamaları bulut hizmetlerinin genişlemesini geciktirebilir [1]. Önceki yıl donanım üretimi yalnızca Asya'daki sözleşmeli üreticilerle ilişkilendirilirken, yeni metinde jeopolitik gerilim ve ticaret kısıtlamalarından etkilenen bölgeler açıkça belirtilmektedir [2].",
+   "sources": [
+    {
+     "n": 1,
+     "chunk_id": 450,
+     "section": "1A",
+     "section_title": "Risk Faktörleri",
+     "form": "10-K",
+     "filing_date": "2026-07-29",
+     "accession_no": "0009990001-26-000213",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm",
+     "text": "We are increasingly dependent on third-party providers of specialized AI accelerators and data center capacity. Supply constraints, export restrictions, or price increases affecting these components could delay the expansion of our cloud services and increase our operating costs.",
+     "similarity": 0.71
+    },
+    {
+     "n": 2,
+     "chunk_id": 463,
+     "section": "1A",
+     "section_title": "Risk Faktörleri",
+     "form": "10-K",
+     "filing_date": "2026-07-29",
+     "accession_no": "0009990001-26-000213",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm",
+     "text": "Our hardware and devices depend on a limited number of contract manufacturers, some of which are located in regions affected by geopolitical tension and trade restrictions.",
+     "similarity": 0.64
+    }
+   ]
+  },
+  {
+   "keywords": [
+    "gelir",
+    "büyüme",
+    "revenue",
+    "satış",
+    "nakit"
+   ],
+   "answer": "Yönetimin değerlendirmesine göre gelir, bulut platformuna yönelik güçlü talep sayesinde %15 artarak 258,6 milyar dolara ulaşmıştır [1]. Faaliyet kârı ise gelir büyümesi ve maliyet disiplini sayesinde %18 artmıştır; ancak yapay zekâ altyapısına yönelik yatırım harcamalarının belirgin biçimde arttığı da belirtilmektedir [2].",
+   "sources": [
+    {
+     "n": 1,
+     "chunk_id": 476,
+     "section": "7",
+     "section_title": "Yönetimin Değerlendirmesi (MD&A)",
+     "form": "10-K",
+     "filing_date": "2026-07-29",
+     "accession_no": "0009990001-26-000213",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm",
+     "text": "Revenue increased 15% to $258.6 billion, driven by strong demand for our cloud platform.",
+     "similarity": 0.69
+    },
+    {
+     "n": 2,
+     "chunk_id": 489,
+     "section": "7",
+     "section_title": "Yönetimin Değerlendirmesi (MD&A)",
+     "form": "10-K",
+     "filing_date": "2026-07-29",
+     "accession_no": "0009990001-26-000213",
+     "url": "https://www.sec.gov/Archives/edgar/data/9990001/000999000126000213/0009990001-26-000213-index.htm",
+     "text": "Capital expenditures increased significantly to support demand for AI infrastructure, reducing free cash flow growth.",
+     "similarity": 0.61
+    }
+   ]
+  }
+ ]
+}

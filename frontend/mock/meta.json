@@ -1,0 +1,78 @@
+{
+ "health": {
+  "status": "ok",
+  "version": "0.3.0-mock",
+  "models": {
+   "sentiment": "ProsusAI/finbert",
+   "embedding": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+   "llm": {
+    "provider": "anthropic",
+    "model": "claude-haiku-5-5",
+    "enabled": true
+   }
+  }
+ },
+ "search_index": [
+  {
+   "ticker": "EXMP",
+   "cik": "0009990001",
+   "name": "EXAMPLE CORP",
+   "analyzed": true
+  },
+  {
+   "ticker": "HRBR",
+   "cik": "0009990003",
+   "name": "HARBOR FREIGHT LINES INC",
+   "analyzed": true
+  },
+  {
+   "ticker": "NVLT",
+   "cik": "0009990002",
+   "name": "NOVALIGHT SYSTEMS INC",
+   "analyzed": true
+  },
+  {
+   "ticker": "QNTA",
+   "cik": "0009990004",
+   "name": "QUANTA RIDGE FOODS CO",
+   "analyzed": false
+  },
+  {
+   "ticker": "LMNR",
+   "cik": "0009990005",
+   "name": "LUMENOR BIOTECH INC",
+   "analyzed": false
+  },
+  {
+   "ticker": "ORVB",
+   "cik": "0009990006",
+   "name": "ORCHARD VALLEY BANCORP",
+   "analyzed": false
+  },
+  {
+   "ticker": "PLSD",
+   "cik": "0009990007",
+   "name": "PLASMA DYNAMICS CORP",
+   "analyzed": false
+  },
+  {
+   "ticker": "EXMR",
+   "cik": "0009990008",
+   "name": "EXAMPLE MARINE HOLDINGS",
+   "analyzed": false
+  }
+ ],
+ "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir.",
+ "not_found_answer": "Bu bilgi işlenen raporlarda bulunamadı.",
+ "ingest_steps": [
+  "Şirket bilgileri alınıyor (submissions)",
+  "XBRL finansal verileri çekiliyor (companyfacts)",
+  "10-K belgeleri indiriliyor",
+  "Bölümler ayıklanıyor (Item 1A, Item 7)",
+  "Oranlar hesaplanıyor",
+  "Duygu analizi (10-K 2025)",
+  "Risk bölümleri karşılaştırılıyor",
+  "Gömme vektörleri oluşturuluyor",
+  "Skor hesaplanıyor"
+ ]
+}
