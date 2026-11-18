@@ -12,10 +12,11 @@ Eşikler ve gerekçeleri:
 - `UNCHANGED_THRESHOLD = 0.90`: Aynı paragraf 1.0 verir. Yıl, tutar veya tek kelime
   değişikliği 60+ kelimelik bir paragrafta yalnızca birkaç unigram/bigram'ı etkiler ve
   benzerliği ~0.93–0.99 aralığında tutar; bu düzey "esasen aynı" kabul edilir.
-- `MODIFIED_THRESHOLD = 0.50`: Cümle eklenip çıkarılmış veya yeniden yazılmış ama aynı
-  konuyu anlatan paragraflar bigram'ların önemli kısmını paylaşır (testlerde ~0.55–0.85).
-  0.50'nin altında paragraflar yalnızca genel kelime dağarcığını paylaşır; bunları
-  "değişti" demek yerine eskisini "çıkarıldı", yenisini "eklendi" saymak daha dürüsttür.
+- `MODIFIED_THRESHOLD = 0.50`: Bir cümlesi eklenmiş veya yeniden yazılmış ama aynı konuyu
+  anlatan paragraflar bigram'ların önemli kısmını paylaşır (sentetik testlerde ~0.69–0.76).
+  Yarısından fazlası değiştirilmiş paragraflar ~0.3'e iner; 0.50'nin altında paragraflar
+  çoğunlukla yalnızca genel kelime dağarcığını paylaşır. Bunlara "değişti" demek yerine
+  eskisini "çıkarıldı", yenisini "eklendi" saymak daha dürüsttür.
 Eşikler sentetik örneklerle ayarlandı; gerçek 10-K çiftleriyle (ör. 10 şirket) elle kontrol
 edilerek yeniden değerlendirilmelidir.
 """

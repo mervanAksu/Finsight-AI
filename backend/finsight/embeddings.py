@@ -4,8 +4,8 @@
   `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`. Çok dilli seçildi çünkü
   kullanıcı soruyu Türkçe soracak, raporlar İngilizce; çok dilli model iki dili aynı
   vektör uzayına yerleştirir. `FINSIGHT_EMBEDDING_MODEL` ile değiştirilebilir.
-- `HashingEmbedder`: sentence-transformers yoksa yedek. Kelime + kelime-2gram özellik
-  hashing'i (hashlib.blake2b; Python `hash()` KULLANILMAZ, çünkü PYTHONHASHSEED'e bağlıdır
+- `HashingEmbedder`: sentence-transformers yoksa yedek. Kelime + kelime-2gram (ağırlık 0.25)
+  özellik hashing'i (hashlib.blake2b; Python `hash()` KULLANILMAZ, çünkü PYTHONHASHSEED'e bağlıdır
   ve veritabanındaki vektörler süreçten sürece değişirdi), işaretli hashing, alt doğrusal tf,
   L2 normalizasyon. Diller arası eşleştirme yapamaz; bu yüzden RAG katmanı LLM varsa
   Türkçe soruyu önce İngilizce arama sorgusuna çevirir.
@@ -34,10 +34,16 @@ HASHING_NAME = "hashing-fallback"
 # Varsayılan benzerlik eşikleri (RAG'de bunun altındaki parçalar "ilgisiz" sayılır).
 # - ST (MiniLM, normalize): ilgisiz cümle çiftleri tipik olarak 0.0–0.25, ilgili soru/pasaj
 #   çiftleri 0.35+; 0.30 ihtiyatlı bir alt sınırdır (gerçek veride doğrulanmalı).
-# - Hashing: ilgisiz metinlerde benzerlik yalnızca hash çakışmalarından gelir (~±0.05);
-#   2–3 içerik kelimesini paylaşan soru/parça çiftleri 0.15+ verir (bkz. test_embeddings).
+# - Hashing: ilgisiz metinlerde benzerlik yalnızca işaretli hash çakışmalarından gelir;
+#   standart sapması ≈ 1/sqrt(dim) = 0.031 (dim=1024). 0.12 ≈ 4σ: yüzlerce parça arasında
+#   bile gürültünün eşiği geçmesi çok nadirdir. Sorgu kelimelerinin 2–3'ünü içeren ~150
+#   kelimelik parçalar 0.12–0.25 verir (bkz. test_embeddings). Sinyal parça uzunluğunun
+#   karekökü ile düştüğü için ~350 kelimelik parçalarda geri çağırma azalır.
 ST_MIN_SIMILARITY = 0.30
 HASHING_MIN_SIMILARITY = 0.12
+# Kısa anahtar kelime sorgularında bigram'lar nadiren eşleşir ama parça vektörünün normunu
+# büyütür; düşük ağırlık (0.25) ifade eşleşmesine küçük bir bonus verip sinyali korur.
+BIGRAM_WEIGHT = 0.25
 
 
 class Embedder(Protocol):
@@ -78,11 +84,14 @@ class SentenceTransformerEmbedder:
         return _l2_normalize(vecs)
 
 
-# Hashing için küçük İngilizce + Türkçe durak kelime listesi (gürültülü çakışmaları azaltır).
+# Hashing için küçük İngilizce + Türkçe durak kelime listesi. Soru kalıplarındaki dolgu
+# kelimeleri ("how much", "tell me", "company") de çıkarılır: neredeyse her parçada geçen
+# veya hiç geçmeyen bu kelimeler kısa sorgunun normunu büyütüp sinyali zayıflatır.
 HASHING_STOPWORDS = frozenset("""
-a an and are as at be been by can could do does for from had has have how i if in into is it
-its may might of on or our such that the their them there these they this those to was we
-were what when where which who will with would you your not no also than then so any all
+a an and are as at be been by can could do does did for from had has have how i if in into is
+it its may might of on or our such that the their them there these they this those to was we
+were what when where which who whom why will with would you your not no also than then so any
+all about much many me tell please describe explain give list show company companies
 ve ile bir bu şu da de mi mı mu mü ne nasıl neden hangi için gibi olan olarak daha çok en
 """.split())
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -121,12 +130,13 @@ class HashingEmbedder:
 
     def _vector(self, text: str) -> np.ndarray:
         toks = hashing_tokens(text)
-        feats = Counter(toks)
-        feats.update(f"{a} {b}" for a, b in zip(toks, toks[1:]))
         vec = np.zeros(self.dim, dtype=np.float32)
-        for feat, count in feats.items():
-            idx, sign = self._bucket(feat)
-            vec[idx] += sign * (1.0 + math.log(count))
+        unigrams = Counter(toks)
+        bigrams = Counter(f"{a} {b}" for a, b in zip(toks, toks[1:]))
+        for feats, weight in ((unigrams, 1.0), (bigrams, BIGRAM_WEIGHT)):
+            for feat, count in feats.items():
+                idx, sign = self._bucket(feat)
+                vec[idx] += sign * weight * (1.0 + math.log(count))  # alt doğrusal tf
         return vec
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:

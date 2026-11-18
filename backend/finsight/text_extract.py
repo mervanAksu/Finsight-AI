@@ -17,9 +17,15 @@ bitiş başlığına kadar olan metin alınır ve **en uzun** aday seçilir.
 from __future__ import annotations
 
 import re
+import warnings
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 from bs4.element import CData, Comment, Declaration, Doctype, ProcessingInstruction
+
+try:  # bs4 >= 4.11
+    from bs4 import XMLParsedAsHTMLWarning
+except ImportError:  # pragma: no cover
+    XMLParsedAsHTMLWarning = UserWarning
 
 SECTION_TITLES: dict[str, str] = {
     "1A": "Risk Faktörleri",
@@ -34,6 +40,7 @@ MIN_SECTION_WORDS = 15
 MAX_SENTENCE_CHARS = 1000
 MIN_SENTENCE_WORDS = 3
 HEADING_MAX_WORDS = 8  # bundan kısa paragraflar başlık sayılıp sonraki paragrafa katılır
+HEADING_REST_MAX_CHARS = 150  # bölüm başlık satırının başlıktan sonra kalan en fazla uzunluğu
 
 # --------------------------------------------------------------------------- HTML → metin
 
@@ -88,7 +95,10 @@ def html_to_text(html: str | bytes) -> str:
     - `&nbsp;` ve fazla boşluklar normalize edilir; yalnızca sayfa numarası veya
       "Table of Contents" içeren satırlar atılır.
     """
-    soup = BeautifulSoup(_decode(html), _parser_name())
+    with warnings.catch_warnings():
+        # iXBRL belgeleri XHTML'dir; HTML ayrıştırıcıyla okumak bilinçli bir tercihtir.
+        warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
+        soup = BeautifulSoup(_decode(html), _parser_name())
 
     for tag in soup.find_all(True):
         if tag.decomposed:
@@ -151,8 +161,11 @@ _MDNA_TITLE = r"(?:management['’`]?s?\s+discussion|md\s*&\s*a)"
 
 
 def _start_re(code: str, title: str) -> re.Pattern:
+    # Başlık satırının kalanı ("...and Analysis of Financial Condition...") kısa ise başlığa
+    # dahil edilir; uzunsa (başlık ile gövde aynı satırdaysa) gövdeden yemek için alınmaz.
     return re.compile(
-        rf"^[ \t]*{_PART_PREFIX}item[ \t]*{re.escape(code)}(?![0-9a-z]){_TITLE_SEP}{title}",
+        rf"^[ \t]*{_PART_PREFIX}item[ \t]*{re.escape(code)}(?![0-9a-z]){_TITLE_SEP}{title}"
+        rf"(?:[^\n]{{0,{HEADING_REST_MAX_CHARS}}}(?=\n|\Z))?",
         re.I | re.M,
     )
 
@@ -269,8 +282,10 @@ def _split_long(sentence: str, limit: int = MAX_SENTENCE_CHARS) -> list[str]:
     pieces: list[str] = []
     for part in re.split(r"(?<=;)\s+", sentence):
         while len(part) > limit:
-            cut = part.rfind(" ", 0, limit)
-            cut = cut if cut > 0 else limit
+            # Parçaları eşit boya yakın kes; sonda tek kelimelik artık kalmasın.
+            target = len(part) // -(-len(part) // limit)
+            cut = part.rfind(" ", 0, target + 1)
+            cut = cut if cut > 0 else target
             pieces.append(part[:cut].strip())
             part = part[cut:].strip()
         if part:

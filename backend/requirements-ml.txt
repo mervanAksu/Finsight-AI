@@ -1,0 +1,17 @@
+# İsteğe bağlı ağır ML bağımlılıkları (FR-08 FinBERT, FR-10 çok dilli gömme).
+# Bunlar kurulu değilse sistem yedek modellerle çalışır: duygu için "lexicon-fallback",
+# gömme için "hashing-fallback" (bkz. finsight/sentiment.py, finsight/embeddings.py).
+#
+# Önce çekirdek bağımlılıklar:  pip install -r requirements.txt
+#
+# CPU kurulumu (GPU gerekmez; CUDA paketlerini indirmemek için önce torch'u CPU dizininden kur):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-ml.txt
+#
+# İlk çalıştırmada modeller Hugging Face'ten indirilir (~440 MB ProsusAI/finbert,
+# ~470 MB paraphrase-multilingual-MiniLM-L12-v2). Çevrimdışı ortamda HF_HOME önbelleğini
+# önceden doldurun veya FINSIGHT_SENTIMENT_MODEL=lexicon / FINSIGHT_EMBEDDER=hashing kullanın.
+
+torch>=2.2
+transformers>=4.40
+sentence-transformers>=2.7

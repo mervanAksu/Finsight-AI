@@ -3,7 +3,10 @@
 Akış:
 1. Soru gömülür; parçaların gömmeleriyle kosinüs benzerliğine göre en iyi `top_k` getirilir.
    Hashing gömücüsü (diller arası eşleştiremez) ve LLM varsa, Türkçe soru önce LLM ile
-   İngilizce arama sorgusuna çevrilir ve soruyla birlikte gömülür (hata olursa yalnızca soru).
+   İngilizce arama sorgusuna çevrilir; soru ve çeviri ayrı gömülüp parça başına en yüksek
+   benzerlik alınır (çeviri başarısız olursa yalnızca soru).
+   Hashing gömücüsünde, soruyla hiç ortak içerik kelimesi olmayan parçalar eşiği geçse bile
+   atılır (benzerlikleri yalnızca hash çakışması gürültüsüdür).
 2. Benzerlik eşiğini geçen parça yoksa `not_found` döner ve cevap üretmek için LLM
    **çağrılmaz** (yukarıdaki çeviri çağrısı cevap üretmez; yalnızca arama sorgusudur).
 3. LLM varsa: numaralı `<source n=...>` blokları + soru gönderilir; cevaptaki geçersiz
@@ -160,15 +163,16 @@ def _response(answer: str, found: bool, sources: list[dict], mode: str, model, t
     }
 
 
-def _expand_query(question: str, llm: LLMClient) -> str:
+def _rewrite_query(question: str, llm: LLMClient) -> str | None:
+    """Soruyu LLM ile İngilizce arama sorgusuna çevirir; hata/boş yanıtta None."""
     try:
         rewritten = llm.complete(QUERY_REWRITE_PROMPT, question, max_tokens=100).strip()
     except Exception as exc:  # sorgu genişletme isteğe bağlıdır
         log.warning("Sorgu genişletme başarısız (%s); özgün soru kullanılıyor.",
                     type(exc).__name__)
-        return question
+        return None
     rewritten = rewritten.splitlines()[0].strip().strip('"“”') if rewritten else ""
-    return f"{question} {rewritten}".strip() if rewritten else question
+    return rewritten[:300] or None
 
 
 def answer_question(question: str, chunks: Sequence[dict], embedder: Embedder,
@@ -179,19 +183,36 @@ def answer_question(question: str, chunks: Sequence[dict], embedder: Embedder,
     t0 = time.perf_counter()
     threshold = embedder.default_min_similarity if min_similarity is None else min_similarity
 
-    query_text = question
-    if llm is not None and getattr(embedder, "name", "") == HASHING_NAME and chunks:
-        query_text = _expand_query(question, llm)
+    is_hashing = getattr(embedder, "name", "") == HASHING_NAME
+    queries = [question]
+    if llm is not None and is_hashing and chunks:
+        rewritten = _rewrite_query(question, llm)
+        if rewritten and rewritten.lower() != question.strip().lower():
+            queries.append(rewritten)
+    query_text = " ".join(queries)
 
     retrieved: list[tuple[dict, float]] = []
     if chunks:
         matrix = np.vstack([np.asarray(c["embedding"], dtype=np.float32) for c in chunks])
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
-        q = embedder.embed([query_text])[0]
-        for idx, sim in _top_k(q, matrix / norms, top_k):
-            if sim >= threshold:
-                retrieved.append((chunks[idx], sim))
+        matrix = matrix / norms
+        # Her sorgu varyantı (özgün soru, İngilizce çeviri) ayrı gömülür; parça başına en
+        # yüksek benzerlik alınır. Birleştirip tek vektör yapmak, Türkçe kelimelerin normu
+        # büyütmesi yüzünden İngilizce sinyali sulandırırdı.
+        best: dict[int, float] = {}
+        for q in embedder.embed(queries):
+            for idx, sim in _top_k(q, matrix, top_k):
+                best[idx] = max(sim, best.get(idx, -1.0))
+        ranked = sorted(best.items(), key=lambda x: (-x[1], x[0]))[:top_k]
+        q_tokens = set(hashing_tokens(query_text)) if is_hashing else set()
+        for idx, sim in ranked:
+            if sim < threshold:
+                continue
+            # Hashing'de ortak kelime yoksa benzerlik yalnızca hash çakışması gürültüsüdür.
+            if is_hashing and not q_tokens & set(hashing_tokens(str(chunks[idx].get("text", "")))):
+                continue
+            retrieved.append((chunks[idx], sim))
 
     if not retrieved:
         return _response(NOT_FOUND_ANSWER, False, [], "not_found", embedder.name, t0)
