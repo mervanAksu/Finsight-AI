@@ -8,6 +8,7 @@ import pytest
 
 from finsight.embeddings import HashingEmbedder
 from finsight.rag import (
+    ADVICE_NOT_FOUND_ANSWER,
     ADVICE_REFUSAL,
     EMBEDDING_MISMATCH_WARNING,
     NOT_FOUND_ANSWER,
@@ -16,6 +17,8 @@ from finsight.rag import (
     answer_question,
     build_user_prompt,
     clean_citations,
+    dedupe_chunks,
+    extractive_answer,
     filter_answer,
     is_advice_question,
 )
@@ -286,9 +289,63 @@ def test_advice_question_llm_context_and_prefix(kw_chunks):
 
 
 def test_advice_question_not_found_still_refuses(kw_chunks):
+    """R3: tavsiye + bilgi yok → "aşağıda" demeyen tek cevap; diğer modlarda eski ret cümlesi."""
     out = answer_question("Hedef fiyat nedir?", kw_chunks, KeywordEmbedder(), FakeLLM())
     assert out["mode"] == "not_found" and out["advice_refused"] is True
-    assert out["answer"] == ADVICE_REFUSAL + "\n\n" + NOT_FOUND_ANSWER
+    assert out["found"] is False and out["sources"] == []
+    assert out["answer"] == ADVICE_NOT_FOUND_ANSWER == (
+        "FinSight AI yatırım tavsiyesi vermez. Bu soruyla ilgili işlenen raporlarda bilgi "
+        "bulunamadı.")
+    assert "aşağıda" not in out["answer"]
+    plain = answer_question("Zebra nedir?", kw_chunks, KeywordEmbedder(), None)
+    assert plain["mode"] == "not_found" and plain["answer"] == NOT_FOUND_ANSWER
+    # Gömme uyuşmazlığında da (not_found + warning) aynı kural
+    mismatched = [{**c, "embedding": np.ones(3, dtype=np.float32)} for c in kw_chunks]
+    warned = answer_question("Should I buy the stock?", mismatched, KeywordEmbedder(), None)
+    assert warned["answer"] == ADVICE_NOT_FOUND_ANSWER and warned["warning"]
+
+
+def _dup_chunk(chunk_id, text, filing_date, accession):
+    vec = KeywordEmbedder().embed([text])[0]
+    return {"chunk_id": chunk_id, "text": text, "section": "1A",
+            "section_title": SECTION_TITLES["1A"], "form": "10-K", "filing_date": filing_date,
+            "accession_no": accession, "url": URL, "embedding": vec}
+
+
+def test_identical_chunks_from_old_and_new_filing_listed_once():
+    """R1: eski/yeni 10-K'da birebir aynı paragraf → yalnızca en yeni başvurunun parçası."""
+    same = ("We depend on a single supplier for semiconductor wafers. A supplier disruption "
+            "could delay shipments.")
+    chunks = [
+        _dup_chunk(1, same, "2025-02-20", "0000000001-25-000005"),
+        _dup_chunk(2, same.replace(". ", ".\n"), "2026-02-20", "0000000001-26-000010"),
+        _dup_chunk(3, "Our supplier contracts for semiconductor parts expire in two years.",
+                   "2026-02-20", "0000000001-26-000010"),
+    ]
+    out = answer_question("supplier semiconductor", chunks, KeywordEmbedder(), None)
+    assert out["mode"] == "extractive"
+    ids = [s["chunk_id"] for s in out["sources"]]
+    assert sorted(ids) == [2, 3]  # 1 (eski başvurudaki aynı metin) elendi
+    assert dedupe_chunks(list(reversed(chunks)))[1]["chunk_id"] == 2
+
+
+def test_extractive_does_not_repeat_same_sentence_or_quote_headings():
+    """R1 + R2: örtüşen parçalardaki aynı cümle bir kez (ilk atıfla); alt başlık alıntılanmaz."""
+    shared = "We depend on a single supplier for semiconductor wafers."
+    first = _dup_chunk(1, "Risks Related to Our Business. " + shared + " Prices may rise.",
+                       "2026-02-20", "A")
+    second = _dup_chunk(2, shared + " Another supplier semiconductor shortage could occur.",
+                        "2026-02-20", "A")
+    answer = extractive_answer("supplier semiconductor", [(first, 0.9), (second, 0.8)])
+    lines = [ln for ln in answer.splitlines() if ln.startswith("- ")]
+    assert lines[0] == f"- “{shared}” [1]"
+    assert lines[1] == "- “Another supplier semiconductor shortage could occur.” [2]"
+    assert sum(shared in ln for ln in lines) == 1
+    assert "Risks Related" not in answer
+    # Tekrar dışında soruyla örtüşen cümlesi olmayan parça atlanır
+    third = _dup_chunk(3, shared + " Weather was mild.", "2026-02-20", "A")
+    answer = extractive_answer("supplier semiconductor", [(first, 0.9), (third, 0.7)])
+    assert [ln for ln in answer.splitlines() if ln.startswith("- ")] == [f"- “{shared}” [1]"]
 
 
 def test_llm_advice_sentences_and_uncited_numbers_removed(kw_chunks):

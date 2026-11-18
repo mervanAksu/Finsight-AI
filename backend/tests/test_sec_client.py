@@ -67,3 +67,34 @@ def test_cache_prevents_second_request(tmp_path, fake_clock):
     client.get_json(SUB_URL)
     client.get_json(SUB_URL)
     assert len(fetcher.calls) == 1
+
+
+def test_file_cache_set_is_atomic(tmp_path, monkeypatch):
+    """O5: yazım geçici dosya + os.replace ile; yarıda kalan yazım eski içeriği bozmaz."""
+    import os
+
+    cache = FileCache(str(tmp_path))
+    cache.set(SUB_URL, b"eski")
+    assert cache.get(SUB_URL) == b"eski"
+
+    replaced: list[tuple[str, str]] = []
+    real_replace = os.replace
+
+    def recording_replace(src, dst):
+        replaced.append((src, dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", recording_replace)
+    cache.set(SUB_URL, b"yeni")
+    assert cache.get(SUB_URL) == b"yeni"
+    assert len(replaced) == 1 and replaced[0][1] == cache._path(SUB_URL)
+    assert os.path.dirname(replaced[0][0]) == str(tmp_path)  # aynı dosya sistemi
+
+    def failing_replace(src, dst):
+        raise OSError("disk dolu")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    with pytest.raises(OSError):
+        cache.set(SUB_URL, b"yarim")
+    assert cache.get(SUB_URL) == b"yeni"  # eski içerik sağlam
+    assert sorted(os.listdir(tmp_path)) == [os.path.basename(cache._path(SUB_URL))]

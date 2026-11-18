@@ -1,31 +1,106 @@
-# FinSight AI — SEC Veri Çekme Prototipi (Aşama 1)
+# FinSight AI — SEC Raporlarından Açıklanabilir Finansal Analiz (Aşama 3)
 
-Verilen ABD şirketleri için SEC EDGAR'dan 10-K, 10-Q ve 8-K başvuru listesini ve son 3 mali
-yılın temel finansal kalemlerini (XBRL companyfacts) çeker, veritabanına yazar ve iki REST uç
-noktasıyla sunar.
+FinSight AI, seçilen bir ABD şirketinin SEC 10-K / 10-Q / 8-K raporlarından finansal verileri
+çıkarır, dönemsel karşılaştırma yapar, risk ve ton (duygu) analizi yürütür, rapor hakkındaki
+soruları kaynak göstererek cevaplar ve bileşenleri görünür bir finansal sağlık skoru üretir.
+Backend (FastAPI) ve web arayüzü (React + TypeScript) tek sunucudan çalışır.
 
-> FinSight AI eğitim ve araştırma amaçlı bir prototiptir. Sunulan analizler yatırım tavsiyesi değildir.
+> FinSight AI eğitim ve araştırma amaçlı bir üniversite projesidir. Sunulan analizler
+> **yatırım tavsiyesi değildir**; her yanıt ve ekran bu uyarıyı taşır.
 
-## Ne yapıyor
+## Özellikler
 
 | Özellik | Gereksinim |
 | --- | --- |
-| Ticker veya CIK ile şirket bulma | FR-01 |
-| 10-K / 10-Q / 8-K başvuru listesi, belge bağlantısı | FR-02 |
-| Gelir, net kâr, işletme nakit akışı, toplam varlık, toplam yükümlülük, özkaynak (son 3 yıl) | FR-04 |
+| Ticker, şirket adı veya CIK ile arama (aynı şirketin birden fazla ticker'ı, ör. GOOGL/GOOG, aynı kaydı açar) | FR-01 |
+| 10-K / 10-Q / 8-K başvuru listesi ve belge bağlantıları | FR-02 |
+| Son iki 10-K ve son 10-Q belgesinin indirilip saklanması (aynı belge tekrar indirilmez) | FR-03 |
+| Gelir, net kâr, işletme nakit akışı, toplam varlık / yükümlülük, özkaynak — her değer XBRL etiketi, form ve accession numarasıyla | FR-04, NFR-06 |
 | Yıllık yüzde değişim (YoY) | FR-05 |
-| Her istekte tanımlayıcı User-Agent; yoksa program başlamaz | NFR-01 |
-| En fazla 8 istek/sn (SEC sınırı 10) | NFR-02 |
-| 429/5xx yanıtlarında 3 yeniden deneme | NFR-03 |
-| Her değerin kaynağı: XBRL etiketi, form, accession numarası | NFR-06 |
-| 24 saatlik dosya önbelleği, tekrar çalıştırmada mükerrer kayıt yok | — |
+| 10 finansal oran, formülüyle; eksik veri "hesaplanamadı" olarak döner, sıfır yazılmaz | FR-06 |
+| Item 1A (Risk Faktörleri) ve Item 7 / 10-Q Item 2 (MD&A) bölüm ayıklama | FR-07 |
+| Cümle düzeyinde duygu analizi (FinBERT; yoksa sözlük yedeği) | FR-08 |
+| İki 10-K arasında eklenen / çıkarılan / değişen risk paragrafları | FR-09 |
+| Kaynak gösteren soru-cevap (RAG); kaynak yoksa "raporlarda bulunamadı" | FR-10, NFR-07 |
+| Bileşenleri ve ağırlıkları görünür 100 puanlık skor | FR-11 |
+| Zaman serisi grafikleri (gelir, net kâr, borç, oranlar) | FR-12 |
+| 2–4 şirketi yan yana karşılaştırma | FR-13 |
+| 8-K olay maddeleri (ör. 2.02, 5.02) Türkçe etiketleriyle | FR-14 |
+| Arayüzden arka plan veri çekme işi ve ilerleme takibi | FR-15 |
+| CSV dışa aktarma (Excel uyumlu, UTF-8 BOM) | FR-16 |
+| SEC kuralları: tanımlayıcı User-Agent zorunlu, en fazla 8 istek/sn, 429/5xx'te üstel geri çekilme | NFR-01…03 |
+| Türkçe / İngilizce arayüz | NFR-11 |
+| Yatırım tavsiyesi yok: al/sat/tut soruları reddedilir, yalnızca rapor olguları verilir | NFR-12 |
+
+## Klasör yapısı
+
+```
+finsight-ai/
+├── Dockerfile               # tek imaj: derlenmiş arayüz + FastAPI
+├── docker-compose.yml       # api + PostgreSQL
+├── .env.example             # tüm ayarlar (kopyalayıp .env yapın)
+├── docs/
+│   ├── api-contract.md      # API sözleşmesi (backend ↔ arayüz)
+│   ├── entegrasyon-plani.md # katmanlar, tablolar, analiz hattı
+│   ├── modul-arayuzleri.md  # saf modüllerin fonksiyon imzaları
+│   ├── raporlar/            # planlama belgesi ve ara raporlar
+│   └── ekran-goruntuleri/
+├── backend/
+│   ├── requirements.txt     # çekirdek bağımlılıklar
+│   ├── requirements-ml.txt  # isteğe bağlı: torch, transformers, sentence-transformers
+│   ├── finsight/
+│   │   ├── config.py        # ortam değişkenleri + .env yükleme, User-Agent kontrolü
+│   │   ├── rate_limiter.py  # 8 istek/sn sınırı
+│   │   ├── sec_client.py    # SEC'e tek erişim noktası (yeniden deneme, dosya önbelleği)
+│   │   ├── edgar.py         # CIK, ticker, başvuru ayrıştırma, 8-K maddeleri
+│   │   ├── xbrl.py          # companyfacts → yıllık kalemler
+│   │   ├── pipeline.py      # bir şirket için SEC verisi toplama
+│   │   ├── ratios.py        # finansal oranlar
+│   │   ├── scoring.py       # açıklanabilir skor
+│   │   ├── text_extract.py  # HTML → metin, bölüm ayıklama, cümle / paragraf / parça
+│   │   ├── sentiment.py     # FinBERT veya sözlük yedeği
+│   │   ├── risk_diff.py     # risk bölümü karşılaştırması
+│   │   ├── embeddings.py    # sentence-transformers veya hashing yedeği
+│   │   ├── llm.py           # Anthropic / OpenAI uyumlu LLM istemcisi
+│   │   ├── rag.py           # kaynak gösteren soru-cevap
+│   │   ├── analyze.py       # saf analiz hattı (bölüm, duygu, gömme, risk, skor)
+│   │   ├── models.py, db.py # tablolar, şema yükseltme
+│   │   ├── repository.py    # veritabanı okuma / yazma
+│   │   ├── views.py         # API JSON şekilleri (saf)
+│   │   ├── jobs.py          # arka plan işi, model önbelleği
+│   │   ├── ingest.py        # komut satırı aracı
+│   │   └── api.py           # FastAPI uç noktaları + arayüzün sunulması
+│   └── tests/               # pytest; fixtures/ altında sentetik SEC verisi
+└── frontend/                # React 19 + TypeScript (esbuild), d3 grafikler
+    ├── src/
+    │   ├── pages/           # ana sayfa, şirket sayfası (sekmeler), karşılaştırma
+    │   ├── components/      # arama, veri çekme paneli, ortak bileşenler
+    │   ├── charts/          # çubuk grafik, skor göstergesi
+    │   ├── api.ts, types.ts # API istemcisi ve sözleşme tipleri
+    │   └── i18n.ts          # Türkçe / İngilizce metinler
+    ├── mock/, scripts/      # sahte API verisi (arayüz testleri için)
+    └── build.mjs            # npm run build → dist/
+```
 
 ## Çalıştırma
 
+Önce ayar dosyasını hazırlayın (her iki yöntem için):
+
+```bash
+cd finsight-ai
+cp .env.example .env      # Windows: copy .env.example .env
+```
+
+`.env` içinde en az `SEC_USER_AGENT` satırını kendi adınız ve e-postanızla doldurun
+(SEC bunu zorunlu tutar; yoksa veri çekme başlamaz). `.env` git'e eklenmez.
+Python ile çalışırken `.env` otomatik okunur (önce komutu çalıştırdığınız klasördeki, sonra
+depo kökündeki `.env`); kabukta zaten tanımlı bir değişken `.env` ile ezilmez.
+
 ### A. Python ile (Docker gerekmez)
 
-Python 3.11 veya üstü gerekir. Veritabanı olarak otomatik bir SQLite dosyası (`finsight.db`)
-kullanılır; önceki sürümden kalan dosya ilk açılışta yeni sütun ve tablolarla yükseltilir.
+Python 3.11 veya üstü gerekir. Veritabanı olarak çalışma klasöründe otomatik bir SQLite
+dosyası (`finsight.db`) oluşturulur; önceki sürümden kalan dosya ilk açılışta yeni sütun ve
+tablolarla yükseltilir.
 
 **Windows (PowerShell):**
 
@@ -34,7 +109,6 @@ cd finsight-ai\backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-$env:SEC_USER_AGENT = "FinSight-AI Ad Soyad eposta@ornek.com"
 python -m finsight.ingest MSFT --analyze      # veri çek + metin analizi + skor
 uvicorn finsight.api:app --reload
 ```
@@ -45,49 +119,55 @@ uvicorn finsight.api:app --reload
 cd finsight-ai/backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export SEC_USER_AGENT="FinSight-AI Ad Soyad eposta@ornek.com"
 python -m finsight.ingest MSFT --analyze      # veri çek + metin analizi + skor
 uvicorn finsight.api:app --reload
 ```
 
 - `python -m finsight.ingest AAPL MSFT` yalnızca finansal veriyi çeker; `--analyze` ayrıca son
-  iki 10-K ile son 10-Q'yu indirir, risk / MD&A bölümlerini ayıklar, cümle duygu analizi,
-  gömme (soru-cevap için), risk bölümü karşılaştırması ve skor üretir. Çıktıda hangi modellerin
-  kullanıldığı (FinBERT mi yedek sözlük mü, LLM var mı) yazılır. `--force` önceden analiz
-  edilmiş başvuruları yeniden işler.
-- Şirketler arayüzden de eklenebilir (arka plan işi: `POST /api/companies/{ticker}/ingest`).
+  iki 10-K ile son 10-Q'yu indirir, bölümleri ayıklar, duygu analizi, gömme, risk
+  karşılaştırması ve skor üretir. Çıktıda hangi modellerin kullanıldığı yazılır. `--force`
+  önceden analiz edilmiş başvuruları yeniden işler. Bir şirketteki hata diğerlerini durdurmaz.
+- Şirketler arayüzden de eklenebilir ("Analiz et" düğmesi → arka plan işi).
 
 **Arayüz:** `cd frontend && npm install && npm run build` ile `frontend/dist` üretildiyse
-arayüz API ile aynı adresten sunulur: <http://127.0.0.1:8000>. Geliştirme için
-`npm run dev` → <http://127.0.0.1:5173> (API'ye `http://127.0.0.1:8000` üzerinden bağlanır).
-Swagger: <http://127.0.0.1:8000/docs>.
+arayüz API ile aynı adresten sunulur: <http://127.0.0.1:8000>. Geliştirme için `npm run dev`
+→ <http://127.0.0.1:5173>. Swagger: <http://127.0.0.1:8000/docs>.
 
-**İsteğe bağlı ML paketleri (FinBERT, çok dilli gömme):** kurulmazsa sistem yedek modellerle
-(`lexicon-fallback`, `hashing-fallback`) çalışır ve bunu `/api/health` yanıtında belirtir.
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements-ml.txt     # ilk çalıştırmada ~0,9 GB model indirilir
-```
-
-**LLM anahtarı (isteğe bağlı):** soru-cevap LLM olmadan da çalışır (ilgili alıntıları kaynak
-numarasıyla gösterir). LLM ile özet cevap için `.env` veya ortamda
-`ANTHROPIC_API_KEY=...` (ya da `OPENAI_API_KEY=...`, yerel sunucu için `OPENAI_BASE_URL`)
-tanımlayın; model `FINSIGHT_LLM_MODEL` ile değiştirilebilir. Tüm değişkenler: `.env.example`.
-
-### B. Docker Compose ile (PostgreSQL + pgvector, arayüz dahil)
+### B. Docker Compose ile (PostgreSQL, arayüz dahil)
 
 ```bash
 cd finsight-ai
-cp .env.example .env          # Windows: copy .env.example .env  → SEC_USER_AGENT'ı düzenle
-docker compose up -d --build  # ML paketleriyle: INSTALL_ML=1 docker compose up -d --build
+docker compose up -d --build                 # ML paketleriyle: INSTALL_ML=1 docker compose up -d --build
 docker compose run --rm api python -m finsight.ingest MSFT --analyze
 ```
 
 Arayüz: <http://localhost:8000> · API: <http://localhost:8000/api/health> ·
 Swagger: <http://localhost:8000/docs>
 
-### Uç noktalar (tümü `/api` önekli; şekiller: `docs/api-contract.md`)
+Portlar yalnızca bu bilgisayara (127.0.0.1) açılır. Veritabanı portu dışarı açılmaz; gerekirse
+`docker-compose.yml` içindeki yorumlu satırı açın.
+
+### İsteğe bağlı ML paketleri
+
+Kurulmazsa sistem yedek modellerle çalışır: duygu için `lexicon-fallback` (sözlük), gömme için
+`hashing-fallback`. Hangi modelin kullanıldığı `/api/health` ve her yanıtta belirtilir.
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-ml.txt     # ilk çalıştırmada ~0,9 GB model indirilir
+```
+
+Model değiştikten sonra şirketi yeniden analiz edin (arayüzde "Analiz et" veya
+`python -m finsight.ingest MSFT --analyze`); eski gömmelerle soru-cevap uyarı verir.
+
+### LLM anahtarı (isteğe bağlı)
+
+Soru-cevap LLM olmadan da çalışır: ilgili rapor cümlelerini kaynak numarasıyla alıntılar.
+Özet cevap için `.env` içinde `ANTHROPIC_API_KEY=...` (ya da `OPENAI_API_KEY=...`; yerel
+OpenAI uyumlu sunucu için `OPENAI_BASE_URL`) tanımlayın. Model `FINSIGHT_LLM_MODEL` ile
+değiştirilebilir. Anahtar koda yazılmaz, hata mesajlarında gizlenir.
+
+## Uç noktalar (tümü `/api` önekli; şekiller: `docs/api-contract.md`)
 
 | Yöntem | Yol | Açıklama |
 | --- | --- | --- |
@@ -105,51 +185,58 @@ Swagger: <http://localhost:8000/docs>
 | GET | `/api/companies/{ticker}/risk-changes` | İki 10-K arasında risk paragrafı farkı |
 | POST | `/api/companies/{ticker}/ask` | Kaynak gösteren soru-cevap |
 | GET | `/api/compare?tickers=AAPL,MSFT` | 2–4 şirket karşılaştırması |
-| GET | `/api/companies/{ticker}/export.csv` | CSV dışa aktarım (UTF-8 BOM) |
+| GET | `/api/companies/{ticker}/export.csv` | CSV dışa aktarım (uyarı metni `X-FinSight-Disclaimer` başlığında) |
 
 ## Testler
 
 ```bash
 cd backend
-pytest -v --cov=finsight
+python -m pytest -q                  # tüm testler
+python -m pytest --cov=finsight      # kapsam raporu (pytest-cov)
+cd .. && ruff check backend/finsight backend/tests     # lint
+
+cd frontend && npm run typecheck && npm run build      # arayüz
 ```
 
-Testler SEC'e gerçek istek atmaz; `tests/fixtures/` altındaki **sentetik** "Example Corp"
-verisini kullanır (gerçek bir şirket değildir). Test edilen kurallar: User-Agent zorunluluğu,
-hız sınırı (her 1 sn'de en fazla 8 istek), yeniden deneme, önbellek, form süzme, mükerrer XBRL
-değerinden en son raporlananın seçilmesi, 10-K içindeki çeyrek değerlerin dışlanması, etiket
-değişikliğinde yedek etikete geçiş, API yanıtları.
+Testler SEC'e ve LLM'e gerçek istek atmaz; `backend/tests/fixtures/` altındaki **sentetik**
+şirket verisini ("Example Corp", "Kestrel Dynamics" — gerçek şirketler değildir) ve sahte
+istemcileri kullanır. FastAPI / SQLAlchemy kurulu değilse ilgili testler (`test_api.py`,
+`test_repository.py`, `test_jobs.py`) atlanır; tam doğrulama için `requirements.txt`
+kurulu ortamda çalıştırın.
 
-## Klasör yapısı
+## Nasıl çalışır (kısaca)
 
-```
-finsight-ai/
-├── docker-compose.yml
-├── .env.example
-├── docs/
-│   ├── raporlar/            # planlama belgesi ve ara raporlar (.md + .docx)
-│   ├── ekran-goruntuleri/   # prototip çalıştırma ve Swagger ekran görüntüleri
-│   └── kaynak/              # bölümün ara rapor şablonu, ilk proje taslağı
-└── backend/
-    ├── finsight/
-    │   ├── config.py        # ortam değişkenleri, User-Agent kontrolü
-    │   ├── rate_limiter.py  # 8 istek/sn sınırı
-    │   ├── sec_client.py    # SEC'e tek erişim noktası (retry, önbellek)
-    │   ├── edgar.py         # CIK, ticker, başvuru ayrıştırma
-    │   ├── xbrl.py          # companyfacts → yıllık kalemler
-    │   ├── pipeline.py      # bir şirket için veri toplama
-    │   ├── models.py, db.py # company, filing, financial_fact tabloları
-    │   ├── ingest.py        # komut satırı aracı
-    │   └── api.py           # FastAPI uç noktaları
-    └── tests/
-```
+- **Veri:** SEC `submissions` ve `companyfacts` JSON'ları + başvuruların ana HTML belgesi.
+  Yanıtlar 24 saat dosya önbelleğinde tutulur.
+- **Metin analizi:** bölümler ayıklanır, cümlelere ve ~150–350 kelimelik parçalara bölünür.
+  Bölüm alt başlıkları ("Risks Related to Our Business") duygu analizinde ve alıntılarda
+  kullanılmaz.
+- **Soru-cevap:** parça vektörleri veritabanında ikili (float32) sütunda saklanır; benzerlik
+  her soruda numpy ile hesaplanır (kosinüs). Veritabanında vektör araması (pgvector) Aşama 4
+  seçeneğidir. Eski ve yeni 10-K'da birebir aynı paragraflar tek kaynak olarak gösterilir.
+- **Skor:** oranlar + metin sinyalleri, ağırlıkları `scoring.py`'de; her bileşen gerekçesiyle.
 
-## Bilinen sınırlar (Aşama 2'de ele alınacak)
+## Bilinen sınırlar
 
-- Tablolar `create_all` ile oluşturuluyor; Alembic göçleri Aşama 2'de eklenecek.
+- **Hashing yedeğinde Türkçe sorular:** `hashing-fallback` gömücüsü kelime eşleşmesine
+  dayanır ve diller arası eşleştiremez. LLM anahtarı yoksa Türkçe soru, İngilizce raporlarda
+  karşılık bulamayabilir ("raporlarda bulunamadı"). Çözüm: soruyu İngilizce sorun, LLM anahtarı
+  tanımlayın (soru otomatik İngilizceye çevrilip aranır) veya ML paketlerini kurun (çok dilli
+  gömme modeli).
+- **Sözlük duygu modeli:** `lexicon-fallback` kelime sayımıdır; olumsuzlamayı ("not
+  significant"), bağlamı ve finansal ironiyi anlamaz, uzun cümlelerde nötre kayar. Ton
+  değerlerini FinBERT kurulu ortamda yorumlayın. Loughran-McDonald sözlüğü
+  (`LM_DICTIONARY_PATH`) verilirse kapsam artar.
+- **Gerçek SEC verisiyle doğrulama** geliştirme ortamında ağ kısıtı nedeniyle sentetik veriyle
+  yapıldı; gerçek şirketlerle (ör. MSFT, AAPL, GOOGL/GOOG) uçtan uca deneme kullanıcının
+  bilgisayarında yapılır.
+- Bölüm ayıklama başlık kalıplarına dayanır; alışılmadık biçimli belgelerde bölüm
+  bulunamayabilir (iş uyarısında belirtilir).
 - Bankalar ve sigorta şirketlerinde bazı kalemler farklı etiketlerle raporlanır, boş gelebilir.
 - Mali yılı Aralık dışında biten şirketlerde "yıl" dönem bitiş tarihine göre gösterilir.
-- Belge metni (Item 1A / 7) indirme ve ayıklama Aşama 3'te (hafta 7).
+- Şema yükseltme basit `ALTER TABLE ... ADD COLUMN` ile yapılır; Alembic göçleri Aşama 4'te.
+- Arka plan işleri tek süreç içindir (uvicorn tek worker önerilir).
+- PDF dışa aktarma yok; yalnızca CSV.
 
 ## Kaynaklar
 

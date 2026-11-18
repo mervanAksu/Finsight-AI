@@ -36,25 +36,30 @@ altından sunar. Gerekirse `FINSIGHT_API_BASE` ile derleme anında değiştirili
 
 `scripts/mock_server.py` yalnızca Python standart kütüphanesiyle çalışır; `dist/` klasörünü ve
 `/api/*` uç noktalarını `mock/*.json` içindeki **kurgusal** verilerle sunar (EXMP – Example Corp,
-NVLT – Novalight Systems, HRBR – Harbor Freight Lines, QNTA – Quanta Ridge Foods). Ağa, SEC'e
-veya LLM'e bağlanmaz; sunumda veya backend hazır değilken arayüzü göstermek için uygundur.
+NVLT – Novalight Systems, HRBR – Harbor Freight Lines, QNTA – Quanta Ridge Foods, CDRW – Cedarway
+Outdoor). Ağa, SEC'e veya LLM'e bağlanmaz; yanıtlar `docs/api-contract.md` (v1.1) şeklindedir.
 
 ```bash
 npm run build
 python3 scripts/mock_server.py 8765          # http://127.0.0.1:8765
 python3 scripts/mock_server.py 8765 --latency 0   # yapay gecikme olmadan
+python3 scripts/mock_server.py 8765 --empty       # hiç işlenmiş şirket yok (boş ana sayfa)
 ```
 
 Demo akışları:
-- **Analiz et:** Arama kutusuna `quanta` yazıp QNTA'yı seçin ve "Analiz et"e basın; ~9 sn süren
-  sahte iş ilerleme çubuğuyla izlenir, bitince şirket sayfası açılır.
-- **Hata durumu:** LMNR, ORVB, PLSD veya EXMR için analiz işi hata ile biter.
+- **İşlenmemiş şirket:** `#/company/CDRW/overview` (veya aramada CDRW) → sunucu gerçek backend gibi
+  404 döner; sayfa "Bu şirket henüz işlenmedi" ve "SEC'ten verileri çek ve analiz et" düğmesini
+  gösterir. ~9 sn süren sahte iş (adım uyarısı dahil) bitince sayfa dolar.
+- **Metin analizi yapılmamış şirket:** QNTA yalnızca finansal veriyle başlar (`analyzed: false`;
+  ton/risk özeti yok, skor metin bileşenleri olmadan). Başlıktaki "Metin analizini çalıştır" ile
+  analiz tamamlanır.
+- **Hata durumu:** LMNR, ORVB, PLSD veya EXMR için analiz işi hata ile biter (şirket kaydı boş kalır).
 - **Soru-Cevap:** soruda "bulunamadı" (veya "kripto") geçerse `not_found`, "alıntı" geçerse
-  `extractive` (LLM yok) yanıtı döner; diğer sorular iki kaynaklı LLM cevabı alır.
-- **Eksik oran:** NVLT'de 2023 cari oranı hesaplanamaz ("—", nedeni ipucunda); NVLT'de risk
-  değişimi bileşeni "hesaplanamadı" olarak görünür.
+  `extractive`, "gömme" geçerse `warning` alanlı yanıt döner; "almalı mıyım" gibi tavsiye
+  sorularında `advice_refused: true` ve cevabın başında sabit ret cümlesi bulunur.
+- **Eksik oran:** NVLT'de 2023 cari oranı hesaplanamaz ("—", nedeni ipucunda).
 
-Sunucu durumu bellektedir; QNTA'yı yeniden "işlenmemiş" görmek için sunucuyu yeniden başlatın.
+Sunucu durumu bellektedir; CDRW / QNTA'yı yeniden başlangıç durumunda görmek için sunucuyu yeniden başlatın.
 Sahte veriyi yeniden üretmek için: `python3 scripts/gen_mock_data.py` (oranlar ve skor,
 `.claude/skills/financial-analysis` kurallarıyla bu betikte hesaplanır).
 

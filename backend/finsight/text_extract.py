@@ -63,8 +63,8 @@ _BLOCK_TAGS = {
 _SKIP_STRINGS = (Comment, Doctype, CData, ProcessingInstruction, Declaration)
 _DISPLAY_NONE = re.compile(r"display\s*:\s*none", re.I)
 _PAGE_NOISE_LINE = re.compile(r"^(?:\d{1,3}|[-–—]\s*\d{1,3}\s*[-–—]|table of contents)$", re.I)
-_SPACE_CHARS = {"\xa0": " ", " ": " ", " ": " ", " ": " ", "​": "",
-                "﻿": "", "\r": "\n", "\t": " ", "\f": " ", "\v": " "}
+_SPACE_CHARS = {"\xa0": " ", "\u2007": " ", "\u202f": " ", "\u2009": " ", "\u200b": "",
+                "\ufeff": "", "\r": "\n", "\t": " ", "\f": " ", "\v": " "}
 _SPACE_TABLE = str.maketrans(_SPACE_CHARS)
 
 
@@ -389,7 +389,7 @@ def extract_sections(text: str, form: str) -> dict[str, dict]:
 
 # --------------------------------------------------------------------------- cümle / paragraf
 
-_DOT = ""  # kısaltmalardaki noktayı geçici olarak saklayan özel karakter
+_DOT = "\ue000"  # kısaltmalardaki noktayı geçici olarak saklayan özel karakter
 _ABBREV_CS = re.compile(
     r"\b(?:Inc|No|Nos|Mr|Mrs|Ms|Dr|Corp|Co|Ltd|Jr|Sr|St|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|"
     r"Sept|Oct|Nov|Dec|Fig)\.(?=\s)"
@@ -454,13 +454,60 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
+# Başlık sezgisi: kısa satırda yaygın yardımcı fiil / kip ya da "-ed" ile biten küçük harfli
+# kelime varsa cümle sayılır ("Revenue increased", "We may fail").
+_VERB_HINT = re.compile(
+    r"\b(?:is|are|was|were|be|been|being|am|has|have|had|do|does|did|may|might|can|could|"
+    r"will|would|shall|should|must|[a-z]+ed)\b"
+)
+_TERMINAL = (".", "!", "?")
+
+
+def is_heading_like(sentence: str) -> bool:
+    """Bölüm alt başlığı mı (ör. "Risks Related to Our Business")?
+
+    Basit sezgi (R2): en fazla ``HEADING_MAX_WORDS`` kelime, soru/ünlem değil ve
+    (a) uzun kelimeleri büyük harfle başlıyor (başlık yazımı) ya da (b) cümle sonu noktası
+    ve fiil ipucu yok. Duygu analizinde ve çıkarımsal alıntılarda başlıklar kullanılmaz.
+    """
+    text = sentence.strip()
+    words = text.split()
+    if not words or len(words) > HEADING_MAX_WORDS:
+        return False
+    if text.endswith(("?", "!")):
+        return False
+    alpha = [w.strip("\"'“”‘’()[],.;:") for w in words]
+    alpha = [w for w in alpha if w and w[0].isalpha()]
+    if not alpha:
+        return True  # yalnızca sayı / simge
+    if all(w[0].isupper() or len(w) <= 3 for w in alpha):
+        return True
+    return not text.endswith(_TERMINAL) and not _VERB_HINT.search(text)
+
+
+def content_sentences(text: str) -> list[str]:
+    """``split_sentences`` + başlık benzeri cümleler atılmış hali (duygu, alıntı)."""
+    return [s for s in split_sentences(text) if not is_heading_like(s)]
+
+
+def _close_heading(heading: str) -> str:
+    """Paragrafa eklenen başlığın sonuna cümle sınırı koyar ("Başlık" → "Başlık.") ki
+    cümle bölücü başlığı sonraki cümleye yapıştırmasın (R2)."""
+    if heading.endswith(_TERMINAL):
+        return heading
+    trimmed = heading.rstrip(" :;,-–—")
+    return (trimmed + ".") if trimmed else heading
+
+
 def split_paragraphs(text: str) -> list[str]:
     """Metni paragraflara böler.
 
     Metinde boş satır varsa paragraf sınırı boş satırdır (blok içindeki satır sonları
     boşluğa çevrilir — sabit satır genişlikli eski metin başvuruları için); hiç boş satır
     yoksa her satır bir paragraftır. 8 kelimeden kısa başlık benzeri paragraflar sonraki
-    paragrafın başına eklenir (sonda kalırsa öncekine).
+    paragrafın başına eklenir (sonda kalırsa öncekine). Başlığın sonunda nokta yoksa
+    eklenir ("Risks Related to Our Business. We depend ..."), böylece başlık ayrı bir cümle
+    olarak kalır.
     """
     if not text or not text.strip():
         return []
@@ -477,10 +524,11 @@ def split_paragraphs(text: str) -> list[str]:
         if len(p.split()) < HEADING_MAX_WORDS:
             pending.append(p)
             continue
-        result.append(" ".join([*pending, p]))
+        result.append(" ".join([*(_close_heading(h) for h in pending), p]))
         pending = []
     if pending:
-        tail = " ".join(pending)
+        # Sondaki kısa paragraflar öncekine eklenir; aralarına cümle sınırı konur.
+        tail = " ".join([*(_close_heading(h) for h in pending[:-1]), pending[-1]])
         if result:
             result[-1] = result[-1] + " " + tail
         else:

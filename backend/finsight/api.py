@@ -15,6 +15,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Iterator
+from urllib.parse import quote
 
 from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Query,
                      Request)
@@ -29,7 +30,7 @@ from . import DISCLAIMER, __version__, jobs, views
 from . import repository as repo
 from .config import ConfigError, get_cors_origins, get_frontend_dist, get_user_agent
 from .edgar import build_ticker_map, search_companies
-from .rag import answer_question
+from .rag import EMBEDDING_MISMATCH_WARNING, answer_question
 from .ratios import compute_ratios
 from .sec_client import SecClient
 from .xbrl import METRICS
@@ -40,6 +41,11 @@ TICKER_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 RATIO_PERIODS = 3
 TICKER_MAP_TTL = 6 * 3600       # başarılı company_tickers listesi süreç içinde 6 saat tutulur
 TICKER_MAP_RETRY = 300          # başarısız denemeden sonra 5 dk yalnızca yerel arama
+DISCLAIMER_HEADER = "X-FinSight-Disclaimer"  # CSV'de uyarı metni (URL kodlu, ASCII)
+
+# O1: "çalışan iş var mı?" kontrolü ile iş oluşturma arasında başka istek araya girmesin
+# (aynı şirket için iki iş açılmasın). Tek süreç içindir; çok süreçli dağıtımda Aşama 4.
+_ingest_lock = threading.Lock()
 
 
 # --------------------------------------------------------------------------- istek gövdeleri
@@ -109,6 +115,20 @@ class _TickerMapCache:
                 self._failed_at = now
             return self._map
 
+    def peek(self) -> dict[str, dict] | None:
+        """Ağa çıkmadan, varsa önbellekteki haritayı döndürür."""
+        with self._lock:
+            return self._map
+
+
+def same_cik_tickers(ticker_map: dict[str, dict] | None, ticker: str) -> list[str]:
+    """SEC ticker listesinde ``ticker`` ile aynı CIK'e bağlı ticker'lar (kendisi dahil)."""
+    info = (ticker_map or {}).get(ticker)
+    if not info:
+        return []
+    cik = info.get("cik")
+    return [t for t, other in (ticker_map or {}).items() if other.get("cik") == cik]
+
 
 # --------------------------------------------------------------------------- uç noktalar
 
@@ -150,16 +170,20 @@ def ingest(ticker: str, request: Request, background_tasks: BackgroundTasks,
            session: Session = Depends(get_session)) -> dict:
     """FR-15: arka planda veri çekme + analiz. Çalışan iş varsa onun kimliği döner."""
     t = check_ticker(ticker)
-    running = repo.find_running_job(session, t)
-    if running is not None:
-        return {"job_id": running["id"], "status": running["status"]}
-    if request.app.state.check_sec_config:
-        try:
-            get_user_agent()
-        except ConfigError as exc:
-            raise HTTPException(503, str(exc)) from None
+    # K3: aynı CIK'in diğer ticker'larıyla başlatılmış iş de "çalışan iş" sayılır (GOOG/GOOGL).
+    # SEC listesi yalnızca önbellekteyse kullanılır (bu istek ağa çıkmaz).
+    aliases = same_cik_tickers(request.app.state.ticker_maps.peek(), t)
     analyze = True if body is None else body.analyze
-    job = repo.create_job(session, t, analyze)
+    with _ingest_lock:
+        running = repo.find_running_job(session, t, aliases=aliases)
+        if running is not None:
+            return {"job_id": running["id"], "status": running["status"]}
+        if request.app.state.check_sec_config:
+            try:
+                get_user_agent()
+            except ConfigError as exc:
+                raise HTTPException(503, str(exc)) from None
+        job = repo.create_job(session, t, analyze)
     background_tasks.add_task(jobs.run_ingest_job, job["id"], t, analyze,
                               session_factory=request.app.state.session_factory,
                               client_factory=request.app.state.client_factory)
@@ -241,6 +265,10 @@ def ask(ticker: str, body: AskRequest, session: Session = Depends(get_session)) 
     llm = jobs.get_llm()
     chunks = repo.load_chunks_for_rag(session, company["id"], embedder.name)
     result = answer_question(question, chunks, embedder, llm)
+    if not chunks and "warning" not in result and \
+            repo.count_chunks_other_models(session, company["id"], embedder.name) > 0:
+        # K4: parçalar başka bir gömme modeliyle oluşturulmuş → yeniden analiz uyarısı.
+        result["warning"] = EMBEDDING_MISMATCH_WARNING
     repo.log_qa(session, company["id"], question, result)
     return views.json_safe({"question": question, **result, "disclaimer": DISCLAIMER})
 
@@ -277,9 +305,12 @@ def export_csv(ticker: str, session: Session = Depends(get_session)) -> Response
     rows = views.export_rows(company, facts_, compute_ratios(facts_, periods=RATIO_PERIODS),
                              repo.load_latest_score(session, company["id"]))
     filename = f"finsight-{company['ticker'] or company['cik']}.csv"
+    # O12: CSV'nin içine yorum satırı eklenmez (Excel'de ilk satır başlık olmalı); uyarı
+    # metni yanıt başlığındadır. HTTP başlıkları ASCII olmalı → URL kodlaması.
     return Response(content=views.export_csv(rows).encode("utf-8"),
                     media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                             DISCLAIMER_HEADER: quote(DISCLAIMER, safe="")})
 
 
 # --------------------------------------------------------------------------- uygulama
@@ -336,7 +367,8 @@ def create_app(*, database_url: str | None = None,
     app.state.ticker_maps = _TickerMapCache(app.state.client_factory)
 
     app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(),
-                       allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+                       allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
+                       expose_headers=[DISCLAIMER_HEADER, "Content-Disposition"])
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled_error)
     app.include_router(router)
@@ -365,6 +397,11 @@ def __getattr__(name: str):
         global _app
         with _app_lock:
             if _app is None:
-                _app = create_app()
+                try:
+                    _app = create_app()
+                except AttributeError as exc:
+                    # K7: modül __getattr__ içinden sızan AttributeError, Python tarafından
+                    # "app özniteliği yok" diye yorumlanır ve asıl hata gizlenir.
+                    raise RuntimeError(f"FinSight uygulaması kurulamadı: {exc}") from exc
             return _app
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

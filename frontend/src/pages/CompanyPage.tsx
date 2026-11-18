@@ -1,5 +1,8 @@
 // Şirket sayfası: başlık şeridi + sekmeler (Özet, Finansallar, Risk ve Ton, Soru-Cevap, Raporlar).
-import { LuDownload } from "react-icons/lu";
+// Sözleşme v1.1: işlenmemiş şirket 404 → "henüz işlenmedi" + veri çekme (FR-15);
+// analyzed=false → yalnızca finansal veri var, başlıkta "Metin analizini çalıştır".
+import { useState } from "react";
+import { LuCloudDownload, LuDownload, LuScanText } from "react-icons/lu";
 import { api, ApiError } from "../api";
 import { IngestPanel } from "../components/IngestPanel";
 import { EmptyState, ErrorCard, Skeleton, cx } from "../components/ui";
@@ -24,14 +27,26 @@ const TAB_LABEL: Record<CompanyTab, MsgKey> = {
   filings: "tab.filings",
 };
 
-/** Şirket var ama analiz yok: skor ve kalemler boş (api-contract: alanlar null / boş liste). */
-function isAnalyzed(o: Overview): boolean {
+/** Backend api.TICKER_RE ile aynı: harf, rakam, nokta, tire; en fazla 10 karakter. */
+const TICKER_RE = /^[A-Za-z0-9.-]{1,10}$/;
+
+export function isValidTicker(ticker: string): boolean {
+  return TICKER_RE.test(ticker);
+}
+
+/** Şirket kaydı var ama hiç finansal veri yok (ör. veri çekme yarıda kaldı). */
+function hasFinancialData(o: Overview): boolean {
   return o.score !== null || o.key_metrics.length > 0;
 }
 
 export function CompanyPage({ ticker, tab }: { ticker: string; tab: CompanyTab }) {
   const { t } = useI18n();
-  const { state, reload } = useAsync((signal) => api.overview(ticker, signal), [ticker]);
+  const valid = isValidTicker(ticker);
+  const { state, reload } = useAsync(
+    (signal) => (valid ? api.overview(ticker, signal) : Promise.reject(new ApiError(400, ""))),
+    [ticker, valid],
+  );
+  const [textRun, setTextRun] = useState(false);
 
   if (state.status === "loading") {
     return (
@@ -52,11 +67,20 @@ export function CompanyPage({ ticker, tab }: { ticker: string; tab: CompanyTab }
     );
   }
   if (state.status === "error") {
-    const notFound = state.error instanceof ApiError && state.error.status === 404;
+    const status = state.error instanceof ApiError ? state.error.status : null;
+    if (valid && status === 404) {
+      // Geçerli biçimde ama veritabanında yok: SEC'ten çekmeyi öner (gerçek backend 404 döner).
+      return (
+        <div className="page company">
+          <NotIngested ticker={ticker} onDone={reload} />
+        </div>
+      );
+    }
+    const notFound = !valid || status === 404 || status === 400;
     return (
       <div className="page company">
         <ErrorCard
-          error={state.error}
+          error={valid ? state.error : new Error(t("company.invalidTicker", { ticker }))}
           title={notFound ? t("state.companyNotFound") : undefined}
           onRetry={notFound ? undefined : reload}
         />
@@ -70,12 +94,31 @@ export function CompanyPage({ ticker, tab }: { ticker: string; tab: CompanyTab }
   }
 
   const overview = state.data;
-  const analyzed = isAnalyzed(overview);
+  const hasData = hasFinancialData(overview);
+  const canRunText = hasData && !overview.analyzed;
 
   return (
     <div className="page company">
-      <CompanyStrip overview={overview} analyzed={analyzed} />
-      {analyzed ? (
+      <CompanyStrip
+        overview={overview}
+        hasData={hasData}
+        onRunText={canRunText && !textRun ? () => setTextRun(true) : undefined}
+      />
+      {canRunText && textRun && (
+        <IngestPanel
+          className="text-run"
+          ticker={ticker}
+          name={overview.company.name}
+          heading={t("company.textRunHeading")}
+          autoStart
+          analyze
+          onDone={() => {
+            setTextRun(false);
+            reload();
+          }}
+        />
+      )}
+      {hasData ? (
         <>
           <nav className="tabs" aria-label={t("company.tabsLabel")}>
             {COMPANY_TABS.map((k) => (
@@ -93,7 +136,7 @@ export function CompanyPage({ ticker, tab }: { ticker: string; tab: CompanyTab }
             {tab === "overview" && <OverviewTab ticker={ticker} overview={overview} />}
             {tab === "financials" && <FinancialsTab ticker={ticker} cik={overview.company.cik} />}
             {tab === "risk" && <RiskTab ticker={ticker} />}
-            {tab === "ask" && <AskTab ticker={ticker} />}
+            {tab === "ask" && <AskTab ticker={ticker} analyzed={overview.analyzed} />}
             {tab === "filings" && <FilingsTab ticker={ticker} />}
           </div>
         </>
@@ -107,7 +150,52 @@ export function CompanyPage({ ticker, tab }: { ticker: string; tab: CompanyTab }
   );
 }
 
-function CompanyStrip({ overview, analyzed }: { overview: Overview; analyzed: boolean }) {
+/** İşlenmemiş şirket (404): kısa açıklama + SEC'ten veri çekme ve analiz (IngestPanel). */
+function NotIngested({ ticker, onDone }: { ticker: string; onDone: () => void }) {
+  const { t } = useI18n();
+  // Adı göstermek için SEC ticker listesinde tam eşleşme aranır; bulunamazsa yalnızca ticker.
+  const lookup = useAsync((signal) => api.search(ticker, 5, signal), [ticker]);
+  const match =
+    lookup.state.status === "success" ? lookup.state.data.find((r) => r.ticker.toUpperCase() === ticker) : undefined;
+
+  return (
+    <section className="not-ingested" aria-labelledby="not-ingested-title">
+      <div className="not-ingested-head">
+        <span className="not-ingested-icon" aria-hidden="true">
+          <LuCloudDownload />
+        </span>
+        <div>
+          <p className="strip-ticker">
+            <span className="ticker-tag is-large">{ticker}</span>
+          </p>
+          <h1 id="not-ingested-title" className="not-ingested-title">
+            {t("company.notIngestedTitle")}
+          </h1>
+          <p className="not-ingested-body">{t("company.notIngestedBody", { ticker })}</p>
+        </div>
+      </div>
+      <IngestPanel
+        ticker={ticker}
+        name={match?.name ?? null}
+        startLabel={t("company.fetchAndAnalyze")}
+        onDone={onDone}
+      />
+      <p className="back-link">
+        <a href={hrefFor({ name: "home" })}>{t("state.backHome")}</a>
+      </p>
+    </section>
+  );
+}
+
+function CompanyStrip({
+  overview,
+  hasData,
+  onRunText,
+}: {
+  overview: Overview;
+  hasData: boolean;
+  onRunText?: () => void;
+}) {
   const { t, lang } = useI18n();
   const c = overview.company;
   const total = overview.score?.total ?? null;
@@ -124,6 +212,7 @@ function CompanyStrip({ overview, analyzed }: { overview: Overview; analyzed: bo
       <div className="strip-main">
         <p className="strip-ticker">
           <span className="ticker-tag is-large">{c.ticker}</span>
+          {hasData && !overview.analyzed && <span className="band-pill tone-muted">{t("home.textNotAnalyzed")}</span>}
           {overview.analysis_updated_at && (
             <span className="strip-updated">{t("company.updated", { date: fmtDateTime(overview.analysis_updated_at) })}</span>
           )}
@@ -140,8 +229,19 @@ function CompanyStrip({ overview, analyzed }: { overview: Overview; analyzed: bo
           ))}
         </dl>
       </div>
-      {analyzed && (
-        <div className="strip-side">
+      {hasData && (
+        <div className={cx("strip-side", onRunText && "has-action")}>
+          {onRunText && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onRunText}
+              title={t("company.runTextHint")}
+            >
+              <LuScanText aria-hidden="true" />
+              {t("company.runText")}
+            </button>
+          )}
           {overview.score && (
             <div className={`score-badge tone-${tone}`}>
               <span className="score-badge-label">{t("company.score")}</span>

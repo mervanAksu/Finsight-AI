@@ -500,4 +500,4 @@ def export_csv(rows: Sequence[dict]) -> str:
     writer.writerow(EXPORT_COLUMNS)
     for row in rows:
         writer.writerow([_csv_cell(row.get(col)) for col in EXPORT_COLUMNS])
-    return "﻿" + buf.getvalue()
+    return "\ufeff" + buf.getvalue()  # UTF-8 BOM (U+FEFF)

@@ -25,7 +25,7 @@ type Turn =
   | { id: number; kind: "answer"; question: string; response: AskResponse }
   | { id: number; kind: "error"; question: string; message: string };
 
-export function AskTab({ ticker }: { ticker: string }) {
+export function AskTab({ ticker, analyzed }: { ticker: string; analyzed: boolean }) {
   const { t } = useI18n();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
@@ -83,6 +83,12 @@ export function AskTab({ ticker }: { ticker: string }) {
           ) : undefined
         }
       >
+        {!analyzed && (
+          <p className="msg-note is-warning ask-unanalyzed" role="note">
+            <LuTriangleAlert aria-hidden="true" />
+            <span>{t("ask.notAnalyzedNote")}</span>
+          </p>
+        )}
         <div className="chat" aria-live="polite">
           {turns.length === 0 && (
             <div className="chat-empty">
@@ -213,7 +219,7 @@ function Answer({ response, turnId }: { response: AskResponse; turnId: number })
   return (
     <div className={cx("msg msg-bot", notFound && "is-notfound")}>
       <span className="msg-who">{t("ask.assistant")}</span>
-      {response.advice_refused === true && (
+      {response.advice_refused && (
         <p className="msg-note is-advice" role="note">
           <LuShieldAlert aria-hidden="true" />
           {t("ask.adviceNote")}

@@ -1,0 +1,15 @@
+# Docker derleme bağlamına girmeyecek dosyalar (imaj küçük kalsın, gizli bilgi sızmasın).
+.git
+.env
+.env.*
+!.env.example
+**/.venv
+**/node_modules
+frontend/dist
+**/.sec_cache
+**/*.db
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+.verify

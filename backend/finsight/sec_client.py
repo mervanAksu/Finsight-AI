@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 import time
 from typing import Callable, Protocol
 
@@ -64,8 +65,21 @@ class FileCache:
             return f.read()
 
     def set(self, url: str, body: bytes) -> None:
-        with open(self._path(url), "wb") as f:
-            f.write(body)
+        """Atomik yazım (O5): önce aynı klasörde geçici dosya, sonra ``os.replace``. Yarıda
+        kesilen yazım (çökme, disk dolu) bozuk bir önbellek dosyası bırakmaz; eşzamanlı
+        okuyucu ya eski ya yeni içeriği görür."""
+        path = self._path(url)
+        fd, tmp = tempfile.mkstemp(dir=self.directory, prefix=".tmp-", suffix=".part")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(body)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
 
 class SecClient:

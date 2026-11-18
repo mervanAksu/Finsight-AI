@@ -22,6 +22,7 @@
     "NYSE"
    ]
   },
+  "analyzed": true,
   "score": {
    "total": 46.2,
    "band": "İzlenmeli",
@@ -39,7 +40,8 @@
      "form": "10-K",
      "accession_no": "0009990003-26-000213",
      "filed": "2026-02-24",
-     "derived_from": null
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
     }
    },
    {
@@ -53,7 +55,8 @@
      "form": "10-K",
      "accession_no": "0009990003-26-000213",
      "filed": "2026-02-24",
-     "derived_from": null
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
     }
    },
    {
@@ -67,7 +70,8 @@
      "form": "10-K",
      "accession_no": "0009990003-26-000213",
      "filed": "2026-02-24",
-     "derived_from": null
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
     }
    },
    {
@@ -81,7 +85,8 @@
      "form": "10-K",
      "accession_no": "0009990003-26-000213",
      "filed": "2026-02-24",
-     "derived_from": null
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
     }
    },
    {
@@ -95,7 +100,8 @@
      "form": "10-K",
      "accession_no": "0009990003-26-000213",
      "filed": "2026-02-24",
-     "derived_from": null
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
     }
    },
    {
@@ -109,7 +115,8 @@
      "form": "10-K",
      "accession_no": "0009990003-26-000213",
      "filed": "2026-02-24",
-     "derived_from": null
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
     }
    }
   ],
@@ -171,6 +178,158 @@
   "analysis_updated_at": "2026-11-17T21:40:00Z",
   "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
  },
+ "overview_fin": {
+  "company": {
+   "ticker": "HRBR",
+   "cik": "0009990003",
+   "name": "HARBOR FREIGHT LINES INC",
+   "sic": "4213",
+   "sic_description": "Trucking (No Local)",
+   "fiscal_year_end": "1231",
+   "exchanges": [
+    "NYSE"
+   ]
+  },
+  "analyzed": false,
+  "score": {
+   "total": 44.5,
+   "band": "Zayıf",
+   "as_of_period": "2025-12-31"
+  },
+  "key_metrics": [
+   {
+    "metric": "revenue",
+    "label": "Gelir",
+    "value": 5500000000,
+    "period_end": "2025-12-31",
+    "yoy": -0.0678,
+    "source": {
+     "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+     "form": "10-K",
+     "accession_no": "0009990003-26-000213",
+     "filed": "2026-02-24",
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
+    }
+   },
+   {
+    "metric": "net_income",
+    "label": "Net kâr",
+    "value": 190000000,
+    "period_end": "2025-12-31",
+    "yoy": -0.2963,
+    "source": {
+     "xbrl_tag": "us-gaap:NetIncomeLoss",
+     "form": "10-K",
+     "accession_no": "0009990003-26-000213",
+     "filed": "2026-02-24",
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
+    }
+   },
+   {
+    "metric": "operating_cash_flow",
+    "label": "İşletme nakit akışı",
+    "value": 470000000,
+    "period_end": "2025-12-31",
+    "yoy": -0.2295,
+    "source": {
+     "xbrl_tag": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+     "form": "10-K",
+     "accession_no": "0009990003-26-000213",
+     "filed": "2026-02-24",
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
+    }
+   },
+   {
+    "metric": "total_assets",
+    "label": "Toplam varlıklar",
+    "value": 8200000000,
+    "period_end": "2025-12-31",
+    "yoy": -0.012,
+    "source": {
+     "xbrl_tag": "us-gaap:Assets",
+     "form": "10-K",
+     "accession_no": "0009990003-26-000213",
+     "filed": "2026-02-24",
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
+    }
+   },
+   {
+    "metric": "total_liabilities",
+    "label": "Toplam yükümlülükler",
+    "value": 4200000000,
+    "period_end": "2025-12-31",
+    "yoy": 0.012,
+    "source": {
+     "xbrl_tag": "us-gaap:Liabilities",
+     "form": "10-K",
+     "accession_no": "0009990003-26-000213",
+     "filed": "2026-02-24",
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
+    }
+   },
+   {
+    "metric": "stockholders_equity",
+    "label": "Özkaynak",
+    "value": 4000000000,
+    "period_end": "2025-12-31",
+    "yoy": -0.0361,
+    "source": {
+     "xbrl_tag": "us-gaap:StockholdersEquity",
+     "form": "10-K",
+     "accession_no": "0009990003-26-000213",
+     "filed": "2026-02-24",
+     "derived_from": null,
+     "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
+    }
+   }
+  ],
+  "latest_filings": [
+   {
+    "accession_no": "0009990003-26-000345",
+    "form": "8-K",
+    "filing_date": "2026-10-28",
+    "report_date": "2026-10-28",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000345/0009990003-26-000345-index.htm"
+   },
+   {
+    "accession_no": "0009990003-26-000301",
+    "form": "10-Q",
+    "filing_date": "2026-10-28",
+    "report_date": "2026-09-30",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000301/0009990003-26-000301-index.htm"
+   },
+   {
+    "accession_no": "0009990003-26-000334",
+    "form": "8-K",
+    "filing_date": "2026-07-29",
+    "report_date": "2026-07-29",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000334/0009990003-26-000334-index.htm"
+   },
+   {
+    "accession_no": "0009990003-26-000272",
+    "form": "10-Q",
+    "filing_date": "2026-07-29",
+    "report_date": "2026-06-30",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000272/0009990003-26-000272-index.htm"
+   },
+   {
+    "accession_no": "0009990003-26-000323",
+    "form": "8-K",
+    "filing_date": "2026-05-14",
+    "report_date": "2026-05-14",
+    "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000323/0009990003-26-000323-index.htm"
+   }
+  ],
+  "sentiment_summary": null,
+  "risk_summary": null,
+  "analysis_updated_at": null,
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
  "facts": {
   "company": {
    "ticker": "HRBR",
@@ -199,7 +358,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -212,7 +372,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -225,7 +386,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -245,7 +407,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -258,7 +421,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -271,7 +435,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -294,7 +459,8 @@
        "derived_from": [
         "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
         "us-gaap:CostOfGoodsAndServicesSold"
-       ]
+       ],
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -310,7 +476,8 @@
        "derived_from": [
         "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
         "us-gaap:CostOfGoodsAndServicesSold"
-       ]
+       ],
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -326,7 +493,8 @@
        "derived_from": [
         "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
         "us-gaap:CostOfGoodsAndServicesSold"
-       ]
+       ],
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -346,7 +514,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -359,7 +528,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -372,7 +542,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -392,7 +563,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -405,7 +577,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -418,7 +591,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -438,7 +612,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -451,7 +626,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -464,7 +640,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -484,7 +661,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -497,7 +675,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -510,7 +689,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -530,7 +710,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -543,7 +724,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -556,7 +738,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -576,7 +759,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -589,7 +773,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -602,7 +787,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -622,7 +808,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -635,7 +822,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -648,7 +836,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -668,7 +857,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -681,7 +871,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -694,7 +885,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -714,7 +906,8 @@
        "form": "10-K",
        "accession_no": "0009990003-24-000137",
        "filed": "2024-02-27",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000324000137/"
       }
      },
      {
@@ -727,7 +920,8 @@
        "form": "10-K",
        "accession_no": "0009990003-25-000175",
        "filed": "2025-02-25",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000325000175/"
       }
      },
      {
@@ -740,7 +934,8 @@
        "form": "10-K",
        "accession_no": "0009990003-26-000213",
        "filed": "2026-02-24",
-       "derived_from": null
+       "derived_from": null,
+       "url": "https://www.sec.gov/Archives/edgar/data/9990003/000999000326000213/"
       }
      }
     ]
@@ -1614,6 +1809,165 @@
   ],
   "missing_components": [],
   "explanation": "Toplam skor 7 bileşenin ağırlıklı ortalamasıdır (kullanılabilen ağırlık 100/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
+  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
+ },
+ "score_fin": {
+  "total": 44.5,
+  "band": "Zayıf",
+  "as_of_period": "2025-12-31",
+  "weights_version": "v1-2026-11",
+  "components": [
+   {
+    "key": "profitability",
+    "label": "Kârlılık",
+    "weight": 25,
+    "score": 18.8,
+    "available": true,
+    "indicators": [
+     {
+      "key": "net_margin",
+      "label": "Net kâr marjı",
+      "value": 0.0345,
+      "display": "%3,5",
+      "points": 17.2
+     },
+     {
+      "key": "operating_margin",
+      "label": "Faaliyet kâr marjı",
+      "value": 0.06,
+      "display": "%6,0",
+      "points": 24.0
+     },
+     {
+      "key": "roa",
+      "label": "ROA",
+      "value": 0.023,
+      "display": "%2,3",
+      "points": 15.3
+     },
+     {
+      "key": "roe",
+      "label": "ROE",
+      "value": 0.0466,
+      "display": "%4,7",
+      "points": 18.6
+     }
+    ],
+    "explanation": "Net kâr marjı %3,5 → 17,2 puan; Faaliyet kâr marjı %6,0 → 24,0 puan; ROA %2,3 → 15,3 puan; ROE %4,7 → 18,6 puan. Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25."
+   },
+   {
+    "key": "leverage",
+    "label": "Kaldıraç ve borç",
+    "weight": 20,
+    "score": 71.3,
+    "available": true,
+    "indicators": [
+     {
+      "key": "debt_to_equity",
+      "label": "Borç / özkaynak",
+      "value": 1.05,
+      "display": "1,05",
+      "points": 78.0
+     },
+     {
+      "key": "liabilities_to_assets",
+      "label": "Yükümlülük / varlık",
+      "value": 0.5122,
+      "display": "%51,2",
+      "points": 64.6
+     }
+    ],
+    "explanation": "Borç/özkaynak 1,05 (eşik 3,0–0,5, ters → 78,0 puan); yükümlülük/varlık %51,2 (eşik %90–%30, ters → 64,6 puan)."
+   },
+   {
+    "key": "liquidity",
+    "label": "Likidite",
+    "weight": 15,
+    "score": 56.4,
+    "available": true,
+    "indicators": [
+     {
+      "key": "current_ratio",
+      "label": "Cari oran",
+      "value": 1.3462,
+      "display": "1,35",
+      "points": 56.4
+     }
+    ],
+    "explanation": "Cari oran 1,35 (eşik 0,5–2,0 → 56,4 puan)."
+   },
+   {
+    "key": "cash_quality",
+    "label": "Nakit akışı kalitesi",
+    "weight": 15,
+    "score": 65.2,
+    "available": true,
+    "indicators": [
+     {
+      "key": "ocf_to_net_income",
+      "label": "Nakit akışı kalitesi",
+      "value": 2.4737,
+      "display": "2,47",
+      "points": 100.0
+     },
+     {
+      "key": "fcf_margin",
+      "label": "Serbest nakit akışı marjı",
+      "value": 0.0109,
+      "display": "%1,1",
+      "points": 30.4
+     }
+    ],
+    "explanation": "İşletme nakit akışı / net kâr 2,47 (eşik 0–1,2 → 100,0 puan); serbest nakit akışı marjı %1,1 (eşik −%5–%15 → 30,4 puan)."
+   },
+   {
+    "key": "growth",
+    "label": "Büyüme",
+    "weight": 10,
+    "score": 6.5,
+    "available": true,
+    "indicators": [
+     {
+      "key": "revenue_yoy",
+      "label": "Gelir değişimi",
+      "value": -0.0678,
+      "display": "-%6,8",
+      "points": 12.9
+     },
+     {
+      "key": "net_income_yoy",
+      "label": "Net kâr değişimi",
+      "value": -0.2963,
+      "display": "-%29,6",
+      "points": 0.0
+     }
+    ],
+    "explanation": "Gelir yıllık -%6,8 (eşik −%10–%15 → 12,9 puan); net kâr yıllık -%29,6 (eşik −%20–%20 → 0,0 puan)."
+   },
+   {
+    "key": "text_tone",
+    "label": "Metin tonu",
+    "weight": 10,
+    "score": null,
+    "available": false,
+    "indicators": [],
+    "explanation": "Metin analizi henüz yapılmadı; bileşen hesaplanamadı ve ağırlığı diğer bileşenlere dağıtıldı."
+   },
+   {
+    "key": "risk_change",
+    "label": "Risk değişimi",
+    "weight": 5,
+    "score": null,
+    "available": false,
+    "indicators": [],
+    "explanation": "Metin analizi henüz yapılmadı; bileşen hesaplanamadı ve ağırlığı diğer bileşenlere dağıtıldı."
+   }
+  ],
+  "missing_components": [
+   "text_tone",
+   "risk_change"
+  ],
+  "explanation": "Toplam skor 5 bileşenin ağırlıklı ortalamasıdır (kullanılabilen ağırlık 85/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
   "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
  },
  "filings": [

@@ -112,7 +112,7 @@ def print_analysis(summary: dict) -> None:
         print(f"  Skor         : {score['total']:.1f} / 100 ({score['band']}, "
               f"dönem sonu {score['as_of_period']}) — derecelendirme değildir")
     else:
-        print("  Skor         : hesaplanamadı (yeterli veri yok)")
+        print("  Skor         : hesaplanamadı veya güncellenmedi (uyarılara bakın)")
     for w in summary.get("warnings") or []:
         print(f"  Uyarı: {w}")
 
@@ -157,11 +157,13 @@ def main(argv: list[str] | None = None) -> int:
     for query in args.companies:
         try:
             data = collect(client, query, ticker_map, args.years)
-        except Exception as e:  # bir şirketin hatası diğerlerini durdurmasın
+            company = save(session, data) if session is not None else None
+        except Exception as e:  # bir şirketin hatası (ağ veya veritabanı) diğerlerini durdurmasın
+            if session is not None:
+                session.rollback()
             log.error("%s işlenemedi: %s", query, e)
             failed.append(query)
             continue
-        company = save(session, data) if session is not None else None
         print_summary(data)
         results.append(data)
         if args.analyze and session is not None and company is not None:

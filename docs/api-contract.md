@@ -46,6 +46,26 @@ Ortak nesneler:
 - `/jobs`: `status = "error"` iken `progress` hatanın oluştuğu andaki değerdir.
 - Sunucu tarafı metinler (etiketler, açıklamalar, uyarı) Türkçedir; arayüz bilinen anahtarları kendi çevirir.
 
+### Netleştirmeler (v1.2)
+- Aynı CIK'e bağlı birden fazla ticker (ör. GOOGL / GOOG) aynı şirketi gösterir: `{ticker}` alan
+  tüm uç noktalar şirketin bilinen her ticker'ıyla çalışır. `company.ticker` şirketin ilk
+  kaydedildiği birincil ticker'dır (istekteki ticker'dan farklı olabilir).
+- `POST /ingest`: aynı şirket (CIK) için başka bir ticker'la başlatılmış çalışan iş varsa yeni iş
+  açılmaz, onun kimliği döner.
+- `/jobs`: hiçbir başvuru analiz edilemezse (ör. belgeler indirilemedi) iş `done` olur, uyarı
+  eklenir; skor ve `analysis_updated_at` güncellenmez.
+- `/ask`: `sources` içinde metni birebir aynı parçalar (eski ve yeni 10-K'da değişmeyen paragraf)
+  tekrarlanmaz; yalnızca en yeni başvurununki yer alır. Çıkarımsal cevapta aynı cümle bir kez
+  alıntılanır, bölüm alt başlıkları alıntılanmaz.
+- `/ask`: şirketin parçaları yalnızca başka bir gömme modeliyle oluşturulmuşsa `mode: "not_found"`
+  ile birlikte `warning` döner (yeniden analiz önerisi).
+- `/ask`: `advice_refused: true` ve `mode: "not_found"` birlikteyse `answer` tam olarak
+  "FinSight AI yatırım tavsiyesi vermez. Bu soruyla ilgili işlenen raporlarda bilgi bulunamadı."
+  olur. Diğer modlarda ret cümlesi cevabın başına eklenir.
+- `/export.csv`: CSV'de uyarı yanıt başlığındadır: `X-FinSight-Disclaimer` (URL kodlu UTF-8,
+  `decodeURIComponent` ile çözülür). CSV gövdesine yorum satırı eklenmez (Excel'de ilk satır
+  sütun başlıklarıdır). Başlık CORS ile tarayıcıya açılmıştır (`Access-Control-Expose-Headers`).
+
 ## GET /api/health
 ```json
 {"status": "ok", "version": "0.3.0",
@@ -191,7 +211,8 @@ Gövde: `{"question": "Tedarik zinciri riskleri nasıl değişti?"}` (1–500 ka
 başına sabit ret cümlesi eklenir, yalnızca rapor olguları verilir. `warning` (isteğe bağlı
 string): ör. parçalar farklı bir gömme modeliyle oluşturulmuşsa yeniden analiz uyarısı.
 LLM cevabındaki tavsiye cümleleri ve atıfsız sayısal cümleler sunucuda ayıklanır.
-`found=false` iken `answer` "Bu bilgi işlenen raporlarda bulunamadı." anlamında bir cümledir ve `sources` boştur.
+`found=false` iken `answer` "Bu bilgi işlenen raporlarda bulunamadı." anlamında bir cümledir ve `sources` boştur
+(tavsiye niyetli soruda: "FinSight AI yatırım tavsiyesi vermez. Bu soruyla ilgili işlenen raporlarda bilgi bulunamadı.").
 
 ## GET /api/compare?tickers=AAPL,MSFT
 2–4 şirket (FR-13).
@@ -206,4 +227,5 @@ LLM cevabındaki tavsiye cümleleri ve atıfsız sayısal cümleler sunucuda ay�
 ## GET /api/companies/{ticker}/export.csv
 FR-16. `text/csv; charset=utf-8`, UTF-8 BOM ile (Excel uyumu). Sütunlar:
 `ticker,cik,section,key,label,period_start,period_end,value,unit,status,xbrl_tag,form,accession_no,filed`.
-`section`: `fact | ratio | score`.
+`section`: `fact | ratio | score`. Uyarı metni `X-FinSight-Disclaimer` yanıt başlığındadır
+(bkz. Netleştirmeler v1.2); CSV'nin ilk satırı her zaman sütun başlıklarıdır.

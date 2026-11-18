@@ -1,6 +1,52 @@
-"""Ortam değişkenlerinden yapılandırma (NFR-01, NFR-10)."""
+"""Ortam değişkenlerinden yapılandırma (NFR-01, NFR-10).
 
+``.env`` dosyaları (python-dotenv kuruluysa) bu modül ilk içe aktarıldığında yüklenir:
+önce çalışma klasöründeki ``.env``, sonra depo kökündeki ``.env``. Zaten tanımlı ortam
+değişkenleri EZİLMEZ (kabukta verilen değer önceliklidir); iki dosyada da olan bir anahtar için
+ilk yüklenen (çalışma klasörü) geçerlidir. ``FINSIGHT_DISABLE_DOTENV=1`` yüklemeyi kapatır
+(testler bunu kullanır).
+"""
+
+import logging
 import os
+
+log = logging.getLogger(__name__)
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def default_env_files() -> list[str]:
+    """Yüklenecek .env adayları: çalışma klasörü, ardından depo kökü (tekrarsız)."""
+    out: list[str] = []
+    for path in (os.path.join(os.getcwd(), ".env"), os.path.join(_REPO_ROOT, ".env")):
+        real = os.path.realpath(path)
+        if real not in out:
+            out.append(real)
+    return out
+
+
+def load_env_files(paths: list[str] | None = None) -> list[str]:
+    """Var olan .env dosyalarını yükler (mevcut ortam değişkenlerini ezmeden).
+
+    python-dotenv kurulu değilse veya ``FINSIGHT_DISABLE_DOTENV`` doluysa hiçbir şey yapmaz.
+    Yüklenen dosya yollarını döndürür.
+    """
+    if os.getenv("FINSIGHT_DISABLE_DOTENV", "").strip().lower() in ("1", "true", "yes"):
+        return []
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # python-dotenv isteğe bağlı: yoksa yalnızca ortam değişkenleri
+        return []
+    loaded: list[str] = []
+    for path in paths if paths is not None else default_env_files():
+        if os.path.isfile(path):
+            load_dotenv(path, override=False)
+            loaded.append(path)
+            log.debug(".env yüklendi: %s", path)
+    return loaded
+
+
+load_env_files()
 
 
 class ConfigError(RuntimeError):
@@ -24,18 +70,22 @@ def get_user_agent() -> str:
 
 def get_max_rps() -> float:
     """Saniyedeki en fazla istek. SEC sınırı 10; varsayılan 8 (NFR-02)."""
-    value = float(os.getenv("SEC_MAX_RPS", "8"))
+    raw = os.getenv("SEC_MAX_RPS", "").strip() or "8"  # .env'de boş bırakılmış olabilir
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ConfigError("SEC_MAX_RPS bir sayı olmalı (ör. 8).") from None
     if not 0 < value < 10:
         raise ConfigError("SEC_MAX_RPS 0 ile 10 arasında (10 hariç) olmalı.")
     return value
 
 
 def get_database_url() -> str:
-    return os.getenv("DATABASE_URL", "sqlite:///finsight.db")
+    return os.getenv("DATABASE_URL", "").strip() or "sqlite:///finsight.db"
 
 
 def get_cache_dir() -> str:
-    return os.getenv("SEC_CACHE_DIR", ".sec_cache")
+    return os.getenv("SEC_CACHE_DIR", "").strip() or ".sec_cache"
 
 
 # --- Aşama 3 eklemeleri: API, arayüz ve belge depolama -----------------------------------
@@ -62,8 +112,7 @@ def get_frontend_dist() -> str | None:
     env = os.getenv("FINSIGHT_FRONTEND_DIST", "").strip()
     if env:
         candidates.append(env)
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    candidates.append(os.path.join(repo_root, "frontend", "dist"))
+    candidates.append(os.path.join(_REPO_ROOT, "frontend", "dist"))
     for path in candidates:
         if os.path.isfile(os.path.join(path, "index.html")):
             return path

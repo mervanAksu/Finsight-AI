@@ -74,7 +74,7 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
           <>
             {score.state.data.total === null && (
               <p className="muted-note">
-                {t(overview.analyzed === false ? "overview.noScoreNotAnalyzed" : "overview.noScore")}
+                {t(!overview.analyzed ? "overview.noScoreNotAnalyzed" : "overview.noScore")}
               </p>
             )}
             <ol className="components">
@@ -107,7 +107,7 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
               </p>
             </>
           ) : (
-            <p className="muted-note">{t("overview.noTone")}</p>
+            <p className="muted-note">{t(overview.analyzed ? "overview.noToneAnalyzed" : "overview.noTone")}</p>
           )}
         </Panel>
         <Panel
@@ -142,7 +142,7 @@ export function OverviewTab({ ticker, overview }: { ticker: string; overview: Ov
               </div>
             </dl>
           ) : (
-            <p className="muted-note">{t("overview.noRisk")}</p>
+            <p className="muted-note">{t(overview.analyzed ? "overview.noRisk" : "overview.noRiskNotAnalyzed")}</p>
           )}
         </Panel>
         <Panel

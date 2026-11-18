@@ -8,6 +8,7 @@ Yazan fonksiyonlar işlemlerini kendileri ``commit`` eder; hata durumunda çağ�
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, func, or_, select
@@ -55,14 +56,39 @@ def company_dict(row: Company) -> dict:
         "sic_description": row.sic_description,
         "fiscal_year_end": row.fiscal_year_end,
         "exchanges": loads(row.exchanges, []) or [],
+        "tickers": company_tickers(row),
         "analysis_updated_at": row.analysis_updated_at,
     }
 
 
+def company_tickers(row: Company) -> list[str]:
+    """Şirketin bilinen tüm ticker'ları (birincil ``ticker`` önce, büyük harf, tekrarsız)."""
+    out: list[str] = []
+    for t in [row.ticker, *(loads(row.tickers, []) or [])]:
+        t = str(t or "").strip().upper()
+        if t and t not in out:
+            out.append(t)
+    return out
+
+
 def get_company_row(session: Session, ticker: str) -> Company | None:
-    return session.scalar(
-        select(Company).where(func.upper(Company.ticker) == ticker.strip().upper())
-        .order_by(Company.id).limit(1))
+    """Ticker'a göre şirket (K3): önce birincil ``Company.ticker``, yoksa ``tickers`` JSON
+    listesinde ``"T"`` geçen şirket (ör. GOOGL kaydı GOOG ile de bulunur). Birden fazla
+    eşleşmede en son güncellenen seçilir."""
+    t = ticker.strip().upper()
+    if not t:
+        return None
+    order = (Company.updated_at.desc(), Company.id.desc())
+    row = session.scalar(select(Company).where(func.upper(Company.ticker) == t)
+                         .order_by(*order).limit(1))
+    if row is not None:
+        return row
+    # JSON metninde tırnaklı tam eşleşme ('%"GOOG"%' — "GOOGL" ile eşleşmez); autoescape
+    # ile % ve _ karakterleri joker sayılmaz. save_collected listeyi büyük harfle yazar.
+    candidates = session.scalars(
+        select(Company).where(Company.tickers.contains(f'"{t}"', autoescape=True))
+        .order_by(*order)).all()
+    return next((c for c in candidates if t in company_tickers(c)), None)
 
 
 def load_company(session: Session, ticker: str) -> dict | None:
@@ -101,7 +127,11 @@ def is_company_analyzed(session: Session, company_id: int) -> bool:
 
 
 def all_tickers(session: Session) -> set[str]:
-    return {t.upper() for t in session.scalars(select(Company.ticker)).all() if t}
+    """İşlenmiş şirketlerin tüm ticker'ları (aynı CIK'in diğer ticker'ları dahil)."""
+    out: set[str] = set()
+    for row in session.scalars(select(Company)).all():
+        out.update(company_tickers(row))
+    return out
 
 
 def search_local(session: Session, query: str, limit: int = 10) -> list[dict]:
@@ -110,7 +140,8 @@ def search_local(session: Session, query: str, limit: int = 10) -> list[dict]:
     if not q:
         return []
     like = f"%{q.upper()}%"
-    conditions = [func.upper(Company.ticker).like(like), func.upper(Company.name).like(like)]
+    conditions = [func.upper(Company.ticker).like(like), func.upper(Company.name).like(like),
+                  Company.tickers.like(like)]
     digits = q[3:] if q.upper().startswith("CIK") else q
     if digits.isdigit() and len(digits) <= 10:
         conditions.append(Company.cik == pad_cik(digits))
@@ -142,7 +173,20 @@ def save_collected(session: Session, data: dict) -> Company:
     if company is None:
         company = Company(cik=info["cik"])
         session.add(company)
-    for key in ("ticker", "name", "sic", "fiscal_year_end"):
+    # K3: birincil ticker yalnızca boşsa (veya SEC'in güncel listesinde artık yoksa — ticker
+    # değişikliği) yazılır; istenen ticker ve aynı CIK'in diğer ticker'ları ``tickers``'a eklenir.
+    requested = str(info.get("ticker") or "").strip().upper() or None
+    sec_tickers = [str(t).strip().upper() for t in (info.get("tickers") or []) if t]
+    current = (company.ticker or "").strip().upper()
+    if not current or (sec_tickers and current not in sec_tickers):
+        company.ticker = requested
+    merged: list[str] = []
+    for t in [company.ticker, requested, *sec_tickers, *(loads(company.tickers, []) or [])]:
+        t = str(t or "").strip().upper()
+        if t and t not in merged:
+            merged.append(t)
+    company.tickers = dumps(merged) if merged else None
+    for key in ("name", "sic", "fiscal_year_end"):
         setattr(company, key, info.get(key))
     if "sic_description" in info:
         company.sic_description = info["sic_description"]
@@ -417,6 +461,18 @@ def load_sentiment_sections(session: Session, company_id: int) -> list[dict]:
     return out
 
 
+def count_chunks_other_models(session: Session, company_id: int, embedding_model: str) -> int:
+    """Şirketin `embedding_model` DIŞINDAKİ modellerle gömülmüş parça sayısı (K4: /ask'ta
+    "farklı gömme modeli, yeniden analiz edin" uyarısı için)."""
+    return int(session.scalar(
+        select(func.count()).select_from(ChunkEmbedding)
+        .join(TextChunk, TextChunk.id == ChunkEmbedding.chunk_id)
+        .join(FilingSection, FilingSection.id == TextChunk.section_id)
+        .join(Filing, Filing.id == FilingSection.filing_id)
+        .where(Filing.company_id == company_id, ChunkEmbedding.model_name != embedding_model)
+    ) or 0)
+
+
 def load_chunks_for_rag(session: Session, company_id: int, embedding_model: str) -> list[dict]:
     """rag.answer_question parçaları — yalnızca `embedding_model` ile gömülenler (başka
     modelin vektörleri aynı uzayda değildir)."""
@@ -612,12 +668,34 @@ def get_job(session: Session, job_id: int) -> dict | None:
     return job_dict(row) if row is not None else None
 
 
-def find_running_job(session: Session, ticker: str, now: datetime | None = None) -> dict | None:
-    """Aynı şirket için kuyrukta / çalışan iş. STALE_JOB_AFTER boyunca ilerleme yazmamış iş
-    (ör. sunucu yeniden başlatıldı) hata olarak kapatılır ve yok sayılır."""
+def job_tickers(session: Session, ticker: str, aliases: Iterable[str] = ()) -> list[str]:
+    """Aynı şirketi (CIK) gösteren ticker'lar: verilen ticker, ``aliases`` (ör. SEC ticker
+    listesinde aynı CIK'li olanlar) ve veritabanındaki şirketin bilinen ticker'ları."""
+    out: list[str] = []
+    for t in [ticker, *aliases]:
+        t = str(t or "").strip().upper()
+        if t and t not in out:
+            out.append(t)
+    for t in list(out):
+        row = get_company_row(session, t)
+        if row is not None:
+            for alias in company_tickers(row):
+                if alias not in out:
+                    out.append(alias)
+    return out
+
+
+def find_running_job(session: Session, ticker: str, now: datetime | None = None, *,
+                     aliases: Iterable[str] = ()) -> dict | None:
+    """Aynı şirket için kuyrukta / çalışan iş. Eşleşme ticker'a göre değil şirkete göredir:
+    aynı CIK'in diğer ticker'larıyla (``job_tickers``) başlatılmış işler de bulunur (K3).
+
+    STALE_JOB_AFTER boyunca ilerleme yazmamış iş (ör. sunucu yeniden başlatıldı) hata olarak
+    kapatılır ve yok sayılır."""
     now = now or utcnow()
+    tickers = job_tickers(session, ticker, aliases)
     rows = session.scalars(
-        select(IngestionJob).where(IngestionJob.ticker == ticker.upper(),
+        select(IngestionJob).where(IngestionJob.ticker.in_(tickers),
                                    IngestionJob.status.in_(ACTIVE_JOB_STATUSES))
         .order_by(IngestionJob.id.desc())).all()
     found = None

@@ -236,6 +236,64 @@ def test_log_qa(session, data):
 # --------------------------------------------------------------------------- işler
 
 
+def test_same_cik_tickers_both_resolve_company(session, data):
+    """K3: GOOGL/GOOG benzeri — aynı CIK'li iki ticker; ikisi de aynı şirketi bulur, birincil
+    ticker değişmez, tickers listesi güncellenir."""
+    first = {**data, "company": {**data["company"], "ticker": "EXMP", "tickers": ["EXMP", "EXMQ"]}}
+    company = repo.save_collected(session, first)
+    second = {**data, "company": {**data["company"], "ticker": "EXMQ", "tickers": ["EXMQ", "EXMP"]}}
+    assert repo.save_collected(session, second).id == company.id
+    for t in ("EXMP", "exmq"):
+        loaded = repo.load_company(session, t)
+        assert loaded is not None and loaded["id"] == company.id, t
+        assert loaded["ticker"] == "EXMP" and loaded["tickers"] == ["EXMP", "EXMQ"]
+    assert repo.load_company(session, "EXM") is None  # JSON içinde tam eşleşme
+    assert repo.load_company(session, "EXMQX") is None
+    assert repo.all_tickers(session) == {"EXMP", "EXMQ"}
+    assert repo.search_local(session, "exmq")[0]["cik"] == company.cik
+    assert count(session, Company) == 1
+
+
+def test_ticker_change_and_requested_ticker_added(session, data):
+    """K3: istenen ticker SEC listesinde olmasa da tickers'a eklenir; birincil ticker SEC'in
+    güncel listesinde artık yoksa (ticker değişikliği) yenisiyle değiştirilir."""
+    legacy = {**data, "company": {**data["company"], "ticker": "OLDT"}}  # tickers alanı yok
+    company = repo.save_collected(session, legacy)
+    assert repo.load_company(session, "OLDT")["tickers"] == ["OLDT"]
+    renamed = {**data, "company": {**data["company"], "ticker": "NEWT", "tickers": ["NEWT"]}}
+    repo.save_collected(session, renamed)
+    loaded = repo.load_company(session, "NEWT")
+    assert loaded["id"] == company.id and loaded["ticker"] == "NEWT"
+    assert loaded["tickers"] == ["NEWT", "OLDT"]
+    assert repo.load_company(session, "OLDT")["id"] == company.id  # eski ticker hâlâ bulunur
+
+
+def test_running_job_matches_other_ticker_of_same_company(session, data):
+    """K3: GOOGL için çalışan iş varken GOOG isteği aynı işi bulur (şirket / CIK eşleşmesi)."""
+    repo.save_collected(session, {**data, "company": {**data["company"], "ticker": "EXMP",
+                                                      "tickers": ["EXMP", "EXMQ"]}})
+    job = repo.create_job(session, "EXMP")
+    assert repo.find_running_job(session, "EXMQ")["id"] == job["id"]
+    assert repo.find_running_job(session, "OTHR") is None
+    # Şirket henüz veritabanında yokken SEC listesinden gelen takma adlarla eşleşme
+    other = repo.create_job(session, "NEWA")
+    assert repo.find_running_job(session, "NEWB", aliases=["NEWB", "NEWA"])["id"] == other["id"]
+    assert repo.job_tickers(session, "exmq") == ["EXMQ", "EXMP"]
+
+
+def test_count_chunks_other_models(session, data):
+    """K4: başka gömme modeliyle oluşturulmuş parça sayısı."""
+    company = repo.save_collected(session, data)
+    filing = repo.load_filings(session, company.id, form="10-K")[0]
+    repo.save_analysis_document(session, filing["id"], analysis())
+    n = count(session, ChunkEmbedding)
+    assert n > 0
+    assert repo.count_chunks_other_models(session, company.id, "hashing-fallback") == 0
+    assert repo.count_chunks_other_models(session, company.id, "other-model") == n
+    assert repo.load_chunks_for_rag(session, company.id, "other-model") == []
+    assert repo.count_chunks_other_models(session, company.id + 99, "other-model") == 0
+
+
 def test_job_lifecycle_and_running_lookup(session):
     job = repo.create_job(session, "msft", analyze=True)
     assert job["ticker"] == "MSFT" and job["status"] == "queued" and job["progress"] == 0.0
@@ -301,7 +359,7 @@ def test_init_db_adds_missing_columns_to_old_sqlite_file(tmp_path, data):
     engine = make_engine(f"sqlite:///{path}")
     added = init_db(engine)
     assert set(added) == {"company.sic_description", "company.exchanges",
-                          "company.analysis_updated_at", "filing.analyzed",
+                          "company.analysis_updated_at", "company.tickers", "filing.analyzed",
                           "financial_fact.derived_from"}
     insp = inspect(engine)
     assert {"filing_section", "text_chunk", "chunk_embedding", "sentiment_result",
@@ -335,6 +393,46 @@ def test_upgrade_skips_not_null_columns(tmp_path, caplog):
     assert "ingestion_job.ticker" not in added
     assert "ingestion_job.step" in added and "ingestion_job.updated_at" in added
     assert "Eksik NOT NULL" in caplog.text
+    # O3: skaler varsayılanlı NOT NULL sütunlar DEFAULT ile eklenir
+    assert {"ingestion_job.status", "ingestion_job.progress", "ingestion_job.request_count",
+            "ingestion_job.analyze"} <= set(added)
+    # çağrılabilir varsayılan (utcnow) NOT NULL değil → normal NULL olabilir sütun
+    engine.dispose()
+
+
+def test_upgrade_adds_not_null_columns_with_scalar_default(tmp_path):
+    """O3: eski şemalı SQLite'ta NOT NULL + skaler varsayılanlı sütunlar DEFAULT ile eklenir;
+    mevcut satırlar varsayılanı alır, yeni ORM yazımları çalışır."""
+    path = tmp_path / "old_jobs.db"
+    with sqlite3.connect(path) as conn:
+        conn.executescript("""
+            CREATE TABLE ingestion_job (id INTEGER PRIMARY KEY, ticker VARCHAR(16) NOT NULL,
+              status VARCHAR(16) NOT NULL, step VARCHAR(255), progress FLOAT NOT NULL,
+              error TEXT, request_count INTEGER NOT NULL, created_at DATETIME NOT NULL,
+              started_at DATETIME, finished_at DATETIME);
+            INSERT INTO ingestion_job (id, ticker, status, progress, request_count, created_at)
+              VALUES (1, 'EXMP', 'done', 1.0, 3, '2026-01-01 00:00:00');
+            CREATE TABLE risk_change (id INTEGER PRIMARY KEY, comparison_id INTEGER NOT NULL,
+              change_type VARCHAR(16) NOT NULL, old_text TEXT, new_text TEXT, similarity FLOAT);
+            INSERT INTO risk_change (id, comparison_id, change_type) VALUES (1, 1, 'added');
+        """)
+    engine = make_engine(f"sqlite:///{path}")
+    added = init_db(engine)
+    assert {"ingestion_job.analyze", "ingestion_job.warnings", "ingestion_job.updated_at",
+            "risk_change.position"} <= set(added)
+    cols = {c["name"]: c for c in inspect(engine).get_columns("ingestion_job")}
+    assert cols["analyze"]["nullable"] is False
+    with sqlite3.connect(path) as conn:
+        assert conn.execute('SELECT "analyze" FROM ingestion_job WHERE id = 1').fetchone() == (1,)
+        assert conn.execute("SELECT position FROM risk_change WHERE id = 1").fetchone() == (0,)
+        ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'risk_change'").fetchone()
+        assert "NOT NULL DEFAULT 0" in ddl[0]
+    factory = make_session_factory(engine)
+    with factory() as s:
+        assert repo.get_job(s, 1)["analyze"] is True
+        job = repo.create_job(s, "EXMP", analyze=False)
+        assert repo.get_job(s, job["id"])["analyze"] is False
+    assert init_db(engine) == []
     engine.dispose()
 
 

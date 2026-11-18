@@ -131,6 +131,11 @@ def filing_url(cik: str, acc: str) -> str:
     return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/{acc}-index.htm"
 
 
+def folder_url(cik: str, acc: str) -> str:
+    """Source.url (sözleşme v1.1): başvuru klasörü, CIK baştaki sıfırlar olmadan, accession tiresiz."""
+    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/"
+
+
 # ---------------------------------------------------------------- şirketler
 COMPANIES: dict[str, dict] = {
     "EXMP": {
@@ -222,6 +227,31 @@ COMPANIES: dict[str, dict] = {
             "current_liabilities": [4.4, 4.5, 4.7, 4.9],
             "total_liabilities": [12.6, 12.9, 13.1, 13.3],
             "stockholders_equity": [8.4, 8.9, 9.4, 9.8],
+        },
+        "derived": set(),
+        "scale": B,
+    },
+    # CDRW: örnek verisi var ama başlangıçta hiç işlenmemiş (sunucu 404 döner); "SEC'ten çek
+    # ve analiz et" akışını gösterir.
+    "CDRW": {
+        "company": {"ticker": "CDRW", "cik": "0009990009", "name": "CEDARWAY OUTDOOR INC", "sic": "3949",
+                    "sic_description": "Sporting & Athletic Goods, NEC", "fiscal_year_end": "1231",
+                    "exchanges": ["NYSE"]},
+        "years": [2022, 2023, 2024, 2025],
+        "fy_end": (12, 31),
+        "tenk_filed": {2023: "2024-02-28", 2024: "2025-02-26", 2025: "2026-02-25"},
+        "facts": {
+            "revenue": [3.1, 3.4, 3.6, 3.9],
+            "cost_of_revenue": [1.8, 1.95, 2.05, 2.2],
+            "operating_income": [0.36, 0.41, 0.43, 0.49],
+            "net_income": [0.25, 0.29, 0.3, 0.35],
+            "operating_cash_flow": [0.31, 0.37, 0.4, 0.44],
+            "capex": [0.12, 0.14, 0.15, 0.17],
+            "total_assets": [2.9, 3.2, 3.5, 3.8],
+            "current_assets": [1.5, 1.65, 1.8, 1.95],
+            "current_liabilities": [0.8, 0.85, 0.9, 0.95],
+            "total_liabilities": [1.4, 1.5, 1.6, 1.7],
+            "stockholders_equity": [1.5, 1.7, 1.9, 2.1],
         },
         "derived": set(),
         "scale": B,
@@ -346,6 +376,34 @@ SENTIMENT = {
     },
 }
 
+SENTIMENT["CDRW"] = {
+    "model": "ProsusAI/finbert",
+    "sections": [
+        (2024, "1A", 244, 9, 171, [
+            ("Unfavorable weather conditions could reduce demand for our seasonal products.", 0.95),
+        ], [
+            ("Our direct-to-consumer channel provides valuable insight into customer preferences.", 0.66),
+        ]),
+        (2024, "7", 302, 96, 61, [
+            ("Freight costs increased due to longer ocean shipping routes.", 0.85),
+        ], [
+            ("Net sales increased 5.9% driven by growth in our camping and trail categories.", 0.94),
+        ]),
+        (2025, "1A", 259, 10, 180, [
+            ("Tariffs on products sourced from Asia could increase our costs and reduce our margins.", 0.96),
+            ("A significant portion of our sales is concentrated among a few large sporting goods retailers.", 0.93),
+        ], [
+            ("Diversifying our supplier base reduces our dependence on any single country.", 0.67),
+        ]),
+        (2025, "7", 318, 112, 58, [
+            ("Inventory levels increased as we built stock ahead of anticipated tariff changes.", 0.84),
+        ], [
+            ("Net sales increased 8.3% to $3.9 billion, led by strong direct-to-consumer growth.", 0.96),
+            ("Operating income increased 14% as gross margin expanded 60 basis points.", 0.93),
+        ]),
+    ],
+}
+
 RISK_CHANGES = {
     "EXMP": {
         "unchanged": 112,
@@ -386,6 +444,25 @@ RISK_CHANGES = {
     },
 }
 
+RISK_CHANGES["CDRW"] = {
+    "unchanged": 38,
+    "changes": [
+        ("added", None, "Tariffs and other trade restrictions on products sourced from Asia could increase our costs, and we may be unable to offset these increases through pricing.", None),
+        ("added", None, "A significant portion of our net sales is concentrated among a small number of large sporting goods retailers, and the loss of any of them could adversely affect our results.", None),
+        ("modified", "Unfavorable weather conditions could reduce demand for our products.", "Unfavorable or unseasonable weather conditions, including warmer winters, could reduce demand for our seasonal products and increase inventory markdowns.", 0.71),
+        ("removed", "Disruptions at our primary distribution center during its expansion could delay shipments.", None, None),
+    ],
+}
+
+ASK_CDRW = [
+    {"keywords": ["tedarik", "risk", "gümrük", "tarife"],
+     "answer": "Şirket, Asya'dan tedarik edilen ürünlere uygulanan gümrük vergilerinin maliyetleri artırıp marjları düşürebileceğini yeni bir risk olarak eklemiştir [1]. Satışların önemli bir kısmının birkaç büyük spor malzemesi perakendecisinde yoğunlaştığı da belirtilmektedir [2].",
+     "sources": [(1, "1A", 2025, 0, 0.72), (2, "1A", 2025, 1, 0.63)]},
+    {"keywords": ["gelir", "büyüme", "satış", "kâr"],
+     "answer": "Net satışlar, doğrudan tüketiciye satış kanalındaki güçlü büyümeyle %8,3 artarak 3,9 milyar dolara ulaşmıştır [1]. Faaliyet kârı, brüt marjın 60 baz puan genişlemesiyle %14 artmıştır [2].",
+     "sources": [(1, "7", 2025, "pos0", 0.71), (2, "7", 2025, "pos1", 0.64)]},
+]
+
 ASK = {
     "EXMP": [
         {"keywords": ["tedarik", "supply", "çip", "donanım", "risk"],
@@ -419,7 +496,15 @@ ASK = {
          "answer": "Net satışlar, dondurulmuş gıda ve içecek segmentlerindeki büyümeyle %3,2 artarak 16,1 milyar dolara ulaşmıştır [1]. Düzeltilmiş brüt marj verimlilik tasarrufları sayesinde 30 baz puan iyileşmiştir [2].",
          "sources": [(1, "7", 2025, "pos0", 0.7), (2, "7", 2025, "pos1", 0.63)]},
     ],
+    "CDRW": ASK_CDRW,
 }
+
+NO_TEXT_EXPLANATION = "Metin analizi henüz yapılmadı; bileşen hesaplanamadı ve ağırlığı diğer bileşenlere dağıtıldı."
+
+ADVICE_REFUSAL = (
+    "FinSight AI yatırım tavsiyesi vermez; aşağıda yalnızca raporlarda yer alan bilgiler "
+    "özetlenmiştir."
+)
 
 SECTION_TITLES = {"1A": "Risk Faktörleri", "7": "Yönetimin Değerlendirmesi (MD&A)",
                   "2": "Yönetimin Değerlendirmesi (MD&A)"}
@@ -476,6 +561,7 @@ def build_filings(tk: str, spec: dict) -> list[dict]:
         "HRBR": [("2026-01-15", ["8.01"]), ("2026-05-14", ["5.02"]), ("2026-07-29", ["2.02", "9.01"]),
                  ("2026-10-28", ["2.02", "9.01"])],
         "QNTA": [("2026-01-22", ["5.07"]), ("2026-08-05", ["2.02", "9.01"])],
+        "CDRW": [("2026-05-07", ["5.07"]), ("2026-07-30", ["2.02", "9.01"])],
     }[tk]
     for filed, items in extra:
         seq += 11
@@ -520,7 +606,8 @@ def build(tk: str, spec: dict) -> dict:
         derived = metric in spec["derived"]
         return {"xbrl_tag": "derived" if derived else TAGS[metric], "form": "10-K",
                 "accession_no": f["accession_no"], "filed": f["filing_date"],
-                "derived_from": DERIVED[metric] if derived else None}
+                "derived_from": DERIVED[metric] if derived else None,
+                "url": folder_url(cik, f["accession_no"])}
 
     def yoy(metric: str, i: int) -> float | None:
         cur, prev = raw[metric][i], raw[metric][i - 1] if i > 0 else None
@@ -653,78 +740,87 @@ def build(tk: str, spec: dict) -> dict:
                         "changes": [], "disclaimer": DISCLAIMER}
         risk_summary = None
 
-    # ---- skor
-    L = latest_ratio
-    comps = []
+    # ---- skor (with_text=False: yalnızca finansal veri çekilmiş, metin analizi yok)
+    def make_score(with_text: bool) -> dict:
+        L = latest_ratio
+        comps = []
 
-    def indicator(key: str, label: str, value, display: str, points: float) -> dict:
-        return {"key": key, "label": label, "value": value, "display": display, "points": r1(points)}
+        def indicator(key: str, label: str, value, display: str, points: float) -> dict:
+            return {"key": key, "label": label, "value": value, "display": display, "points": r1(points)}
 
-    def comp(key, label, weight, inds, explanation, available=True, override=None):
-        pts = [i["points"] for i in inds]
-        score = override if override is not None else (sum(pts) / len(pts) if pts else None)
-        comps.append({"key": key, "label": label, "weight": weight,
-                      "score": r1(score) if (available and score is not None) else None,
-                      "available": available and score is not None, "indicators": inds,
-                      "explanation": explanation})
+        def comp(key, label, weight, inds, explanation, available=True, override=None):
+            pts = [i["points"] for i in inds]
+            score = override if override is not None else (sum(pts) / len(pts) if pts else None)
+            comps.append({"key": key, "label": label, "weight": weight,
+                          "score": r1(score) if (available and score is not None) else None,
+                          "available": available and score is not None, "indicators": inds,
+                          "explanation": explanation})
 
-    def pct_ind(key, label, a, b):
-        v = L[key]
-        return indicator(key, label, v, tr_pct(v), lin(v, a, b))
+        def pct_ind(key, label, a, b):
+            v = L[key]
+            return indicator(key, label, v, tr_pct(v), lin(v, a, b))
 
-    inds = [pct_ind("net_margin", "Net kâr marjı", 0, 0.20), pct_ind("operating_margin", "Faaliyet kâr marjı", 0, 0.25),
-            pct_ind("roa", "ROA", 0, 0.15), pct_ind("roe", "ROE", 0, 0.25)]
-    comp("profitability", "Kârlılık", 25, inds,
-         "; ".join(f"{i['label']} {i['display']} → {tr_num(i['points'])} puan" for i in inds)
-         + ". Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25.")
-    de, la = L["debt_to_equity"], L["liabilities_to_assets"]
-    inds = [indicator("debt_to_equity", "Borç / özkaynak", de, tr_num(de, 2), lin(de, 3.0, 0.5)),
-            indicator("liabilities_to_assets", "Yükümlülük / varlık", la, tr_pct(la), lin(la, 0.9, 0.3))]
-    comp("leverage", "Kaldıraç ve borç", 20, inds,
-         f"Borç/özkaynak {tr_num(de, 2)} (eşik 3,0–0,5, ters → {tr_num(inds[0]['points'])} puan); "
-         f"yükümlülük/varlık {tr_pct(la)} (eşik %90–%30, ters → {tr_num(inds[1]['points'])} puan).")
-    cr = L["current_ratio"]
-    inds = [indicator("current_ratio", "Cari oran", cr, tr_num(cr, 2), lin(cr, 0.5, 2.0))]
-    comp("liquidity", "Likidite", 15, inds,
-         f"Cari oran {tr_num(cr, 2)} (eşik 0,5–2,0 → {tr_num(inds[0]['points'])} puan).")
-    oc, fm = L["ocf_to_net_income"], L["fcf_margin"]
-    inds = [indicator("ocf_to_net_income", "Nakit akışı kalitesi", oc, tr_num(oc, 2), lin(oc, 0, 1.2)),
-            indicator("fcf_margin", "Serbest nakit akışı marjı", fm, tr_pct(fm), lin(fm, -0.05, 0.15))]
-    comp("cash_quality", "Nakit akışı kalitesi", 15, inds,
-         f"İşletme nakit akışı / net kâr {tr_num(oc, 2)} (eşik 0–1,2 → {tr_num(inds[0]['points'])} puan); "
-         f"serbest nakit akışı marjı {tr_pct(fm)} (eşik −%5–%15 → {tr_num(inds[1]['points'])} puan).")
-    ry, ny = yoy("revenue", len(years) - 1), yoy("net_income", len(years) - 1)
-    inds = [indicator("revenue_yoy", "Gelir değişimi", ry, tr_pct(ry), lin(ry, -0.10, 0.15)),
-            indicator("net_income_yoy", "Net kâr değişimi", ny, tr_pct(ny), lin(ny, -0.20, 0.20))]
-    comp("growth", "Büyüme", 10, inds,
-         f"Gelir yıllık {tr_pct(ry)} (eşik −%10–%15 → {tr_num(inds[0]['points'])} puan); "
-         f"net kâr yıllık {tr_pct(ny)} (eşik −%20–%20 → {tr_num(inds[1]['points'])} puan).")
-    if mdna_tone is not None:
-        inds = [indicator("mdna_net_tone", "MD&A net tonu", mdna_tone, tr_num(mdna_tone, 3), lin(mdna_tone, -0.40, 0.20))]
-        comp("text_tone", "Metin tonu", 10, inds,
-             f"Son 10-K MD&A net tonu {tr_num(mdna_tone, 3)} (eşik −0,40–0,20 → {tr_num(inds[0]['points'])} puan).")
-    else:
-        comp("text_tone", "Metin tonu", 10, [], "MD&A ve risk bölümü bulunamadı; bileşen hesaplanamadı.", available=False)
-    if risk_summary:
-        added = risk_summary["added"]
-        inds = [indicator("risk_added", "Eklenen risk paragrafı", added, str(added), lin(added, 15, 0))]
-        comp("risk_change", "Risk değişimi", 5, inds,
-             f"Son iki 10-K arasında {added} yeni risk paragrafı (eşik 15–0, ters → {tr_num(inds[0]['points'])} puan).")
-    else:
-        comp("risk_change", "Risk değişimi", 5, [],
-             "Karşılaştırılacak iki 10-K risk bölümü yok; bileşen hesaplanamadı ve ağırlığı diğer bileşenlere dağıtıldı.",
-             available=False)
+        inds = [pct_ind("net_margin", "Net kâr marjı", 0, 0.20), pct_ind("operating_margin", "Faaliyet kâr marjı", 0, 0.25),
+                pct_ind("roa", "ROA", 0, 0.15), pct_ind("roe", "ROE", 0, 0.25)]
+        comp("profitability", "Kârlılık", 25, inds,
+             "; ".join(f"{i['label']} {i['display']} → {tr_num(i['points'])} puan" for i in inds)
+             + ". Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25.")
+        de, la = L["debt_to_equity"], L["liabilities_to_assets"]
+        inds = [indicator("debt_to_equity", "Borç / özkaynak", de, tr_num(de, 2), lin(de, 3.0, 0.5)),
+                indicator("liabilities_to_assets", "Yükümlülük / varlık", la, tr_pct(la), lin(la, 0.9, 0.3))]
+        comp("leverage", "Kaldıraç ve borç", 20, inds,
+             f"Borç/özkaynak {tr_num(de, 2)} (eşik 3,0–0,5, ters → {tr_num(inds[0]['points'])} puan); "
+             f"yükümlülük/varlık {tr_pct(la)} (eşik %90–%30, ters → {tr_num(inds[1]['points'])} puan).")
+        cr = L["current_ratio"]
+        inds = [indicator("current_ratio", "Cari oran", cr, tr_num(cr, 2), lin(cr, 0.5, 2.0))]
+        comp("liquidity", "Likidite", 15, inds,
+             f"Cari oran {tr_num(cr, 2)} (eşik 0,5–2,0 → {tr_num(inds[0]['points'])} puan).")
+        oc, fm = L["ocf_to_net_income"], L["fcf_margin"]
+        inds = [indicator("ocf_to_net_income", "Nakit akışı kalitesi", oc, tr_num(oc, 2), lin(oc, 0, 1.2)),
+                indicator("fcf_margin", "Serbest nakit akışı marjı", fm, tr_pct(fm), lin(fm, -0.05, 0.15))]
+        comp("cash_quality", "Nakit akışı kalitesi", 15, inds,
+             f"İşletme nakit akışı / net kâr {tr_num(oc, 2)} (eşik 0–1,2 → {tr_num(inds[0]['points'])} puan); "
+             f"serbest nakit akışı marjı {tr_pct(fm)} (eşik −%5–%15 → {tr_num(inds[1]['points'])} puan).")
+        ry, ny = yoy("revenue", len(years) - 1), yoy("net_income", len(years) - 1)
+        inds = [indicator("revenue_yoy", "Gelir değişimi", ry, tr_pct(ry), lin(ry, -0.10, 0.15)),
+                indicator("net_income_yoy", "Net kâr değişimi", ny, tr_pct(ny), lin(ny, -0.20, 0.20))]
+        comp("growth", "Büyüme", 10, inds,
+             f"Gelir yıllık {tr_pct(ry)} (eşik −%10–%15 → {tr_num(inds[0]['points'])} puan); "
+             f"net kâr yıllık {tr_pct(ny)} (eşik −%20–%20 → {tr_num(inds[1]['points'])} puan).")
+        if not with_text:
+            comp("text_tone", "Metin tonu", 10, [], NO_TEXT_EXPLANATION, available=False)
+        elif mdna_tone is not None:
+            inds = [indicator("mdna_net_tone", "MD&A net tonu", mdna_tone, tr_num(mdna_tone, 3), lin(mdna_tone, -0.40, 0.20))]
+            comp("text_tone", "Metin tonu", 10, inds,
+                 f"Son 10-K MD&A net tonu {tr_num(mdna_tone, 3)} (eşik −0,40–0,20 → {tr_num(inds[0]['points'])} puan).")
+        else:
+            comp("text_tone", "Metin tonu", 10, [], "MD&A ve risk bölümü bulunamadı; bileşen hesaplanamadı.", available=False)
+        if not with_text:
+            comp("risk_change", "Risk değişimi", 5, [], NO_TEXT_EXPLANATION, available=False)
+        elif risk_summary:
+            added = risk_summary["added"]
+            inds = [indicator("risk_added", "Eklenen risk paragrafı", added, str(added), lin(added, 15, 0))]
+            comp("risk_change", "Risk değişimi", 5, inds,
+                 f"Son iki 10-K arasında {added} yeni risk paragrafı (eşik 15–0, ters → {tr_num(inds[0]['points'])} puan).")
+        else:
+            comp("risk_change", "Risk değişimi", 5, [],
+                 "Karşılaştırılacak iki 10-K risk bölümü yok; bileşen hesaplanamadı ve ağırlığı diğer bileşenlere dağıtıldı.",
+                 available=False)
 
-    # nakit kalitesi özel kuralı: net kâr ≤ 0 ise
-    avail = [c for c in comps if c["available"]]
-    wsum = sum(c["weight"] for c in avail)
-    total = r1(sum(c["weight"] * c["score"] for c in avail) / wsum)
-    missing = [c["key"] for c in comps if not c["available"]]
-    explanation = (f"Toplam skor {len(avail)} bileşenin ağırlıklı ortalamasıdır "
-                   f"(kullanılabilen ağırlık {wsum}/100). Bant gösterim amaçlıdır; derecelendirme değildir.")
-    score = {"total": total, "band": band(total), "as_of_period": pend(latest_year),
-             "weights_version": "v1-2026-11", "components": comps, "missing_components": missing,
-             "explanation": explanation, "disclaimer": DISCLAIMER}
+        # nakit kalitesi özel kuralı: net kâr ≤ 0 ise
+        avail = [c for c in comps if c["available"]]
+        wsum = sum(c["weight"] for c in avail)
+        total = r1(sum(c["weight"] * c["score"] for c in avail) / wsum)
+        missing = [c["key"] for c in comps if not c["available"]]
+        explanation = (f"Toplam skor {len(avail)} bileşenin ağırlıklı ortalamasıdır "
+                       f"(kullanılabilen ağırlık {wsum}/100). Bant gösterim amaçlıdır; derecelendirme değildir.")
+        score = {"total": total, "band": band(total), "as_of_period": pend(latest_year),
+                 "weights_version": "v1-2026-11", "components": comps, "missing_components": missing,
+                 "explanation": explanation, "disclaimer": DISCLAIMER}
+        return score
+
+    score = make_score(True)
+    score_fin = make_score(False)
 
     # ---- genel bakış
     key_order = ["revenue", "net_income", "operating_cash_flow", "total_assets", "total_liabilities",
@@ -736,7 +832,8 @@ def build(tk: str, spec: dict) -> dict:
     latest_10k = tenk_by_year[latest_year]
     overview = {
         "company": company,
-        "score": {"total": total, "band": band(total), "as_of_period": pend(latest_year)},
+        "analyzed": True,
+        "score": {"total": score["total"], "band": score["band"], "as_of_period": score["as_of_period"]},
         "key_metrics": key_metrics,
         "latest_filings": [ref(f) for f in filings[:5]],
         "sentiment_summary": {"filing": ref(latest_10k), "mdna_net_tone": mdna_tone,
@@ -744,6 +841,16 @@ def build(tk: str, spec: dict) -> dict:
         "risk_summary": risk_summary,
         "analysis_updated_at": "2026-11-17T21:40:00Z",
         "disclaimer": DISCLAIMER,
+    }
+    # Yalnızca finansal veri çekilmiş (metin analizi yok) durumu: ton/risk özeti yok, skor metinsiz
+    overview_fin = {
+        **overview,
+        "analyzed": False,
+        "score": {"total": score_fin["total"], "band": score_fin["band"],
+                  "as_of_period": score_fin["as_of_period"]},
+        "sentiment_summary": None,
+        "risk_summary": None,
+        "analysis_updated_at": None,
     }
 
     # ---- soru-cevap
@@ -774,10 +881,12 @@ def build(tk: str, spec: dict) -> dict:
     return {
         "company": company,
         "overview": overview,
+        "overview_fin": overview_fin,
         "facts": {"company": company, "metrics": facts_metrics, "disclaimer": DISCLAIMER},
         "ratios": {"company": company, "periods": [pend(years[i]) for i in shown], "ratios": ratio_rows,
                    "disclaimer": DISCLAIMER},
         "score": score,
+        "score_fin": score_fin,
         "filings": filings,
         "sentiment": {"model": sent_spec["model"], "sections": sections, "disclaimer": DISCLAIMER},
         "risk_changes": risk_changes,
@@ -793,17 +902,22 @@ def main() -> None:
         print(tk, data["score"]["total"], data["score"]["band"])
 
     # Arama dizini: işlenmiş + işlenmemiş kurgusal şirketler
+    # Arama dizini ve başlangıç durumu ("state"):
+    #   full = finansal veri + metin analizi, fin = yalnızca finansal veri (analyzed=false),
+    #   none = hiç işlenmemiş (şirket uçları 404 döner; gerçek backend gibi).
     search = [
-        {"ticker": "EXMP", "cik": "0009990001", "name": "EXAMPLE CORP", "analyzed": True},
-        {"ticker": "HRBR", "cik": "0009990003", "name": "HARBOR FREIGHT LINES INC", "analyzed": True},
-        {"ticker": "NVLT", "cik": "0009990002", "name": "NOVALIGHT SYSTEMS INC", "analyzed": True},
-        # QNTA: örnek verisi var ama başlangıçta işlenmemiş; "Analiz et" akışını gösterir
-        {"ticker": "QNTA", "cik": "0009990004", "name": "QUANTA RIDGE FOODS CO", "analyzed": False},
+        {"ticker": "EXMP", "cik": "0009990001", "name": "EXAMPLE CORP", "state": "full"},
+        {"ticker": "HRBR", "cik": "0009990003", "name": "HARBOR FREIGHT LINES INC", "state": "full"},
+        {"ticker": "NVLT", "cik": "0009990002", "name": "NOVALIGHT SYSTEMS INC", "state": "full"},
+        # QNTA: finansal verisi çekilmiş, metin analizi yapılmamış; "Metin analizini çalıştır"
+        {"ticker": "QNTA", "cik": "0009990004", "name": "QUANTA RIDGE FOODS CO", "state": "fin"},
+        # CDRW: örnek verisi var ama hiç işlenmemiş; "SEC'ten verileri çek ve analiz et"
+        {"ticker": "CDRW", "cik": "0009990009", "name": "CEDARWAY OUTDOOR INC", "state": "none"},
         # Aşağıdakilerin örnek verisi yok; analiz işi demo modunda hata ile biter
-        {"ticker": "LMNR", "cik": "0009990005", "name": "LUMENOR BIOTECH INC", "analyzed": False},
-        {"ticker": "ORVB", "cik": "0009990006", "name": "ORCHARD VALLEY BANCORP", "analyzed": False},
-        {"ticker": "PLSD", "cik": "0009990007", "name": "PLASMA DYNAMICS CORP", "analyzed": False},
-        {"ticker": "EXMR", "cik": "0009990008", "name": "EXAMPLE MARINE HOLDINGS", "analyzed": False},
+        {"ticker": "LMNR", "cik": "0009990005", "name": "LUMENOR BIOTECH INC", "state": "none"},
+        {"ticker": "ORVB", "cik": "0009990006", "name": "ORCHARD VALLEY BANCORP", "state": "none"},
+        {"ticker": "PLSD", "cik": "0009990007", "name": "PLASMA DYNAMICS CORP", "state": "none"},
+        {"ticker": "EXMR", "cik": "0009990008", "name": "EXAMPLE MARINE HOLDINGS", "state": "none"},
     ]
     meta = {
         "health": {"status": "ok", "version": "0.3.0-mock",
@@ -813,6 +927,18 @@ def main() -> None:
         "search_index": search,
         "disclaimer": DISCLAIMER,
         "not_found_answer": "Bu bilgi işlenen raporlarda bulunamadı.",
+        "advice_refusal": ADVICE_REFUSAL,
+        "embedding_mismatch_warning": "Parçalar farklı bir gömme modeliyle oluşturulmuş; analizi yeniden çalıştırın.",
+        # İşi durdurmayan adım uyarıları (jobs.warnings); şirket → uyarı listesi
+        "job_warnings": {
+            "CDRW": ["2026-05-07 tarihli 8-K belgesi indirilemedi; adım atlandı."],
+        },
+        "financial_steps": [
+            "Şirket bilgileri alınıyor (submissions)",
+            "XBRL finansal verileri çekiliyor (companyfacts)",
+            "Oranlar hesaplanıyor",
+            "Skor hesaplanıyor",
+        ],
         "ingest_steps": [
             "Şirket bilgileri alınıyor (submissions)",
             "XBRL finansal verileri çekiliyor (companyfacts)",

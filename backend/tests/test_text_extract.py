@@ -7,8 +7,10 @@ import pytest
 from finsight.text_extract import (
     SECTION_TITLES,
     chunk_text,
+    content_sentences,
     extract_sections,
     html_to_text,
+    is_heading_like,
     split_paragraphs,
     split_sentences,
 )
@@ -182,9 +184,38 @@ def test_split_paragraphs_merges_short_heading_into_next():
         "our revenue.\n\nWe rely on key suppliers for semiconductors and other critical parts."
     )
     assert split_paragraphs(text) == [
-        "Risks Related to Our Business We depend on a small number of customers for most of our revenue.",
+        "Risks Related to Our Business. We depend on a small number of customers for most of our revenue.",
         "We rely on key suppliers for semiconductors and other critical parts.",
     ]
+
+
+def test_split_paragraphs_heading_becomes_its_own_sentence():
+    """R2: başlık sonraki cümleye yapışmaz; başlık benzeri cümle içerik cümlesi sayılmaz."""
+    text = ("Risk Factors\n\nRisks Related to Our Business:\n\nOur revenue depends on a small "
+            "number of customers and any loss could hurt results.\n\nGeneral Risks.\n\n"
+            "We may be affected by changes in tax laws in the jurisdictions where we operate.")
+    paras = split_paragraphs(text)
+    assert paras[0].startswith("Risk Factors. Risks Related to Our Business. Our revenue")
+    assert paras[1].startswith("General Risks. We may be affected")  # zaten noktalı
+    assert split_sentences(paras[0])[:2] == ["Risks Related to Our Business.",
+                                            "Our revenue depends on a small number of "
+                                            "customers and any loss could hurt results."]
+    assert content_sentences(paras[0]) == [
+        "Our revenue depends on a small number of customers and any loss could hurt results."]
+    assert content_sentences(paras[1]) == [
+        "We may be affected by changes in tax laws in the jurisdictions where we operate."]
+
+
+def test_is_heading_like():
+    for heading in ("Risks Related to Our Business", "Risks Related to Our Business.",
+                    "General Risks", "Competition in our industry", "Overview of results:",
+                    "RISKS RELATING TO REGULATION"):
+        assert is_heading_like(heading), heading
+    for sentence in ("Net revenue increased 12% in 2025.", "Is demand strong?",
+                     "We may fail.", "Our revenue depends on few customers.",
+                     "We rely on key suppliers for semiconductors and other critical parts "
+                     "in many regions."):
+        assert not is_heading_like(sentence), sentence
 
 
 def test_split_paragraphs_hard_wrapped_text_and_single_newlines():

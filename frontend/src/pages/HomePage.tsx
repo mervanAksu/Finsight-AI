@@ -1,11 +1,11 @@
 // Ana sayfa: açıklama, büyük arama kutusu, analiz başlatma ve işlenmiş şirketler ızgarası.
 import { useState } from "react";
-import { LuGitCompareArrows, LuInbox } from "react-icons/lu";
+import { LuChartColumn, LuCloudDownload, LuGitCompareArrows, LuSearch } from "react-icons/lu";
 import { api } from "../api";
 import { ScoreRing } from "../charts/ScoreGauge";
 import { CompanySearch } from "../components/CompanySearch";
 import { IngestPanel } from "../components/IngestPanel";
-import { EmptyState, ErrorCard, Skeleton } from "../components/ui";
+import { ErrorCard, Skeleton, cx } from "../components/ui";
 import { fmtDate, scoreTone } from "../format";
 import { bandLabel, useI18n } from "../i18n";
 import { useAsync } from "../lib/useAsync";
@@ -26,10 +26,11 @@ export function HomePage() {
   };
 
   const steps = [t("home.step1"), t("home.step2"), t("home.step3"), t("home.step4")];
+  const isEmpty = state.status === "success" && state.data.length === 0;
 
   return (
     <div className="page home">
-      <section className="hero" aria-labelledby="home-title">
+      <section className={cx("hero", isEmpty && "is-solo")} aria-labelledby="home-title">
         <div className="hero-main">
           <h1 id="home-title" className="hero-title">
             {t("home.title")}
@@ -54,6 +55,7 @@ export function HomePage() {
             />
           )}
         </div>
+        {!isEmpty && (
         <aside className="hero-steps" aria-labelledby="steps-title">
           <h2 id="steps-title" className="steps-title">
             {t("home.stepsTitle")}
@@ -69,8 +71,12 @@ export function HomePage() {
             ))}
           </ol>
         </aside>
+        )}
       </section>
 
+      {isEmpty ? (
+        <StartCard />
+      ) : (
       <section className="companies" aria-labelledby="companies-title">
         <div className="section-head">
           <div>
@@ -107,11 +113,6 @@ export function HomePage() {
           </div>
         )}
         {state.status === "error" && <ErrorCard error={state.error} onRetry={reload} />}
-        {state.status === "success" && state.data.length === 0 && (
-          <EmptyState title={t("home.emptyTitle")} icon={<LuInbox aria-hidden="true" />}>
-            {t("home.emptyBody")}
-          </EmptyState>
-        )}
         {state.status === "success" && state.data.length > 0 && (
           <ul className="company-grid">
             {state.data.map((c) => (
@@ -122,7 +123,58 @@ export function HomePage() {
           </ul>
         )}
       </section>
+      )}
     </div>
+  );
+}
+
+/** Hiç işlenmiş şirket yokken: davetkâr başlangıç kartı ve 3 adımlı "nasıl çalışır". */
+function StartCard() {
+  const { t } = useI18n();
+  const focusSearch = () => {
+    const input = document.querySelector<HTMLInputElement>(".hero-search input");
+    if (input) {
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+      input.focus({ preventScroll: true });
+    }
+  };
+  const how = [
+    { icon: <LuSearch />, title: t("home.how1Title"), text: t("home.how1Text") },
+    { icon: <LuCloudDownload />, title: t("home.how2Title"), text: t("home.how2Text") },
+    { icon: <LuChartColumn />, title: t("home.how3Title"), text: t("home.how3Text") },
+  ];
+  return (
+    <section className="start-card" aria-labelledby="start-title">
+      <div className="start-intro">
+        <p className="start-eyebrow">{t("home.emptyTitle")}</p>
+        <h2 id="start-title" className="start-title">
+          {t("home.startTitle")}
+        </h2>
+        <p className="start-text">{t("home.startBody")}</p>
+        <button type="button" className="btn btn-primary" onClick={focusSearch}>
+          <LuSearch aria-hidden="true" />
+          {t("home.startCta")}
+        </button>
+      </div>
+      <div className="start-how">
+        <h3 className="start-how-title">{t("home.howTitle")}</h3>
+        <ol className="how-steps">
+          {how.map((h, i) => (
+            <li key={h.title} className="how-step">
+              <span className="how-icon" aria-hidden="true">
+                {h.icon}
+              </span>
+              <div>
+                <p className="how-step-title">
+                  <span className="how-n">{i + 1}.</span> {h.title}
+                </p>
+                <p className="how-step-text">{h.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
   );
 }
 

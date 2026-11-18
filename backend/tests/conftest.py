@@ -1,6 +1,10 @@
 import json
+import os
 import pathlib
 import sys
+
+# Geliştiricinin .env dosyası testleri etkilemesin (config.load_env_files, K1).
+os.environ["FINSIGHT_DISABLE_DOTENV"] = "1"
 
 import pytest
 

@@ -17,53 +17,72 @@
    "ticker": "EXMP",
    "cik": "0009990001",
    "name": "EXAMPLE CORP",
-   "analyzed": true
+   "state": "full"
   },
   {
    "ticker": "HRBR",
    "cik": "0009990003",
    "name": "HARBOR FREIGHT LINES INC",
-   "analyzed": true
+   "state": "full"
   },
   {
    "ticker": "NVLT",
    "cik": "0009990002",
    "name": "NOVALIGHT SYSTEMS INC",
-   "analyzed": true
+   "state": "full"
   },
   {
    "ticker": "QNTA",
    "cik": "0009990004",
    "name": "QUANTA RIDGE FOODS CO",
-   "analyzed": false
+   "state": "fin"
+  },
+  {
+   "ticker": "CDRW",
+   "cik": "0009990009",
+   "name": "CEDARWAY OUTDOOR INC",
+   "state": "none"
   },
   {
    "ticker": "LMNR",
    "cik": "0009990005",
    "name": "LUMENOR BIOTECH INC",
-   "analyzed": false
+   "state": "none"
   },
   {
    "ticker": "ORVB",
    "cik": "0009990006",
    "name": "ORCHARD VALLEY BANCORP",
-   "analyzed": false
+   "state": "none"
   },
   {
    "ticker": "PLSD",
    "cik": "0009990007",
    "name": "PLASMA DYNAMICS CORP",
-   "analyzed": false
+   "state": "none"
   },
   {
    "ticker": "EXMR",
    "cik": "0009990008",
    "name": "EXAMPLE MARINE HOLDINGS",
-   "analyzed": false
+   "state": "none"
   }
  ],
  "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir.",
  "not_found_answer": "Bu bilgi işlenen raporlarda bulunamadı.",
+ "advice_refusal": "FinSight AI yatırım tavsiyesi vermez; aşağıda yalnızca raporlarda yer alan bilgiler özetlenmiştir.",
+ "embedding_mismatch_warning": "Parçalar farklı bir gömme modeliyle oluşturulmuş; analizi yeniden çalıştırın.",
+ "job_warnings": {
+  "CDRW": [
+   "2026-05-07 tarihli 8-K belgesi indirilemedi; adım atlandı."
+  ]
+ },
+ "financial_steps": [
+  "Şirket bilgileri alınıyor (submissions)",
+  "XBRL finansal verileri çekiliyor (companyfacts)",
+  "Oranlar hesaplanıyor",
+  "Skor hesaplanıyor"
+ ],
  "ingest_steps": [
   "Şirket bilgileri alınıyor (submissions)",
   "XBRL finansal verileri çekiliyor (companyfacts)",

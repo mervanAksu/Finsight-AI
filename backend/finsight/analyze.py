@@ -17,7 +17,7 @@ from .ratios import compute_ratios
 from .risk_diff import compare_risk_sections
 from .scoring import compute_score
 from .sentiment import SentimentModel, summarize
-from .text_extract import chunk_text, extract_sections, html_to_text, split_sentences
+from .text_extract import chunk_text, content_sentences, extract_sections, html_to_text
 
 # NLP ölçümü: hashing gömücüsünde benzerlik sinyali parça uzunluğunun kareköküyle düşer;
 # ~150 kelimelik parçalar geri çağırmayı korur. Anlamsal (ST) modellerde 350 kelime yeterli.
@@ -118,7 +118,8 @@ def analyze_sections(html: bytes | str, form: str, *, sentiment_model: Sentiment
     sections = sorted(extract_sections(text, form).values(), key=lambda s: s["char_start"])
     out = []
     for sec in sections:
-        sentences = split_sentences(sec["text"])
+        # Alt başlıklar ("Risks Related to Our Business") duygu cümlesi sayılmaz (R2).
+        sentences = content_sentences(sec["text"])
         predictions = sentiment_model.predict(sentences) if sentences else []
         if len(predictions) != len(sentences):
             raise ValueError("Duygu modeli cümle sayısı kadar tahmin döndürmedi")

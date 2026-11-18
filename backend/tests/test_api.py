@@ -6,6 +6,7 @@ okuma uç noktaları, soru-cevap (LLM yok → extractive), karşılaştırma, CS
 
 import os
 from datetime import date
+from urllib.parse import unquote
 
 import pytest
 from conftest import load
@@ -25,6 +26,7 @@ from finsight import repository as repo  # noqa: E402
 from finsight.edgar import parse_filings  # noqa: E402
 from finsight.ingest import save  # noqa: E402
 from finsight.models import Filing, FilingSection, FinancialFact, QALog  # noqa: E402
+from finsight.rag import EMBEDDING_MISMATCH_WARNING  # noqa: E402
 from finsight.xbrl import METRICS, extract_all  # noqa: E402
 
 DISCLAIMER_PART = "yatırım tavsiyesi değildir"
@@ -58,12 +60,13 @@ def client(factory, sec):
         yield c
 
 
-def seed_example(factory, ticker="EXMP", cik="0000000001"):
+def seed_example(factory, ticker="EXMP", cik="0000000001", tickers=None):
     """Aşama 1 verisiyle (analizsiz) bir şirket yazar; iki kez — mükerrer kayıt olmamalı."""
     sub = load("submissions_example.json")
     data = {
         "company": {"cik": cik, "ticker": ticker, "name": f"{ticker} Example Corp",
-                    "sic": "7372", "fiscal_year_end": "1231"},
+                    "sic": "7372", "fiscal_year_end": "1231",
+                    **({"tickers": tickers} if tickers is not None else {})},
         "filings": parse_filings(sub["filings"]["recent"], since=date(2020, 1, 1)),
         "facts": extract_all(load("companyfacts_example.json")),
     }
@@ -320,6 +323,10 @@ def test_export_csv(client, factory, ingested):
                         "status,xbrl_tag,form,accession_no,filed")
     sections = {line.split(",")[2] for line in lines[1:]}
     assert sections == {"fact", "ratio", "score"}
+    # O12: uyarı CSV içinde değil, ASCII güvenli yanıt başlığında
+    header = res.headers["x-finsight-disclaimer"]
+    assert header.isascii() and DISCLAIMER_PART in unquote(header)
+    assert not lines[0].startswith("#")
 
 
 def test_export_csv_without_analysis_has_only_facts_and_ratios(client, factory):
@@ -372,6 +379,55 @@ def test_root_info_frontend_and_cors(factory, tmp_path):
         assert "FinSight" in c.get("/").text
         assert c.get("/api/health").json()["status"] == "ok"  # API önce eşleşir
         assert c.get("/docs").status_code == 200
+
+
+def test_two_tickers_same_cik_both_return_overview(client, factory):
+    """K3: GOOGL/GOOG benzeri iki ticker (kurgusal EXMA/EXMB, aynı CIK) aynı şirketi gösterir."""
+    seed_example(factory, "EXMA", "0000000001", tickers=["EXMA", "EXMB"])
+    seed_example(factory, "EXMB", "0000000001", tickers=["EXMB", "EXMA"])
+    a = client.get("/api/companies/EXMA/overview")
+    b = client.get("/api/companies/exmb/overview")
+    assert a.status_code == b.status_code == 200
+    assert a.json()["company"] == b.json()["company"]
+    assert a.json()["company"]["ticker"] == "EXMA"  # birincil ticker korunur
+    assert set(a.json()["company"]) == COMPANY_KEYS
+    assert client.get("/api/companies/EXMB/facts").json()["metrics"]
+    assert client.get("/api/companies/EXM/overview").status_code == 404
+    listed = client.get("/api/companies").json()
+    assert len(listed) == 1
+
+
+def test_ingest_finds_running_job_of_other_ticker_same_company(client, factory):
+    """K3 + O1: aynı CIK'in diğer ticker'ıyla çalışan iş varsa yeni iş açılmaz."""
+    seed_example(factory, "EXMA", "0000000001", tickers=["EXMA", "EXMB"])
+    with factory() as s:
+        job = repo.create_job(s, "EXMA")
+    res = client.post("/api/companies/EXMB/ingest", json={"analyze": False})
+    assert res.status_code == 202 and res.json()["job_id"] == job["id"]
+
+
+def test_ask_warns_when_chunks_use_other_embedding_model(client, factory, ingested):
+    """K4: parçalar başka gömme modeliyle oluşturulmuşsa /ask uyarı döndürür."""
+    from finsight.embeddings import HashingEmbedder
+
+    class OtherEmbedder(HashingEmbedder):
+        name = "other-embedder"
+
+    jobs.override_models(embedder=OtherEmbedder())
+    body = client.post("/api/companies/EXMP/ask", json={"question": "supplier risks"}).json()
+    assert body["mode"] == "not_found" and body["found"] is False
+    assert body["warning"] == EMBEDDING_MISMATCH_WARNING
+
+
+def test_lazy_app_wraps_attribute_error(monkeypatch):
+    """K7: create_app içindeki AttributeError 'app özniteliği yok' olarak gizlenmez."""
+    def broken(**_kw):
+        raise AttributeError("'NoneType' object has no attribute 'kw'")
+
+    monkeypatch.setattr(api, "_app", None)
+    monkeypatch.setattr(api, "create_app", broken)
+    with pytest.raises(RuntimeError, match="uygulaması kurulamadı"):
+        _ = api.app
 
 
 def test_lazy_module_app(monkeypatch):

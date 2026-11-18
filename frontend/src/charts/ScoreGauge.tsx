@@ -12,6 +12,9 @@ export const BANDS: Array<{ from: number; to: number; tone: Tone; name: string }
   { from: 75, to: 100, tone: "positive", name: "Güçlü" },
 ];
 
+const GAUGE_PAD_TOP = 10;
+const GAUGE_PAD_BOTTOM = 6;
+
 const toAngle = (v: number) => -Math.PI / 2 + (Math.max(0, Math.min(100, v)) / 100) * Math.PI;
 
 interface ArcDatum {
@@ -50,7 +53,8 @@ export function ScoreGauge({ total, band, size = 300 }: { total: number | null; 
 
   return (
     <figure className="gauge" style={{ maxWidth: w }}>
-      <svg viewBox={`0 0 ${w} ${h}`} width="100%" role="img" aria-label={`${fmtScore(total)} / 100 · ${label}`}>
+      {/* Üstte eşik etiketleri (45/60/75), altta 0/100 için pay: metin viewBox dışına taşmaz */}
+      <svg viewBox={`0 ${-GAUGE_PAD_TOP} ${w} ${h + GAUGE_PAD_TOP + GAUGE_PAD_BOTTOM}`} width="100%" role="img" aria-label={`${fmtScore(total)} / 100 · ${label}`}>
         <g transform={`translate(${cxp},${cyp})`}>
           {BANDS.map((b) => (
             <path

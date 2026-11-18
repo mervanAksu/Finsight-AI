@@ -45,6 +45,9 @@ class Company(Base):
     sic_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     exchanges: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON liste
     analysis_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Aynı CIK'e bağlı tüm ticker'lar (JSON liste, büyük harf; ör. ["GOOGL", "GOOG"]).
+    # ``ticker`` ilk kayıttaki birincil ticker'dır; aramalar bu listeye de bakar.
+    tickers: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     filings: Mapped[list["Filing"]] = relationship(back_populates="company")
 
@@ -80,7 +83,8 @@ class FinancialFact(Base):
     metric: Mapped[str] = mapped_column(String(64), index=True)
     tag: Mapped[str] = mapped_column(String(255))
     unit: Mapped[str] = mapped_column(String(16))
-    value: Mapped[float] = mapped_column(Numeric(24, 2))
+    # asdecimal=False: sürücüden Decimal yerine float döner (PostgreSQL'de de tutarlı tip).
+    value: Mapped[float] = mapped_column(Numeric(24, 2, asdecimal=False))
     period_start: Mapped[date | None] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date)
     fy: Mapped[int | None] = mapped_column(BigInteger)

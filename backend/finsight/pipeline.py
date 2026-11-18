@@ -7,6 +7,21 @@ from .sec_client import SecClient
 from .xbrl import extract_all
 
 
+def company_tickers(cik: str, requested: str | None, subs: dict,
+                    ticker_map: dict) -> list[str]:
+    """Aynı CIK'e bağlı tüm ticker'lar (büyük harf, tekrarsız): istenen ticker önce, sonra
+    submissions ``tickers`` alanı, sonra company_tickers listesinde aynı CIK'li olanlar
+    (ör. GOOGL ve GOOG aynı şirkettir)."""
+    out: list[str] = []
+    candidates = [requested, *(subs.get("tickers") or []),
+                  *(t for t, info in ticker_map.items() if info.get("cik") == cik)]
+    for t in candidates:
+        t = str(t or "").strip().upper()
+        if t and t not in out:
+            out.append(t)
+    return out
+
+
 def collect(client: SecClient, query: str, ticker_map: dict, years: int = 3,
             today: date | None = None) -> dict:
     """Bir şirketin başvuru listesini ve yıllık finansal kalemlerini toplar.
@@ -26,10 +41,12 @@ def collect(client: SecClient, query: str, ticker_map: dict, years: int = 3,
         filings += parse_filings(client.submissions_file(name), since=since)
 
     facts = extract_all(client.companyfacts(cik), years=years + 1)
+    primary = company["ticker"] or (subs.get("tickers") or [None])[0]
     return {
         "company": {
             "cik": cik,
-            "ticker": company["ticker"] or (subs.get("tickers") or [None])[0],
+            "ticker": primary,
+            "tickers": company_tickers(cik, primary, subs, ticker_map),
             "name": subs.get("name") or company["name"],
             "sic": subs.get("sic"),
             "sic_description": subs.get("sicDescription") or None,

@@ -14,9 +14,12 @@ Akış:
    sayısal cümleler çıkarılır; hiç geçerli atıf kalmazsa çıkarımsal moda düşülür.
    LLM kaynaklara rağmen "raporlarda bulunamadı" derse `not_found` döner.
 4. LLM yoksa (veya hata verirse): çıkarımsal (extractive) mod — en ilgili 3 parçadan soruyla
-   en çok örtüşen cümleler `[n]` atıfıyla alıntılanır.
+   en çok örtüşen cümleler `[n]` atıfıyla alıntılanır. Aynı cümle ikinci kez alıntılanmaz
+   (ilk kaynağın atfı kalır); bölüm alt başlıkları alıntılanmaz.
 
 `sources` yalnızca atıf yapılanları değil, getirilen tüm (eşiği geçen) parçaları içerir.
+Metni birebir aynı parçalardan (ör. eski ve yeni 10-K'da değişmeyen paragraf) yalnızca en yeni
+başvurununki aday olur; böylece kaynak listesinde aynı metin tekrarlanmaz.
 `model`: cevabı LLM ürettiyse LLM model adı, aksi halde gömücü adı.
 
 Yatırım tavsiyesi yok (NFR-07, CLAUDE.md): soruda al/sat/tut, hedef fiyat vb. niyet varsa
@@ -40,7 +43,7 @@ import numpy as np
 from .embeddings import HASHING_NAME, Embedder, hashing_tokens
 from .embeddings import top_k as _top_k
 from .llm import LLMClient
-from .text_extract import split_sentences
+from .text_extract import content_sentences, split_sentences
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +76,11 @@ yaz; açıklama, tırnak veya başka metin ekleme."""
 ADVICE_REFUSAL = (
     "FinSight AI yatırım tavsiyesi vermez; aşağıda yalnızca raporlarda yer alan bilgiler "
     "özetlenmiştir."
+)
+# Tavsiye niyetli soru + raporda bilgi yok: ret cümlesi "aşağıda ... özetlenmiştir" demesin.
+ADVICE_NOT_FOUND_ANSWER = (
+    "FinSight AI yatırım tavsiyesi vermez. Bu soruyla ilgili işlenen raporlarda bilgi "
+    "bulunamadı."
 )
 ADVICE_PROMPT_NOTE = (
     "Not: Bu soru yatırım tavsiyesi (al/sat/tut önerisi, hedef fiyat veya yatırım yapılıp "
@@ -277,17 +285,48 @@ def _source_entry(n: int, chunk: dict, sim: float) -> dict:
     }
 
 
+def _normalize_text(text: str) -> str:
+    """Tekilleştirme anahtarı: boşluklar sadeleşir, büyük/küçük harf ve uç noktalama yok."""
+    return re.sub(r"\s+", " ", str(text or "")).strip().strip("\"'“”‘’.;:,").lower()
+
+
+def dedupe_chunks(chunks: Sequence[dict]) -> list[dict]:
+    """Metni (boşluk farkı dışında) birebir aynı parçalardan yalnızca en yeni başvurununkini
+    tutar (R1). Eşit tarihte ilk görülen kalır; kalan parçaların sırası korunur."""
+    keep: dict[str, int] = {}
+    for i, chunk in enumerate(chunks):
+        key = re.sub(r"\s+", " ", str(chunk.get("text", ""))).strip()
+        j = keep.get(key)
+        if j is None or str(chunk.get("filing_date") or "") > \
+                str(chunks[j].get("filing_date") or ""):
+            keep[key] = i
+    kept = set(keep.values())
+    return [c for i, c in enumerate(chunks) if i in kept]
+
+
 def extractive_answer(query_text: str, retrieved: list[tuple[dict, float]]) -> str:
-    """LLM'siz cevap: en ilgili parçalardan soruyla en çok örtüşen cümleleri alıntılar."""
+    """LLM'siz cevap: en ilgili parçalardan soruyla en çok örtüşen cümleleri alıntılar.
+
+    Başlık benzeri cümleler (bölüm alt başlıkları) alıntılanmaz. Önceki bir kaynaktan zaten
+    alıntılanmış cümle tekrar alıntılanmaz; o parçanın sıradaki en iyi cümlesi alınır, soruyla
+    hiç örtüşmüyorsa parça atlanır (atıf numaraları `sources` sırasına göre kalır).
+    """
     q_tokens = set(hashing_tokens(query_text))
-    lines = []
+    lines: list[str] = []
+    quoted: set[str] = set()
     for n, (chunk, _sim) in enumerate(retrieved[:EXTRACTIVE_CHUNKS], start=1):
-        sentences = split_sentences(str(chunk.get("text", ""))) or [str(chunk.get("text", ""))]
-        best, best_score = sentences[0], -1
+        text = str(chunk.get("text", ""))
+        sentences = content_sentences(text) or split_sentences(text) or [text]
+        best, best_score = None, -1
         for s in sentences:
+            if _normalize_text(s) in quoted:
+                continue
             score = len(q_tokens & set(hashing_tokens(s)))
             if score > best_score:
                 best, best_score = s, score
+        if best is None or (lines and best_score <= 0):
+            continue
+        quoted.add(_normalize_text(best))
         lines.append(f"- “{_truncate(best, EXTRACTIVE_SENTENCE_LIMIT)}” [{n}]")
     return (
         "LLM kullanılmadan, işlenen raporlardan soruyla en ilgili alıntılar:\n" + "\n".join(lines)
@@ -297,7 +336,9 @@ def extractive_answer(query_text: str, retrieved: list[tuple[dict, float]]) -> s
 def _response(answer: str, found: bool, sources: list[dict], mode: str, model, t0: float,
               advice: bool = False, warning: str | None = None) -> dict:
     if advice:
-        answer = f"{ADVICE_REFUSAL}\n\n{answer}"
+        # R3: bilgi bulunamadıysa "aşağıda özetlenmiştir" diyen ret cümlesi kullanılmaz.
+        answer = ADVICE_NOT_FOUND_ANSWER if mode == "not_found" \
+            else f"{ADVICE_REFUSAL}\n\n{answer}"
     out = {
         "answer": answer,
         "found": found,
@@ -350,7 +391,8 @@ def answer_question(question: str, chunks: Sequence[dict], embedder: Embedder,
         log.warning("Hiçbir parça %s gömücüsüyle uyumlu değil.", embedder.name)
         return _response(NOT_FOUND_ANSWER, False, [], "not_found", embedder.name, t0,
                          advice, EMBEDDING_MISMATCH_WARNING)
-    chunks = usable
+    # R1: eski/yeni başvuruda birebir aynı paragraflar tek kaynak olarak (en yeni) getirilir.
+    chunks = dedupe_chunks(usable)
 
     is_hashing = getattr(embedder, "name", "") == HASHING_NAME
     queries = [question]

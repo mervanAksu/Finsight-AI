@@ -250,14 +250,20 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
 
     progress(step, frac): frac 0–1 (analiz bölümünün içindeki oran).
     Aynı başvuru aynı duygu ve gömme modeliyle analiz edildiyse atlanır (force=False).
+    Hiçbir başvuru analiz edilemezse (ör. tüm belgeler 404) risk karşılaştırması, skor ve
+    ``analysis_updated_at`` güncellenmez; uyarı eklenir (K2).
     """
     report = progress or (lambda _step, _frac: None)
     company = repo.load_company_by_id(session, company_id)
     if company is None:
         raise KeyError(f"Şirket bulunamadı (id={company_id})")
+    # O2: ilk çalıştırmada FinBERT / sentence-transformers yüklemesi dakikalar sürebilir;
+    # kullanıcı işin takıldığını sanmasın.
+    report("Modeller yükleniyor", 0.0)
     sm = sentiment_model or get_sentiment()
     emb = embedder or get_embedder_cached()
     llm = get_llm()
+    report(f"Modeller hazır ({sm.name}, {emb.name})", 0.0)
     summary: dict = {
         "sentiment_model": sm.name, "embedding_model": emb.name,
         "llm": {"provider": llm.provider, "model": llm.model} if llm else None,
@@ -307,6 +313,11 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
             entry["error"] = safe_error(exc)
             warning(f"{label}: {entry['error']}")
             log.debug("Başvuru analizi hatası", exc_info=True)
+
+    if not any(f["status"] in ("analyzed", "skipped") for f in summary["filings"]):
+        # K2: analiz edilen başvuru yoksa eski/eksik verilerle skor yazılmaz.
+        warning("Hiçbir başvuru analiz edilemedi; risk karşılaştırması ve skor güncellenmedi.")
+        return summary
 
     report("Risk karşılaştırması", 0.85)
     old, new = latest_two_annual(selected)

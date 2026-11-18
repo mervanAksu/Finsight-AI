@@ -1,4 +1,4 @@
-// docs/api-contract.md (v1) ile birebir tipler. Alan adları sözleşmeden kopyalanmıştır;
+// docs/api-contract.md (v1, v1.1 netleştirmeleriyle) ile birebir tipler. Alan adları sözleşmeden kopyalanmıştır;
 // değiştirmeden önce sözleşme güncellenmelidir.
 
 export type ISODate = string; // "2025-06-30"
@@ -28,8 +28,8 @@ export interface Source {
   accession_no: string;
   filed: ISODate;
   derived_from: string[] | null;
-  /** Başvuru klasörü (sözleşme v1.1); yoksa edgarFilingUrl ile kurulur. */
-  url?: string | null;
+  /** Başvuru klasörü (sözleşme v1.1): .../edgar/data/{cik}/{accession tiresiz}/ */
+  url: string;
 }
 
 export interface ApiErrorBody {
@@ -138,8 +138,8 @@ export interface RiskCounts {
 }
 export interface Overview {
   company: Company;
-  /** Metin analizi yapılmış mı (sözleşme v1.1). Eski sahte veride bulunmayabilir. */
-  analyzed?: boolean;
+  /** Metin analizi yapılmış mı (sözleşme v1.1). false: yalnızca finansal veri çekilmiş. */
+  analyzed: boolean;
   score: ScoreSummary | null;
   key_metrics: KeyMetric[];
   latest_filings: FilingRef[];
@@ -304,8 +304,8 @@ export interface AskResponse {
   model: string | null;
   latency_ms: number;
   disclaimer: string;
-  /** Soru yatırım tavsiyesi niyeti taşıyorsa true; cevabın başında sabit ret cümlesi vardır. */
-  advice_refused?: boolean;
+  /** Soru yatırım tavsiyesi niyeti taşıyorsa true; cevabın başında sabit ret cümlesi vardır (v1.1). */
+  advice_refused: boolean;
   /** Ör. parçalar farklı bir gömme modeliyle oluşturulmuşsa yeniden analiz uyarısı. */
   warning?: string | null;
 }

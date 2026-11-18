@@ -1,16 +1,18 @@
 """Veritabanı bağlantısı ve küçük şema yükseltici.
 
 Şema yönetimi: ``init_db`` önce ``create_all`` ile eksik tabloları oluşturur, ardından mevcut
-tablolarda modelde olup veritabanında olmayan NULL olabilir sütunları
-``ALTER TABLE ... ADD COLUMN`` ile ekler (önceki prototipten kalan ``finsight.db`` dosyaları
-bozulmasın diye). Alembic geçişi Aşama 4'e bırakılmıştır (docs/entegrasyon-plani.md).
+tablolarda modelde olup veritabanında olmayan sütunları ``ALTER TABLE ... ADD COLUMN`` ile
+ekler (önceki prototipten kalan ``finsight.db`` dosyaları bozulmasın diye): NULL olabilir
+sütunlar doğrudan, skaler Python varsayılanı olan NOT NULL sütunlar ``NOT NULL DEFAULT <değer>``
+ile (mevcut satırlar bu değeri alır). Alembic geçişi Aşama 4'e bırakılmıştır
+(docs/entegrasyon-plani.md).
 """
 
 from __future__ import annotations
 
 import logging
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import Column, create_engine, event, inspect, literal, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -56,10 +58,27 @@ def make_engine(url: str | None = None) -> Engine:
     return create_engine(url, pool_pre_ping=True)
 
 
-def upgrade_schema(engine: Engine) -> list[str]:
-    """Mevcut tablolarda eksik NULL olabilir sütunları ekler; eklenenleri 'tablo.sütun' döndürür.
+def _scalar_default_sql(column: Column, engine: Engine) -> str | None:
+    """Sütunun skaler Python varsayılanını SQL sabiti olarak derler (ör. ``1``, ``'queued'``,
+    ``0.0``); varsayılan yoksa veya çağrılabilirse (``utcnow``) None."""
+    default = column.default
+    if default is None or not getattr(default, "is_scalar", False):
+        return None
+    value = getattr(default, "arg", None)
+    if value is None:
+        return None
+    compiled = literal(value, type_=column.type).compile(
+        dialect=engine.dialect, compile_kwargs={"literal_binds": True})
+    return str(compiled)
 
-    NOT NULL olup eksik olan sütunlar eklenmez (varsayılan değer gerektirir); uyarı yazılır.
+
+def upgrade_schema(engine: Engine) -> list[str]:
+    """Mevcut tablolarda eksik sütunları ekler; eklenenleri 'tablo.sütun' döndürür.
+
+    - NULL olabilir sütun: ``ADD COLUMN ad tip``.
+    - NOT NULL + skaler Python varsayılanı (ör. ``default=0``, ``default="queued"``):
+      ``ADD COLUMN ad tip NOT NULL DEFAULT <sabit>`` (O3).
+    - NOT NULL ve varsayılansız (veya çağrılabilir varsayılanlı) sütun eklenemez; uyarı yazılır.
     """
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -72,13 +91,21 @@ def upgrade_schema(engine: Engine) -> list[str]:
         for column in table.columns:
             if column.name in present:
                 continue
-            if not column.nullable or column.primary_key:
-                log.warning("Eksik NOT NULL sütun eklenemedi: %s.%s (elle geçiş gerekir)",
+            col_type = column.type.compile(dialect=engine.dialect)
+            suffix = ""
+            if column.primary_key:
+                log.warning("Eksik birincil anahtar sütunu eklenemedi: %s.%s (elle geçiş gerekir)",
                             table.name, column.name)
                 continue
-            col_type = column.type.compile(dialect=engine.dialect)
+            if not column.nullable:
+                default_sql = _scalar_default_sql(column, engine)
+                if default_sql is None:
+                    log.warning("Eksik NOT NULL sütun eklenemedi: %s.%s (varsayılan değer yok; "
+                                "elle geçiş gerekir)", table.name, column.name)
+                    continue
+                suffix = f" NOT NULL DEFAULT {default_sql}"
             ddl = (f"ALTER TABLE {preparer.quote(table.name)} "
-                   f"ADD COLUMN {preparer.quote(column.name)} {col_type}")
+                   f"ADD COLUMN {preparer.quote(column.name)} {col_type}{suffix}")
             with engine.begin() as conn:
                 conn.execute(text(ddl))
             added.append(f"{table.name}.{column.name}")

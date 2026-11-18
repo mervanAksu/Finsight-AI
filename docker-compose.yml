@@ -1,12 +1,17 @@
+# Portlar yalnızca bu bilgisayara (127.0.0.1) açılır; aynı ağdaki başka cihazlar erişemez.
 services:
   db:
+    # pgvector imajı Aşama 4 (veritabanında vektör araması) içindir; şu an vektörler ikili
+    # sütunda saklanır ve benzerlik numpy ile hesaplanır, uzantı kullanılmaz.
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: finsight
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finsight_dev}
       POSTGRES_DB: finsight
-    ports:
-      - "5432:5432"
+    # Veritabanı portu dışarı AÇILMAZ: api servisi db'ye Docker ağı üzerinden (db:5432) bağlanır.
+    # psql / DBeaver ile bağlanmak gerekirse geçici olarak açın (yalnızca bu bilgisayara):
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +33,7 @@ services:
       FINSIGHT_DOCUMENTS_DIR: /app/.sec_cache/documents
       HF_HOME: /app/.hf_cache
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"   # http://localhost:8000
     volumes:
       - seccache:/app/.sec_cache
       - hfcache:/app/.hf_cache

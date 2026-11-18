@@ -1,6 +1,7 @@
 // Analiz başlatma ve ilerleme (FR-15): POST /ingest → /api/jobs/{id} yoklama.
 import { useEffect, useRef, useState } from "react";
-import { LuCheck, LuCircleAlert, LuPlay, LuRefreshCw } from "react-icons/lu";
+import type { ReactNode } from "react";
+import { LuCheck, LuCircleAlert, LuPlay, LuRefreshCw, LuTriangleAlert } from "react-icons/lu";
 import { api } from "../api";
 import { fmtNumber, fmtPercent } from "../format";
 import { useI18n } from "../i18n";
@@ -21,11 +22,26 @@ export function IngestPanel({
   name,
   onDone,
   autoStart = false,
+  analyze = true,
+  heading,
+  explain,
+  startLabel,
+  className,
 }: {
   ticker: string;
-  name: string;
+  /** Şirket adı; bilinmiyorsa yalnızca ticker gösterilir. */
+  name?: string | null;
   onDone: () => void;
   autoStart?: boolean;
+  /** POST /ingest gövdesi: {"analyze": true} = finansal veri + metin analizi. */
+  analyze?: boolean;
+  /** Başlık satırı (varsayılan: ticker + ad). */
+  heading?: ReactNode;
+  /** Başlamadan önceki açıklama (varsayılan: ingest.explain). */
+  explain?: ReactNode;
+  /** Başlat düğmesi metni (varsayılan: "Analiz et"). */
+  startLabel?: string;
+  className?: string;
 }) {
   const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -34,7 +50,7 @@ export function IngestPanel({
 
   const start = () => {
     setPhase({ kind: "starting" });
-    api.ingest(ticker).then(
+    api.ingest(ticker, analyze).then(
       (res) => setPhase({ kind: "polling", job: null, jobId: res.job_id }),
       (err: unknown) => setPhase({ kind: "error", message: errorMessage(err, t), job: null }),
     );
@@ -91,19 +107,25 @@ export function IngestPanel({
           ? t("ingest.queued")
           : t("ingest.running");
 
+  const warnings = job?.warnings ?? [];
+
   return (
-    <div className={cx("ingest", phase.kind !== "idle" && "is-active")}>
+    <div className={cx("ingest", phase.kind !== "idle" && "is-active", className)}>
       <div className="ingest-head">
         <div>
           <p className="ingest-name">
-            <span className="ticker-tag">{ticker}</span> {name}
+            {heading ?? (
+              <>
+                <span className="ticker-tag">{ticker}</span> {name ?? ""}
+              </>
+            )}
           </p>
-          {phase.kind === "idle" && <p className="ingest-explain">{t("ingest.explain")}</p>}
+          {phase.kind === "idle" && <p className="ingest-explain">{explain ?? t("ingest.explain")}</p>}
         </div>
         {phase.kind === "idle" && (
           <button type="button" className="btn btn-primary" onClick={start}>
             <LuPlay aria-hidden="true" />
-            {t("ingest.start")}
+            {startLabel ?? t("ingest.start")}
           </button>
         )}
         {phase.kind === "error" && (
@@ -142,6 +164,16 @@ export function IngestPanel({
             <span>{phase.kind === "error" ? phase.message : (job?.step ?? "…")}</span>
             {job && job.request_count > 0 && <span>{t("ingest.requests", { n: fmtNumber(job.request_count) })}</span>}
           </div>
+          {warnings.length > 0 && (
+            <ul className="ingest-warnings" aria-label={t("ingest.warnings")}>
+              {warnings.map((w) => (
+                <li key={w}>
+                  <LuTriangleAlert aria-hidden="true" />
+                  <span>{w}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

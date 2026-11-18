@@ -4,7 +4,7 @@ from datetime import date
 from conftest import UA, FakeFetcher, load
 
 from finsight.edgar import build_ticker_map
-from finsight.pipeline import collect
+from finsight.pipeline import collect, company_tickers
 from finsight.rate_limiter import RateLimiter
 from finsight.sec_client import SecClient
 
@@ -27,5 +27,16 @@ def test_collect_end_to_end_with_fake_sec(fake_clock):
     # Kalemler years+1 dönem çekilir (ROA/ROE ortalaması için bir önceki mali yıl sonu).
     assert [s["value"] for s in data["facts"]["revenue"]] == [905, 1000, 1100, 1210]
     assert data["company"]["exchanges"] == ["Nasdaq"]
+    assert data["company"]["tickers"] == ["EXMP"]
     assert client.request_count == 2  # eski başvuru dosyasına gerek yok
     assert all(h["User-Agent"] == UA for _, h in fetcher.calls)
+
+
+def test_company_tickers_collects_all_tickers_of_same_cik():
+    """K3: aynı CIK'li ticker'lar (GOOGL/GOOG benzeri) tek listede; istenen ticker önce."""
+    tmap = {"EXA": {"cik": "0000000007", "name": "Example Alpha"},
+            "EXB": {"cik": "0000000007", "name": "Example Alpha"},
+            "OTHR": {"cik": "0000000008", "name": "Other"}}
+    subs = {"tickers": ["exa", "EXC"]}
+    assert company_tickers("0000000007", "EXB", subs, tmap) == ["EXB", "EXA", "EXC"]
+    assert company_tickers("0000000007", None, {}, {}) == []

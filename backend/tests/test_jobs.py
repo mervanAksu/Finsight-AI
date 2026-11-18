@@ -72,6 +72,9 @@ def test_ingest_job_end_to_end_steps_progress_and_results(factory, monkeypatch, 
     names = [s for s, _ in steps if s]
     assert names[0] == "SEC verisi çekiliyor"
     assert names[1] == "Finansal veriler kaydediliyor"
+    # O2: model yükleme adımı ve bitişi işte görünür
+    assert names[2] == "Modeller yükleniyor"
+    assert names[3] == "Modeller hazır (lexicon-fallback, hashing-fallback)"
     for prefix in ("Belge indiriliyor (10-K ", "Bölümler ve duygu analizi (10-K ",
                    "Gömme (10-K ", "Belge indiriliyor (10-Q "):
         assert any(n.startswith(prefix) for n in names), prefix
@@ -151,6 +154,47 @@ def test_failing_document_does_not_stop_job(factory):
         analyzed = {f["form"] for f in repo.load_filings(s, company["id"]) if f["analyzed"]}
         assert analyzed == {"10-K"}
         assert repo.load_risk(s, company["id"]) is not None
+
+
+def test_all_documents_missing_writes_no_score(factory):
+    """K2: hiçbir başvuru analiz edilemezse (tüm belgeler 404) skor ve analysis_updated_at
+    yazılmaz, risk karşılaştırması yapılmaz; iş uyarıyla tamamlanır."""
+    sec = FakeSec(build_routes(missing_docs=(ACC_K_NEW, ACC_K_OLD, ACC_Q)))
+    job = run(factory, sec)
+    assert job["status"] == "done"
+    assert len(job["warnings"]) == 4
+    assert all("404" in w for w in job["warnings"][:3])
+    assert job["warnings"][-1].startswith("Hiçbir başvuru analiz edilemedi")
+    with factory() as s:
+        company = repo.load_company(s, TICKER)
+        assert company["analysis_updated_at"] is None
+        assert repo.load_latest_score(s, company["id"]) is None
+        assert repo.load_risk(s, company["id"]) is None
+        assert count(s, FinancialFact) > 0  # finansal veriler yine kaydedildi
+        summary = jobs.run_analysis_for_company(s, sec(), company["id"])
+    assert summary["score"] is None and summary["risk"] is None
+    assert [f["status"] for f in summary["filings"]] == ["error"] * 3
+
+
+def test_previously_analyzed_company_keeps_score_when_all_documents_fail(factory):
+    """K2: önceden analiz edilmiş başvurular 'atlandı' sayılır; skor yine güncellenir. Model
+    değişip tüm belgeler indirilemezse yeni skor yazılmaz (eski skor kalır)."""
+    run(factory, FakeSec())
+    with factory() as s:
+        company = repo.load_company(s, TICKER)
+        n_scores = count(s, CompanyScore)
+        updated = company["analysis_updated_at"]
+
+    class OtherEmbedder(HashingEmbedder):
+        name = "other-embedder"
+
+    jobs.override_models(embedder=OtherEmbedder())
+    job = run(factory, FakeSec(build_routes(missing_docs=(ACC_K_NEW, ACC_K_OLD, ACC_Q))))
+    assert job["status"] == "done"
+    assert job["warnings"][-1].startswith("Hiçbir başvuru analiz edilemedi")
+    with factory() as s:
+        assert count(s, CompanyScore) == n_scores
+        assert repo.load_company(s, TICKER)["analysis_updated_at"] == updated
 
 
 def test_unknown_ticker_marks_job_error(factory):
@@ -265,3 +309,32 @@ def test_shared_limiter_is_process_wide(monkeypatch):
     monkeypatch.setenv("SEC_USER_AGENT", "FinSight-AI Test test@example.com")
     a, b = jobs.make_sec_client(), jobs.make_sec_client()
     assert a.limiter is b.limiter is jobs.shared_limiter()
+
+
+def test_ingest_cli_save_error_does_not_stop_other_companies(monkeypatch, tmp_path, capsys):
+    """O13: bir şirketin veritabanı yazım hatası diğer şirketlerin işlenmesini durdurmaz."""
+    from finsight import ingest
+    from finsight.rate_limiter import RateLimiter
+    from finsight.sec_client import SecClient
+
+    sec = FakeSec()
+    monkeypatch.setenv("SEC_USER_AGENT", "FinSight-AI Test test@example.com")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'cli.db'}")
+    monkeypatch.setenv("SEC_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(ingest, "SecClient", lambda ua, **_kw: SecClient(
+        ua, fetcher=sec.fetcher, limiter=RateLimiter(8, clock=sec.clock, sleep=sec.clock.sleep),
+        sleep=lambda _s: None))
+    real_save = ingest.save
+    calls = {"n": 0}
+
+    def flaky_save(session, data):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("veritabanı kilitli")
+        return real_save(session, data)
+
+    monkeypatch.setattr(ingest, "save", flaky_save)
+    assert ingest.main([TICKER, TICKER]) == 1  # bir başarısız → çıkış kodu 1
+    assert calls["n"] == 2
+    out = capsys.readouterr().out
+    assert "Example Corp" in out  # ikinci deneme işlendi ve özet yazıldı

@@ -8,12 +8,19 @@
 Kullanım:
     python3 frontend/scripts/mock_server.py            # http://127.0.0.1:8765
     python3 frontend/scripts/mock_server.py 9000 --latency 300
+    python3 frontend/scripts/mock_server.py 8765 --empty   # hiç işlenmiş şirket yok (boş ana sayfa)
 
-Demo akışları:
-- QNTA henüz işlenmemiştir: arayıp "Analiz et" deyince ~9 sn süren sahte bir iş başlar,
-  bitince şirket sayfası dolar.
-- LMNR, ORVB, PLSD, EXMR için örnek veri yoktur: iş hata ile biter (hata durumunu gösterir).
-- Soru-Cevap: soruda "bulunamadı" geçerse `not_found`, "alıntı" geçerse `extractive` yanıt döner.
+Şirket durumları (gerçek backend'deki gibi):
+- full: finansal veri + metin analizi (EXMP, HRBR, NVLT).
+- fin:  yalnızca finansal veri; `/overview` → `analyzed: false` (QNTA). Şirket başlığındaki
+        "Metin analizini çalıştır" ile ~9 sn'lik iş sonunda full olur.
+- none: hiç işlenmemiş; şirket uçları 404 döner (CDRW, LMNR, ORVB, PLSD, EXMR).
+        CDRW için iş başarıyla biter; LMNR, ORVB, PLSD, EXMR için örnek veri yoktur ve iş
+        hata ile biter (şirket kaydı oluşur ama verisi boş kalır: "empty").
+
+Soru-Cevap: soruda "bulunamadı"/"kripto" → `not_found`, "alıntı" → `extractive`, "gömme" →
+`warning` alanı; "almalı mıyım" gibi tavsiye soruları → `advice_refused: true` ve cevabın başında
+sabit ret cümlesi. Metin analizi yapılmamış şirkette her soru `not_found` döner.
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ import csv
 import io
 import json
 import mimetypes
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -50,10 +58,33 @@ def _load() -> tuple[dict, dict]:
 META, DATA = _load()
 DISCLAIMER = META["disclaimer"]
 STATE_LOCK = threading.RLock()
-# Başlangıçta işlenmiş şirketler: arama dizininde analyzed=true olanlar
-ANALYZED = {c["ticker"] for c in META["search_index"] if c["analyzed"]}
+# Şirket durumu: "full" | "fin" | "empty" | "none" (bkz. modül açıklaması)
+STATE: dict[str, str] = {c["ticker"]: c["state"] for c in META["search_index"]}
 JOBS: dict[int, dict] = {}
 NEXT_JOB = [1]
+TICKER_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")  # backend api.TICKER_RE ile aynı
+EMPTY_SCORE = {"total": None, "band": None, "as_of_period": None, "weights_version": "v1-2026-11",
+               "components": [], "missing_components": [], "explanation": None}
+
+# Yatırım tavsiyesi niyeti (backend rag._ADVICE_QUESTION'ın sadeleştirilmiş kopyası)
+_ADVICE_PATTERNS = (
+    r"(?:al|sat|tut)mal[ıi]\s*m[ıi]y[ıi](?:m|z)",
+    r"(?:al[ıi]n|sat[ıi]l|tutul)(?:[ıi]r|mal[ıi])\s*m[ıi]",
+    r"yat[ıi]r[ıi]m\s+yap(?:mal[ıi]|[ıi]l[ıi]r|ay[ıi]m|s[ıi]n|al[ıi]m|mak\s+mant[ıi]kl[ıi])",
+    r"\b(?:al|sat|tut)ay[ıi]m\s+m[ıi]",
+    r"\bhedef\s+fiyat",
+    r"yat[ıi]r[ıi]m\s+tavsiye",
+    (r"\b(?:should|shall|would|could|do|must|can)\s+(?:i|we|you|one)\s+(?:still\s+|now\s+)?"
+     r"(?:buy|sell|hold|invest|short)\b"),
+    r"\b(?:price\s+target|target\s+price)\b",
+    r"\bworth\s+(?:buying|investing|selling)\b",
+)
+ADVICE_RE = re.compile("|".join(_ADVICE_PATTERNS), re.IGNORECASE)
+
+
+def state_of(ticker: str) -> str:
+    with STATE_LOCK:
+        return STATE.get(ticker, "none")
 
 
 def now_iso() -> str:
@@ -63,27 +94,37 @@ def now_iso() -> str:
 def job_view(job: dict) -> dict:
     """İşin anlık durumunu geçen süreye göre hesaplar."""
     elapsed = time.time() - job["t0"]
-    steps = META["ingest_steps"]
-    has_data = job["ticker"] in DATA
-    view = {"id": job["id"], "ticker": job["ticker"], "status": "running", "step": None,
+    ticker = job["ticker"]
+    steps = META["ingest_steps"] if job["analyze"] else META["financial_steps"]
+    has_data = ticker in DATA
+    view = {"id": job["id"], "ticker": ticker, "status": "running", "step": None,
             "progress": 0.0, "error": None, "started_at": job["started_at"], "finished_at": None,
-            "request_count": 0}
+            "request_count": 0, "warnings": []}
     if elapsed < 0.8:
         view.update(status="queued", step="Sırada bekliyor", progress=0.0)
         return view
     frac = min(1.0, (elapsed - 0.8) / JOB_SECONDS)
+    if frac >= 0.5:
+        view["warnings"] = list(META.get("job_warnings", {}).get(ticker, []))
     if not has_data and frac >= 0.34:
-        view.update(status="error", step=steps[2], progress=0.34,
+        with STATE_LOCK:
+            # submissions alındı, şirket kaydı oluştu; XBRL verisi yok → boş şirket
+            if STATE.get(ticker, "none") == "none":
+                STATE[ticker] = "empty"
+        job.setdefault("finished_at", now_iso())
+        view.update(status="error", step=steps[min(2, len(steps) - 1)], progress=0.34,
                     error="Demo modunda bu şirket için örnek veri yok; SEC'e bağlanılmadı.",
-                    finished_at=job.get("finished_at") or now_iso(), request_count=6)
-        job["finished_at"] = view["finished_at"]
+                    finished_at=job["finished_at"], request_count=6)
         return view
     if frac >= 1.0:
         with STATE_LOCK:
-            ANALYZED.add(job["ticker"])
+            if job["analyze"]:
+                STATE[ticker] = "full"
+            elif STATE.get(ticker) != "full":
+                STATE[ticker] = "fin"
         job.setdefault("finished_at", now_iso())
         view.update(status="done", step="Tamamlandı", progress=1.0, finished_at=job["finished_at"],
-                    request_count=27)
+                    request_count=27 if job["analyze"] else 9)
         return view
     idx = min(len(steps) - 1, int(frac * len(steps)))
     view.update(step=steps[idx], progress=round(frac, 3), request_count=int(3 + frac * 24))
@@ -110,9 +151,15 @@ def company_obj(ticker: str) -> dict:
             "sic_description": None, "fiscal_year_end": None, "exchanges": []}
 
 
-def is_analyzed(ticker: str) -> bool:
-    with STATE_LOCK:
-        return ticker in ANALYZED and ticker in DATA
+def score_of(ticker: str) -> dict:
+    """Şirketin durumuna göre skor yanıtı (disclaimer hariç)."""
+    st = state_of(ticker)
+    d = DATA.get(ticker)
+    if d and st == "full":
+        return d["score"]
+    if d and st == "fin":
+        return d["score_fin"]
+    return {**EMPTY_SCORE, "disclaimer": DISCLAIMER}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -187,9 +234,14 @@ class Handler(SimpleHTTPRequestHandler):
         self._delay()
         if len(parts) == 4 and parts[:2] == ["api", "companies"] and parts[3] == "ingest":
             ticker = parts[2].upper()
+            if not TICKER_RE.match(ticker):
+                self._error(400, "Geçersiz ticker: yalnızca harf, rakam, nokta ve tire kullanılabilir "
+                                 "(en fazla 10 karakter).")
+                return
             if company_record(ticker) is None:
                 self._error(404, f"'{ticker}' SEC şirket listesinde bulunamadı.")
                 return
+            analyze = self._body().get("analyze", True) is not False
             with STATE_LOCK:
                 for job in JOBS.values():
                     if job["ticker"] == ticker and job_view(job)["status"] in ("queued", "running"):
@@ -197,7 +249,8 @@ class Handler(SimpleHTTPRequestHandler):
                         return
                 jid = NEXT_JOB[0]
                 NEXT_JOB[0] += 1
-                JOBS[jid] = {"id": jid, "ticker": ticker, "t0": time.time(), "started_at": now_iso()}
+                JOBS[jid] = {"id": jid, "ticker": ticker, "t0": time.time(), "started_at": now_iso(),
+                             "analyze": analyze}
             self._json({"job_id": jid, "status": "queued"}, 202)
             return
         if len(parts) == 4 and parts[:2] == ["api", "companies"] and parts[3] == "ask":
@@ -215,13 +268,17 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if parts == ["api", "companies"]:
             out = []
-            for tk in sorted(t for t in DATA if is_analyzed(t)):
-                d = DATA[tk]
-                c = d["company"]
+            with STATE_LOCK:
+                listed = sorted(t for t, st in STATE.items() if st != "none")
+            for tk in listed:
+                st = state_of(tk)
+                d = DATA.get(tk)
+                c = company_obj(tk)
+                sc = score_of(tk)
                 out.append({"ticker": tk, "cik": c["cik"], "name": c["name"],
-                            "sic_description": c["sic_description"], "analyzed": True,
-                            "last_filing_date": d["filings"][0]["filing_date"],
-                            "score": {"total": d["score"]["total"], "band": d["score"]["band"]}})
+                            "sic_description": c["sic_description"], "analyzed": st == "full",
+                            "last_filing_date": d["filings"][0]["filing_date"] if (d and st != "empty") else None,
+                            "score": None if sc["total"] is None else {"total": sc["total"], "band": sc["band"]}})
             self._json(out)
             return
         if parts == ["api", "companies", "search"]:
@@ -232,7 +289,7 @@ class Handler(SimpleHTTPRequestHandler):
                 hay = f"{c['ticker']} {c['name']} {c['cik']} {c['cik'].lstrip('0')}".lower()
                 if not needle or needle in hay:
                     res.append({"ticker": c["ticker"], "cik": c["cik"], "name": c["name"],
-                                "ingested": is_analyzed(c["ticker"])})
+                                "ingested": state_of(c["ticker"]) != "none"})
             res.sort(key=lambda r: (not r["ticker"].lower().startswith(needle), r["ticker"]))
             self._json(res[:limit])
             return
@@ -252,44 +309,56 @@ class Handler(SimpleHTTPRequestHandler):
             return
         self._error(404, "Uç nokta bulunamadı.")
 
+    def _check_company(self, ticker: str) -> bool:
+        """Backend company_or_404 davranışı: geçersiz ticker 400, işlenmemiş şirket 404."""
+        if not TICKER_RE.match(ticker):
+            self._error(400, "Geçersiz ticker: yalnızca harf, rakam, nokta ve tire kullanılabilir "
+                             "(en fazla 10 karakter).")
+            return False
+        if company_record(ticker) is None or state_of(ticker) == "none":
+            self._error(404, f"{ticker} henüz işlenmedi. Önce verisini çekin: "
+                             f"POST /api/companies/{ticker}/ingest")
+            return False
+        return True
+
     def _company(self, ticker: str, what: str, q: dict[str, str]) -> None:
-        if company_record(ticker) is None:
-            self._error(404, f"'{ticker}' için şirket bulunamadı.")
+        if not self._check_company(ticker):
             return
         company = company_obj(ticker)
-        analyzed = is_analyzed(ticker)
+        st = state_of(ticker)
         d = DATA.get(ticker)
+        full = st == "full" and d is not None
+        has_fin = st in ("full", "fin") and d is not None
 
         if what == "overview":
-            if analyzed and d:
+            if full:
                 self._json(d["overview"])
+            elif has_fin:
+                self._json(d["overview_fin"])
             else:
-                self._json({"company": company, "score": None, "key_metrics": [], "latest_filings": [],
-                            "sentiment_summary": None, "risk_summary": None, "analysis_updated_at": None,
-                            "disclaimer": DISCLAIMER})
+                self._json({"company": company, "analyzed": False, "score": None, "key_metrics": [],
+                            "latest_filings": [], "sentiment_summary": None, "risk_summary": None,
+                            "analysis_updated_at": None, "disclaimer": DISCLAIMER})
             return
         if what == "facts":
-            metrics = d["facts"]["metrics"] if (analyzed and d) else []
+            metrics = d["facts"]["metrics"] if has_fin else []
             if q.get("metric"):
                 metrics = [m for m in metrics if m["metric"] == q["metric"]]
             self._json({"company": company, "metrics": metrics, "disclaimer": DISCLAIMER})
             return
         if what == "ratios":
-            if analyzed and d:
+            if has_fin:
                 self._json(d["ratios"])
             else:
                 self._json({"company": company, "periods": [], "ratios": [], "disclaimer": DISCLAIMER})
             return
         if what == "score":
-            if analyzed and d:
-                self._json(d["score"])
-            else:
-                self._json({"total": None, "band": None, "as_of_period": None, "weights_version": "v1-2026-11",
-                            "components": [], "missing_components": [], "explanation": None,
-                            "disclaimer": DISCLAIMER})
+            self._json(score_of(ticker))
             return
         if what == "filings":
-            filings = d["filings"] if (analyzed and d) else []
+            filings = d["filings"] if has_fin else []
+            if not full:
+                filings = [{**f, "analyzed": False} for f in filings]
             form = q.get("form")
             if form:
                 filings = [f for f in filings if f["form"] == form or f["form"] == f"{form}/A"]
@@ -297,49 +366,49 @@ class Handler(SimpleHTTPRequestHandler):
             self._json({"company": company, "filings": filings[:limit], "disclaimer": DISCLAIMER})
             return
         if what == "sentiment":
-            if analyzed and d:
+            if full:
                 self._json(d["sentiment"])
             else:
                 self._json({"model": META["health"]["models"]["sentiment"], "sections": [],
                             "disclaimer": DISCLAIMER})
             return
         if what == "risk-changes":
-            if analyzed and d:
-                self._json(d["risk_changes"])
+            rc = d["risk_changes"] if full else None
+            if rc and rc["old_filing"] is not None:
+                self._json(rc)
             else:
+                # v1.1: karşılaştırma yoksa old/new null, sayılar 0, değişiklik yok
                 self._json({"old_filing": None, "new_filing": None,
                             "counts": {"added": 0, "removed": 0, "modified": 0, "unchanged": 0},
                             "changes": [], "disclaimer": DISCLAIMER})
             return
         if what == "export.csv":
-            if not (analyzed and d):
-                self._error(404, "Bu şirket için henüz analiz yok; önce analiz başlatın.")
-                return
-            self._csv(ticker, d)
+            self._csv(ticker, d if has_fin else None, with_score=full or st == "fin")
             return
         self._error(404, "Uç nokta bulunamadı.")
 
-    def _csv(self, ticker: str, d: dict) -> None:
+    def _csv(self, ticker: str, d: dict | None, with_score: bool) -> None:
         buf = io.StringIO()
         w = csv.writer(buf, lineterminator="\r\n")
         w.writerow(["ticker", "cik", "section", "key", "label", "period_start", "period_end", "value",
                     "unit", "status", "xbrl_tag", "form", "accession_no", "filed"])
-        cik = d["company"]["cik"]
-        for m in d["facts"]["metrics"]:
+        cik = company_obj(ticker)["cik"]
+        for m in (d["facts"]["metrics"] if d else []):
             for v in m["values"]:
                 s = v["source"]
                 w.writerow([ticker, cik, "fact", m["metric"], m["label"], v["period_start"] or "",
                             v["period_end"], v["value"], "USD", "ok", s["xbrl_tag"], s["form"],
                             s["accession_no"], s["filed"]])
-        for r in d["ratios"]["ratios"]:
+        for r in (d["ratios"]["ratios"] if d else []):
             for v in r["values"]:
                 w.writerow([ticker, cik, "ratio", r["key"], r["label"], "", v["period_end"],
                             "" if v["value"] is None else v["value"], r["unit"], v["status"], "", "10-K",
                             (v["inputs"][0]["accession_no"] if v["inputs"] else ""), ""])
-        sc = d["score"]
-        w.writerow([ticker, cik, "score", "total", "Toplam skor", "", sc["as_of_period"], sc["total"],
-                    "points", "ok", "", "", "", ""])
-        for c in sc["components"]:
+        sc = score_of(ticker)
+        if with_score and sc["total"] is not None:
+            w.writerow([ticker, cik, "score", "total", "Toplam skor", "", sc["as_of_period"], sc["total"],
+                        "points", "ok", "", "", "", ""])
+        for c in (sc["components"] if with_score else []):
             w.writerow([ticker, cik, "score", c["key"], c["label"], "", sc["as_of_period"],
                         "" if c["score"] is None else c["score"], "points",
                         "ok" if c["available"] else "missing", "", "", "", ""])
@@ -357,57 +426,73 @@ class Handler(SimpleHTTPRequestHandler):
         if not 1 <= len(question) <= 500:
             self._error(422, "Soru 1–500 karakter olmalıdır.")
             return
-        if company_record(ticker) is None:
-            self._error(404, f"'{ticker}' için şirket bulunamadı.")
-            return
-        if not is_analyzed(ticker):
-            self._error(409, "Bu şirketin raporları henüz işlenmedi; önce analiz başlatın.")
+        if not self._check_company(ticker):
             return
         t0 = time.time()
         self._delay(3.0)  # yükleniyor animasyonu görünsün
         low = question.lower()
-        model = META["health"]["models"]["llm"]["model"]
-        base = {"question": question, "disclaimer": DISCLAIMER}
+        advice = bool(ADVICE_RE.search(question))
+        llm_model = META["health"]["models"]["llm"]["model"]
+        emb_model = META["health"]["models"]["embedding"]
+
+        def reply(answer: str, found: bool, sources: list, mode: str, model, extra_ms: int = 0,
+                  warning: str | None = None) -> None:
+            if advice:
+                answer = f"{META['advice_refusal']}\n\n{answer}"
+            out = {"question": question, "answer": answer, "found": found, "sources": sources,
+                   "mode": mode, "model": model,
+                   "latency_ms": int((time.time() - t0) * 1000) + extra_ms,
+                   "advice_refused": advice, "disclaimer": DISCLAIMER}
+            if warning:
+                out["warning"] = warning
+            self._json(out)
+
+        if state_of(ticker) != "full" or ticker not in DATA:
+            # Metin analizi yok → parça yok → bulunamadı (backend answer_question ile aynı)
+            reply(META["not_found_answer"], False, [], "not_found", emb_model)
+            return
+        if "gömme" in low:
+            reply(META["not_found_answer"], False, [], "not_found", emb_model,
+                  warning=META["embedding_mismatch_warning"])
+            return
         if "bulunamadı" in low or "kripto" in low:
-            self._json({**base, "answer": META["not_found_answer"], "found": False, "sources": [],
-                        "mode": "not_found", "model": model,
-                        "latency_ms": int((time.time() - t0) * 1000)})
+            reply(META["not_found_answer"], False, [], "not_found", emb_model)
             return
         entries = DATA[ticker]["ask"]
         chosen = next((e for e in entries if any(k in low for k in e["keywords"])), entries[0])
         if "alıntı" in low:
-            # LLM yok: en ilgili alıntılar sırayla verilir
+            # LLM yok: en ilgili alıntılar sırayla verilir; model = gömme modeli
             sources = chosen["sources"]
-            answer = " ".join(f"[{s['n']}] {s['text']}" for s in sources)
-            self._json({**base, "answer": answer, "found": True, "sources": sources, "mode": "extractive",
-                        "model": None, "latency_ms": int((time.time() - t0) * 1000)})
+            answer = "\n".join(f"[{s['n']}] {s['text']}" for s in sources)
+            reply(answer, True, sources, "extractive", emb_model)
             return
-        self._json({**base, "answer": chosen["answer"], "found": True, "sources": chosen["sources"],
-                    "mode": "llm", "model": model, "latency_ms": int((time.time() - t0) * 1000) + 1400})
+        reply(chosen["answer"], True, chosen["sources"], "llm", llm_model, extra_ms=1400)
 
     def _compare(self, raw: str) -> None:
         tickers = [t.strip().upper() for t in raw.split(",") if t.strip()]
         tickers = list(dict.fromkeys(tickers))
         if not 2 <= len(tickers) <= 4:
-            self._error(422, "Karşılaştırma için 2–4 şirket seçin.")
+            self._error(400, "Karşılaştırma için 2–4 şirket seçin.")
             return
         for t in tickers:
-            if company_record(t) is None:
-                self._error(404, f"'{t}' için şirket bulunamadı.")
+            if not TICKER_RE.match(t) or company_record(t) is None or state_of(t) == "none":
+                self._error(404, f"{t} henüz işlenmedi. Önce verisini çekin: POST /api/companies/{t}/ingest")
                 return
-            if not is_analyzed(t):
-                self._error(409, f"'{t}' henüz analiz edilmedi; karşılaştırmadan önce analiz başlatın.")
-                return
-        first = DATA[tickers[0]]["ratios"]["ratios"]
+        # v1.1: metin analizi gerekmez; finansal verisi olan her şirket karşılaştırılır
+        ref_ratios = DATA[next(iter(DATA))]["ratios"]["ratios"]
         ratio_meta = [{"key": r["key"], "label": r["label"], "unit": r["unit"],
-                       "higher_is_better": r["higher_is_better"]} for r in first]
+                       "higher_is_better": r["higher_is_better"]} for r in ref_ratios]
         companies = []
         for t in tickers:
-            d = DATA[t]
+            d = DATA.get(t)
+            has_fin = d is not None and state_of(t) in ("full", "fin")
+            sc = score_of(t)
             companies.append({
-                "ticker": t, "name": d["company"]["name"], "period_end": d["ratios"]["periods"][-1],
-                "score": {"total": d["score"]["total"], "band": d["score"]["band"]},
-                "ratios": {r["key"]: r["values"][-1]["value"] for r in d["ratios"]["ratios"]},
+                "ticker": t, "name": company_obj(t)["name"],
+                "period_end": d["ratios"]["periods"][-1] if has_fin else None,
+                "score": None if sc["total"] is None else {"total": sc["total"], "band": sc["band"]},
+                "ratios": ({r["key"]: r["values"][-1]["value"] for r in d["ratios"]["ratios"]} if has_fin
+                           else {m["key"]: None for m in ratio_meta}),
             })
         self._json({"ratio_meta": ratio_meta, "companies": companies, "disclaimer": DISCLAIMER})
 
@@ -417,7 +502,13 @@ def main() -> None:
     ap.add_argument("port", nargs="?", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--latency", type=int, default=250, help="yapay gecikme (ms)")
+    ap.add_argument("--empty", action="store_true",
+                    help="hiç işlenmiş şirket olmadan başla (boş ana sayfa durumu)")
     args = ap.parse_args()
+    if args.empty:
+        with STATE_LOCK:
+            for tk in STATE:
+                STATE[tk] = "none"
     Handler.latency_ms = args.latency
     mimetypes.add_type("application/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
