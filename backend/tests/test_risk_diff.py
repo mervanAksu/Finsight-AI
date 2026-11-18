@@ -135,3 +135,40 @@ def test_empty_inputs():
     assert only_new["counts"]["added"] == 2
     assert [c["new_text"] for c in only_new["changes"]] == [TAX, AI_REG]  # belge sırası
     assert compare_risk_sections(doc(TAX), None)["counts"]["removed"] == 1
+
+
+# ---- D8: seyrek TF-IDF (bellek) ----
+
+
+def test_sparse_similarities_match_dense_matrix():
+    from finsight.risk_diff import sparse_similarities, tfidf_vectors
+
+    texts = [CUSTOMERS, SUPPLIERS, CUSTOMERS_YEAR_CHANGED, SUPPLIERS_MOSTLY_REPLACED]
+    mat = tfidf_matrix(texts)
+    dense = mat[:2] @ mat[2:].T
+    vecs = tfidf_vectors(texts)
+    sparse = sparse_similarities(vecs[:2], vecs[2:], 0.0)
+    for i in range(2):
+        for j in range(2):
+            assert sparse.get((i, j), 0.0) == pytest.approx(float(dense[i, j]), abs=1e-6)
+
+
+def test_large_sections_use_little_memory():
+    import random
+    import tracemalloc
+
+    rng = random.Random(0)
+    vocab = [f"w{i}" for i in range(20000)]
+
+    def section():
+        return "\n\n".join(" ".join(rng.choice(vocab) for _ in range(90)) for _ in range(400))
+
+    old, new = section(), section()
+    tracemalloc.start()
+    try:
+        result = compare_risk_sections(old, new)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 50e6  # yoğun matrisle ~290 MB idi
+    assert result["counts"] == {"added": 400, "removed": 400, "modified": 0, "unchanged": 0}

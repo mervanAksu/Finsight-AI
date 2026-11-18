@@ -102,7 +102,13 @@ worsen worsened writedown
 """.split())
 
 NEGATIONS = frozenset({"not", "no", "never", "cannot", "neither", "nor", "without"})
-NEGATION_WINDOW = 3
+NEGATION_WINDOW = 4
+# Belirsizlik/güvence vermeme kalıpları ("there can be no assurance", "we cannot assure"):
+# ifade olumsuz sayılır (−1) ve ardından gelen olumlu kelimeler varsayımsaldır (sayılmaz).
+UNCERTAINTY_PHRASES: tuple[tuple[str, ...], ...] = (
+    ("no", "assurance"), ("no", "assurances"), ("cannot", "assure"), ("can", "not", "assure"),
+    ("can't", "assure"), ("cannot", "guarantee"), ("no", "guarantee"),
+)
 _TOKEN = re.compile(r"[a-z]+(?:'[a-z]+)?")
 _SUFFIXES = ("ies", "es", "s", "ed", "ing", "ly")
 
@@ -144,8 +150,11 @@ def load_lm_dictionary(path: str) -> tuple[frozenset[str], frozenset[str]]:
 class LexiconModel:
     """Sözlük tabanlı yedek duygu modeli.
 
-    Kurallar: olumlu kelime +1, olumsuz −1; önceki 3 kelimede "not/no/never" (ve
-    "cannot", "...n't") varsa işaret çevrilir. net > 0 → positive, net < 0 → negative,
+    Kurallar: olumlu kelime +1, olumsuz −1; önceki 4 kelimede "not/no/never" (ve
+    "cannot", "...n't") varsa olumlu kelime −1 olur, olumsuz kelime ise nötrleşir
+    ("did not experience any material disruption" olumlu sayılmaz). "no assurance",
+    "cannot assure", "there can be no assurance" kalıpları −1'dir ve kalıptan sonraki olumlu
+    kelimeler sayılmaz. net > 0 → positive, net < 0 → negative,
     aksi neutral. Güven: polar etiketlerde `0.5 + 0.5·|net|/(eşleşme+1)` (tek eşleşme 0.75,
     eşleşme arttıkça ve tutarlılık arttıkça 1'e yaklaşır); neutral'da eşleşme yoksa 0.75,
     eşleşmeler birbirini götürüyorsa 0.5.
@@ -185,14 +194,36 @@ class LexiconModel:
         tokens = _TOKEN.findall(sentence.lower().replace("’", "'"))
         net = 0
         hits = 0
+        phrase_tokens: set[int] = set()
+        first_phrase: int | None = None
+        for i in range(len(tokens)):
+            for phrase in UNCERTAINTY_PHRASES:
+                if tuple(tokens[i:i + len(phrase)]) == phrase:
+                    phrase_tokens.update(range(i, i + len(phrase)))
+                    if first_phrase is None or i < first_phrase:
+                        first_phrase = i
+                    break
+        if first_phrase is not None:
+            net -= 1
+            hits += 1
         for i, tok in enumerate(tokens):
+            if i in phrase_tokens:
+                continue
             pol = self._polarity(tok)
             if not pol:
                 continue
-            hits += 1
-            window = tokens[max(0, i - NEGATION_WINDOW):i]
+            if pol > 0 and first_phrase is not None and i > first_phrase:
+                continue  # "no assurance that we will achieve profitability": varsayımsal
+            window = [w for j, w in enumerate(tokens[max(0, i - NEGATION_WINDOW):i],
+                                              start=max(0, i - NEGATION_WINDOW))
+                      if j not in phrase_tokens]
             if any(_is_negation(w) for w in window):
+                if pol < 0:
+                    # "did not experience any material disruption": olumsuzlanmış olumsuz
+                    # olumluya çevrilmez, nötrdür.
+                    continue
                 pol = -pol
+            hits += 1
             net += pol
         if net > 0:
             return {"label": "positive", "score": 0.5 + 0.5 * net / (hits + 1)}

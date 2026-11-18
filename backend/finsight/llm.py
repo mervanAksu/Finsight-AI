@@ -1,8 +1,13 @@
 """LLM istemcileri: Anthropic Messages API ve OpenAI uyumlu Chat Completions (FR-10).
 
 Anahtarlar yalnızca ortam değişkenlerinden okunur (NFR-10) ve hiçbir hata mesajında,
-günlükte veya `repr` çıktısında gösterilmez. Testlerde `transport=httpx.MockTransport(...)`
-verilerek ağa çıkılmaz.
+günlükte veya `repr` çıktısında gösterilmez. Hata mesajları HTTP gövdesini içermez (sağlayıcı
+gövdesi maskeli anahtar parçası yansıtabilir); yalnızca durum kodu ve varsa `error.type`.
+Testlerde `transport=httpx.MockTransport(...)` verilerek ağa çıkılmaz.
+
+Zaman aşımı varsayılan 20 sn (`FINSIGHT_LLM_TIMEOUT`); okuma zaman aşımı yeniden denenmez
+(kullanıcı en kötü durumda ~20 sn bekler). 429/5xx'te `Retry-After` (saniye, en fazla 10)
+varsa ona uyulur, yoksa 1, 2 sn üstel bekleme.
 """
 
 from __future__ import annotations
@@ -22,8 +27,10 @@ ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-5-5"
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_TIMEOUT = 60.0
+DEFAULT_TIMEOUT = 20.0
+TIMEOUT_ENV = "FINSIGHT_LLM_TIMEOUT"
 MAX_RETRIES = 2
+MAX_RETRY_AFTER = 10.0
 RETRY_STATUSES = {429, 500, 502, 503, 504, 529}
 
 
@@ -44,15 +51,52 @@ def _redact(text: str, secret: str | None) -> str:
     return text
 
 
+def _default_timeout() -> float:
+    raw = os.getenv(TIMEOUT_ENV, "").strip()
+    if raw:
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+        log.warning("Geçersiz %s=%r; varsayılan %.0f sn kullanılıyor.", TIMEOUT_ENV, raw,
+                    DEFAULT_TIMEOUT)
+    return DEFAULT_TIMEOUT
+
+
+def _retry_after(resp: httpx.Response) -> float | None:
+    raw = resp.headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        value = float(raw.strip())
+    except ValueError:  # HTTP tarih biçimi desteklenmez → üstel bekleme
+        return None
+    return min(max(value, 0.0), MAX_RETRY_AFTER)
+
+
+def _error_type(resp: httpx.Response) -> str | None:
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+    err = data.get("error") if isinstance(data, dict) else None
+    etype = err.get("type") if isinstance(err, dict) else None
+    if isinstance(etype, str) and etype.replace("_", "").isalnum() and len(etype) <= 64:
+        return etype
+    return None
+
+
 class _HttpLLMClient:
     provider = "base"
 
-    def __init__(self, api_key: str | None, model: str, timeout: float = DEFAULT_TIMEOUT,
+    def __init__(self, api_key: str | None, model: str, timeout: float | None = None,
                  max_retries: int = MAX_RETRIES, transport: httpx.BaseTransport | None = None,
                  sleep: Callable[[float], None] = time.sleep) -> None:
         self._api_key = api_key or ""
         self.model = model
-        self.timeout = timeout
+        self.timeout = float(timeout) if timeout is not None else _default_timeout()
         self.max_retries = max_retries
         self._transport = transport
         self._sleep = sleep
@@ -64,24 +108,34 @@ class _HttpLLMClient:
         last_error = "bilinmeyen hata"
         with httpx.Client(timeout=self.timeout, transport=self._transport) as client:
             for attempt in range(self.max_retries + 1):
+                wait: float | None = None
                 try:
                     resp = client.post(url, headers=headers, json=body)
-                except httpx.TransportError as exc:  # zaman aşımı, bağlantı hatası
+                except httpx.ReadTimeout:
+                    # Yanıt beklenirken zaman aşımı: yeniden denemek bekleme süresini katlar.
+                    last_error = f"zaman aşımı ({self.timeout:g} sn)"
+                    break
+                except httpx.TransportError as exc:  # bağlantı hatası, bağlantı zaman aşımı
                     last_error = f"bağlantı hatası ({type(exc).__name__})"
                 else:
                     if resp.status_code == 200:
                         try:
-                            return resp.json()
+                            data = resp.json()
                         except ValueError:
                             raise LLMError(
                                 f"{self.provider} yanıtı JSON olarak çözülemedi"
                             ) from None
-                    detail = resp.text[:200]
-                    last_error = f"HTTP {resp.status_code}: {detail}"
+                        if not isinstance(data, dict):
+                            raise LLMError(f"{self.provider} yanıtı beklenmeyen biçimde")
+                        return data
+                    # Gövde mesaja konmaz (D7): yalnızca durum kodu ve varsa error.type.
+                    etype = _error_type(resp)
+                    last_error = f"HTTP {resp.status_code}" + (f" ({etype})" if etype else "")
                     if resp.status_code not in RETRY_STATUSES:
                         break
+                    wait = _retry_after(resp)
                 if attempt < self.max_retries:
-                    self._sleep(2.0 ** attempt)
+                    self._sleep(wait if wait is not None else 2.0 ** attempt)
         raise LLMError(_redact(f"{self.provider} LLM isteği başarısız: {last_error}",
                                self._api_key))
 
@@ -109,11 +163,20 @@ class AnthropicClient(_HttpLLMClient):
             "messages": [{"role": "user", "content": user}],
         }
         data = self._post(self.url, headers, body)
-        parts = [
-            c.get("text", "") for c in data.get("content", []) or []
-            if isinstance(c, dict) and c.get("type") == "text"
-        ]
-        return "".join(parts).strip()
+        try:
+            content = data.get("content") or []
+            if not isinstance(content, list):
+                raise TypeError("content liste değil")
+            parts = []
+            for c in content:
+                if isinstance(c, dict) and c.get("type") == "text":
+                    text = c.get("text")
+                    if not isinstance(text, str):
+                        raise TypeError("text metin değil")
+                    parts.append(text)
+            return "".join(parts).strip()
+        except (AttributeError, TypeError, ValueError):
+            raise LLMError("anthropic yanıtı beklenmeyen biçimde (content)") from None
 
 
 class OpenAICompatibleClient(_HttpLLMClient):
@@ -141,9 +204,18 @@ class OpenAICompatibleClient(_HttpLLMClient):
         data = self._post(f"{self.base_url}/chat/completions", headers, body)
         try:
             content = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
+        except (KeyError, IndexError, TypeError, AttributeError):
             raise LLMError("openai yanıtında choices[0].message.content yok") from None
-        return (content or "").strip()
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):  # bazı uyumlu sunucular parça listesi döndürür
+            texts = [p.get("text") for p in content if isinstance(p, dict)
+                     and p.get("type") in ("text", "output_text")]
+            if all(isinstance(t, str) for t in texts):
+                return "".join(t for t in texts if isinstance(t, str)).strip()
+        raise LLMError("openai yanıtı beklenmeyen biçimde (content)")
 
 
 def get_llm_client(transport: httpx.BaseTransport | None = None) -> LLMClient | None:
@@ -155,6 +227,7 @@ def get_llm_client(transport: httpx.BaseTransport | None = None) -> LLMClient | 
       `gpt-4o-mini`.
     - `OPENAI_BASE_URL`: varsayılan `https://api.openai.com/v1` (anahtarsız yerel sunucu
       için özel bir adres verilebilir).
+    - `FINSIGHT_LLM_TIMEOUT`: istek zaman aşımı (sn), varsayılan 20.
     """
     provider = os.getenv("FINSIGHT_LLM_PROVIDER", "").strip().lower()
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()

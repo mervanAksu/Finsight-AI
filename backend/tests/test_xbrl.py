@@ -1,5 +1,6 @@
 from datetime import date
 
+import pytest
 from conftest import load
 
 from finsight.xbrl import extract_all, extract_annual, yoy_changes
@@ -147,3 +148,73 @@ def test_yoy_ratio():
     assert yoy_ratio(s(None, 5)) == [None, None]
     assert yoy_ratio(s(5, None)) == [None, None]
     assert yoy_ratio([]) == [None]
+
+
+# ---- O2: ardışık olmayan dönemlerde YoY yok; O6: birincil etiket ----
+
+
+def _cf(tag_vals):
+    return {"facts": {"us-gaap": {t: {"units": {"USD": v}} for t, v in tag_vals.items()}}}
+
+
+def _f(start, end, val, accn, filed, form="10-K"):
+    x = {"end": end, "val": val, "accn": accn, "fy": None, "fp": "FY", "form": form,
+         "filed": filed}
+    if start:
+        x["start"] = start
+    return x
+
+
+def test_yoy_is_none_across_missing_year():
+    cf = _cf({"Revenues": [_f("2021-01-01", "2021-12-31", 100, "a21", "2022-02-01"),
+                           _f("2022-01-01", "2022-12-31", 110, "a22", "2023-02-01"),
+                           _f("2024-01-01", "2024-12-31", 150, "a24", "2025-02-01")]})
+    rev = extract_annual(cf, "revenue", years=0)
+    assert yoy_ratio(rev) == [None, pytest.approx(0.1), None]  # 2022→2024 iki yıllık
+    assert yoy_changes(rev) == [None, 10.0, None]
+
+
+def test_yoy_is_none_across_fiscal_year_end_change():
+    cf = _cf({"Revenues": [_f("2022-01-01", "2022-12-31", 100, "b22", "2023-02-01"),
+                           _f("2023-01-01", "2023-12-31", 120, "b23", "2024-02-01"),
+                           _f("2024-01-01", "2024-06-30", 70, "b24t", "2024-09-01", "10-KT"),
+                           _f("2024-07-01", "2025-06-30", 160, "b25", "2025-09-01")]})
+    rev = extract_annual(cf, "revenue", years=0)
+    assert [i["period_end"] for i in rev] == [date(2022, 12, 31), date(2023, 12, 31),
+                                              date(2025, 6, 30)]
+    assert yoy_ratio(rev) == [None, pytest.approx(0.2), None]  # 18 aylık fark YoY değildir
+    assert yoy_changes(rev) == [None, 20.0, None]
+
+
+def test_yoy_accepts_52_53_week_years():
+    s = [{"value": 100, "period_end": date(2022, 9, 24)},
+         {"value": 110, "period_end": date(2023, 9, 30)}]  # 371 gün
+    assert yoy_ratio(s) == [None, pytest.approx(0.1)]
+
+
+def test_primary_tag_is_the_one_with_latest_period():
+    # Gözden geçirici D: 2023 eski (öncelikli) etikette 900; yeni etikette yeniden düzenlenmiş
+    # karşılaştırma değeri 1000. Tutarlı tanım için birincil (en son dönemli) etiket kullanılır.
+    cf = _cf({
+        "RevenueFromContractWithCustomerExcludingAssessedTax": [
+            _f("2023-01-01", "2023-12-31", 900, "t23", "2024-02-01")],
+        "Revenues": [_f("2023-01-01", "2023-12-31", 1000, "t24", "2025-02-01"),
+                     _f("2024-01-01", "2024-12-31", 1100, "t24", "2025-02-01")],
+    })
+    rev = extract_annual(cf, "revenue", years=0)
+    assert [(i["value"], i["tag"]) for i in rev] == [(1000, "Revenues"), (1100, "Revenues")]
+    assert yoy_ratio(rev)[1] == pytest.approx(0.1)
+
+
+def test_primary_tag_tie_uses_priority_and_fills_gaps_from_others():
+    cf = _cf({
+        "RevenueFromContractWithCustomerExcludingAssessedTax": [
+            _f("2023-01-01", "2023-12-31", 1000, "x", "2024-02-01"),
+            _f("2024-01-01", "2024-12-31", 1100, "y", "2025-02-01")],
+        "Revenues": [_f("2022-01-01", "2022-12-31", 800, "w", "2023-02-01"),
+                     _f("2023-01-01", "2023-12-31", 999, "x", "2024-02-01"),
+                     _f("2024-01-01", "2024-12-31", 1099, "y", "2025-02-01")],
+    })
+    rev = extract_annual(cf, "revenue", years=0)
+    assert [(i["period_end"].year, i["value"]) for i in rev] == [(2022, 800), (2023, 1000),
+                                                                  (2024, 1100)]

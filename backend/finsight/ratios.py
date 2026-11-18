@@ -2,9 +2,13 @@
 
 Kurallar .claude/skills/financial-analysis/SKILL.md §2 ile birebir aynıdır:
 - Değerler ham oran olarak döner (0.253 = %25,3); yuvarlama yapılmaz.
-- Akış ve bilanço kalemleri aynı period_end (mali yıl sonu) ile eşleşir.
+- Dönemler revenue ∪ net_income ∪ total_assets mali yıl sonlarının birleşimidir; birbirine
+  30 günden yakın tarihler aynı dönemdir (en son tarih tutulur).
+- Akış ve bilanço kalemleri period_end ±7 gün toleransla (en yakın) eşleşir (52–53 haftalık
+  mali yıl, gelir 28 Aralık / bilanço 31 Aralık gibi farklar).
 - ROA/ROE paydası ortalamadır: (dönem sonu + bir önceki mali yıl sonu) / 2. Önceki mali yıl
   sonu (period_end farkı 330–400 gün) yoksa dönem sonu değeri kullanılır ve note yazılır.
+  ROE'de önceki dönem özkaynağı ≤ 0 ise de dönem sonu değeri kullanılır (ayrı note).
 - Hesaplanamayan oran: value=None, status="missing", reason dolu. Eksik veri 0 sayılmaz.
 
 Girdi: xbrl.extract_all çıktısı. Ortalamaya yetmesi için entegrasyon katmanı
@@ -14,6 +18,10 @@ Girdi: xbrl.extract_all çıktısı. Ortalamaya yetmesi için entegrasyon katman
 from datetime import date
 
 NOTE_PERIOD_END = "ortalama yerine dönem sonu değeri"
+NOTE_PRIOR_EQUITY = "önceki dönem özkaynağı negatif; ortalama yerine dönem sonu değeri"
+MATCH_TOLERANCE_DAYS = 7  # akış/bilanço kalemi eşleştirme toleransı
+SAME_PERIOD_DAYS = 30  # bundan yakın dönem sonları aynı dönemdir
+PERIOD_BASE_METRICS = ("revenue", "net_income", "total_assets")
 REASON_ZERO = "payda sıfır"
 REASON_EQUITY = "özkaynak negatif veya sıfır; oran anlamlı değil"
 REASON_NET_INCOME = "net kâr sıfır veya negatif; oran anlamlı değil"
@@ -74,16 +82,36 @@ def _index(facts: dict[str, list[dict]]) -> dict[str, dict[date, dict]]:
     return {m: {i["period_end"]: i for i in (series or [])} for m, series in facts.items()}
 
 
+def match_period(by_end: dict[date, dict], end: date,
+                 tolerance_days: int = MATCH_TOLERANCE_DAYS) -> dict | None:
+    """`end` ile aynı dönemdeki kayıt: tam eşleşme, yoksa ±`tolerance_days` içindeki en yakın."""
+    if end in by_end:
+        return by_end[end]
+    near = [(abs((e - end).days), -e.toordinal(), e) for e in by_end
+            if abs((e - end).days) <= tolerance_days]
+    return by_end[min(near)[2]] if near else None
+
+
 def _prior(by_end: dict[date, dict], cur_end: date) -> dict | None:
     candidates = [i for end, i in by_end.items() if is_prior_fiscal_year(end, cur_end)]
     return max(candidates, key=lambda i: i["period_end"]) if candidates else None
 
 
 def select_periods(facts: dict[str, list[dict]], periods: int = 3) -> list[date]:
-    """revenue'nun (yoksa net_income'un) son `periods` mali yıl sonu, eskiden yeniye."""
-    base = facts.get("revenue") or facts.get("net_income") or []
-    ends = sorted({i["period_end"] for i in base})
-    return ends[-periods:] if periods else ends
+    """Son `periods` mali yıl sonu, eskiden yeniye.
+
+    Aday tarihler revenue ∪ net_income ∪ total_assets dönem sonlarıdır (gelir etiketi listede
+    olmayan bir etikete geçse bile dönemler eskide takılı kalmaz). Birbirine 30 günden yakın
+    tarihler (ör. gelir 2024-12-28, bilanço 2024-12-31) tek dönem sayılır; en son tarih tutulur.
+    """
+    ends = sorted({i["period_end"] for m in PERIOD_BASE_METRICS for i in (facts.get(m) or [])})
+    merged: list[date] = []
+    for end in ends:
+        if merged and (end - merged[-1]).days < SAME_PERIOD_DAYS:
+            merged[-1] = end  # aynı dönem, farklı tarih → en son tarih
+        else:
+            merged.append(end)
+    return merged[-periods:] if periods else merged
 
 
 def _input(item: dict) -> dict:
@@ -98,21 +126,27 @@ def _entry(end: date, value=None, reason=None, note=None, inputs=None) -> dict:
 
 def _compute_one(key: str, end: date, idx: dict[str, dict[date, dict]]) -> dict:
     num_metrics, den_metric, use_avg, rule = _SPECS[key]
-    num_items = [idx.get(m, {}).get(end) for m in num_metrics]
-    den_item = idx.get(den_metric, {}).get(end)
-    prev_item = _prior(idx.get(den_metric, {}), end) if use_avg and den_item else None
+    num_items = [match_period(idx.get(m, {}), end) for m in num_metrics]
+    den_item = match_period(idx.get(den_metric, {}), end)
+    prev_item = (_prior(idx.get(den_metric, {}), den_item["period_end"])
+                 if use_avg and den_item is not None else None)
 
     found = [i for i in [*num_items, den_item, prev_item] if i is not None]
     inputs = [_input(i) for i in found]
     missing = [m for m, i in zip([*num_metrics, den_metric], [*num_items, den_item]) if i is None]
-    if missing:
+    present = [i for i in num_items if i is not None]
+    if missing or den_item is None or len(present) != len(num_items):
         return _entry(end, reason="eksik veri: " + ", ".join(missing), inputs=inputs)
 
-    numerator = float(num_items[0]["value"]) - sum(float(i["value"]) for i in num_items[1:])
+    numerator = float(present[0]["value"]) - sum(float(i["value"]) for i in present[1:])
     cur_den = float(den_item["value"])
     note = None
     if use_avg and prev_item is not None:
-        denominator = (cur_den + float(prev_item["value"])) / 2
+        prev_den = float(prev_item["value"])
+        if rule == "equity" and prev_den <= 0 < cur_den:
+            denominator, note = cur_den, NOTE_PRIOR_EQUITY
+        else:
+            denominator = (cur_den + prev_den) / 2
     else:
         denominator = cur_den
         if use_avg:

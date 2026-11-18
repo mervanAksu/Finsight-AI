@@ -12,7 +12,13 @@ eşikler doğrulanmış bir model değil, başlangıç önerisidir.
 from datetime import date
 
 from .formatting import MISSING, fmt_decimal, fmt_percent, fmt_times, fmt_usd_short
-from .ratios import RATIO_DEFS, REASON_EQUITY, REASON_NET_INCOME, is_prior_fiscal_year
+from .ratios import (
+    RATIO_DEFS,
+    REASON_EQUITY,
+    REASON_NET_INCOME,
+    is_prior_fiscal_year,
+    match_period,
+)
 from .xbrl import yoy_ratio
 
 WEIGHTS_VERSION = "v1-2026-11"
@@ -124,12 +130,10 @@ def _describe(ind: dict) -> str:
 # ---- veri erişimi ----
 
 def _fact_at(facts: dict, metric: str, end: date | None) -> dict | None:
+    """`end` dönemine ait kayıt (oranlarla aynı kural: ±7 gün toleransla en yakın)."""
     if end is None:
         return None
-    for item in facts.get(metric) or []:
-        if item["period_end"] == end:
-            return item
-    return None
+    return match_period({i["period_end"]: i for i in facts.get(metric) or []}, end)
 
 
 def _fact_prior(facts: dict, metric: str, end: date | None) -> dict | None:
@@ -158,7 +162,8 @@ def _ratio_indicator(spec: tuple, latest: dict[str, dict]) -> dict:
 # ---- bileşenler ----
 
 def _growth_indicator(spec: tuple, facts: dict, metric: str, as_of: date | None) -> dict:
-    cur, prev = _fact_at(facts, metric, as_of), _fact_prior(facts, metric, as_of)
+    cur = _fact_at(facts, metric, as_of)
+    prev = _fact_prior(facts, metric, cur["period_end"]) if cur is not None else None
     if cur is None:
         return _from_value(spec, None, f"eksik veri: {metric}")
     if prev is None:

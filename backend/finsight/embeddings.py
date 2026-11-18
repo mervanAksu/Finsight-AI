@@ -34,13 +34,21 @@ HASHING_NAME = "hashing-fallback"
 # Varsayılan benzerlik eşikleri (RAG'de bunun altındaki parçalar "ilgisiz" sayılır).
 # - ST (MiniLM, normalize): ilgisiz cümle çiftleri tipik olarak 0.0–0.25, ilgili soru/pasaj
 #   çiftleri 0.35+; 0.30 ihtiyatlı bir alt sınırdır (gerçek veride doğrulanmalı).
-# - Hashing: ilgisiz metinlerde benzerlik yalnızca işaretli hash çakışmalarından gelir;
-#   standart sapması ≈ 1/sqrt(dim) = 0.031 (dim=1024). 0.12 ≈ 4σ: yüzlerce parça arasında
-#   bile gürültünün eşiği geçmesi çok nadirdir. Sorgu kelimelerinin 2–3'ünü içeren ~150
-#   kelimelik parçalar 0.12–0.25 verir (bkz. test_embeddings). Sinyal parça uzunluğunun
-#   karekökü ile düştüğü için ~350 kelimelik parçalarda geri çağırma azalır.
+# - Hashing (dim=4096, işaretli): ilgisiz metinlerde benzerlik yalnızca işaretli hash
+#   çakışmalarından gelir; standart sapması ≈ 1/sqrt(dim) = 0.016. Ölçüm (6 kelimelik sorgu ×
+#   150 kelimelik ilgisiz parça, 160 bin çift): ≥ 0.08 oranı %0.04, ≥ 0.10 oranı %0.005.
+#   İlgili parçalar (kestrel fixture, 100–150 kelime) 0.145–0.26; ~130 kelimelik parçada tek
+#   konu cümlesi + 2 ortak kelimeli sorgu %94 oranında ≥ 0.08 (0.12'de %7). Bu yüzden 0.08
+#   (≈ 5σ); RAG ayrıca en az bir ortak kelime şartı arar. Sinyal parça uzunluğunun karekökü
+#   ile düştüğü için ~350 kelimelik parçalarda geri çağırma azalır.
+#   Neden 1024 değil: ~250 özellikli parçada bir kovanın başka bir özellikle çakışma olasılığı
+#   ~%22 idi; ters işaretli çakışma ilgili kelimenin katkısını sıfırlayabiliyordu (ör.
+#   "Which suppliers provide semiconductors and magnets?" ↔ tedarikçi parçası 0.017). 4096'da
+#   ~%6. İşaretsiz hashing denendi: çakışma sıfırlamaz ama gürültü ortalaması pozitif kayıyor
+#   (4096'da en yüksek gürültü 0.17), bu yüzden işaretli tutuldu.
 ST_MIN_SIMILARITY = 0.30
-HASHING_MIN_SIMILARITY = 0.12
+HASHING_MIN_SIMILARITY = 0.08
+HASHING_DIM = 4096
 # Kısa anahtar kelime sorgularında bigram'lar nadiren eşleşir ama parça vektörünün normunu
 # büyütür; düşük ağırlık (0.25) ifade eşleşmesine küçük bir bonus verip sinyali korur.
 BIGRAM_WEIGHT = 0.25
@@ -117,7 +125,7 @@ class HashingEmbedder:
     name = HASHING_NAME
     default_min_similarity = HASHING_MIN_SIMILARITY
 
-    def __init__(self, dim: int = 1024) -> None:
+    def __init__(self, dim: int = HASHING_DIM) -> None:
         if dim <= 0:
             raise ValueError("dim pozitif olmalı")
         self.dim = dim

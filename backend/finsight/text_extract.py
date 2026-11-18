@@ -10,8 +10,10 @@ Bölüm yapısı (bkz. `.claude/skills/sec-edgar/SKILL.md`):
 - 10-Q: Part I Item 2 "Management's Discussion..." → Item 3 (yoksa Item 4);
   Part II Item 1A "Risk Factors" → Item 2 / Item 5 / Item 6.
 
-İçindekiler tablosu tuzağı: başlıklar önce içindekilerde geçer. Her başlık adayından bir sonraki
-bitiş başlığına kadar olan metin alınır ve **en uzun** aday seçilir.
+İçindekiler tablosu tuzağı: başlıklar önce içindekilerde geçer. Yalnızca "başlık benzeri"
+satırlar aday sayılır (çapraz atıflar — "see Item 1A. Risk Factors, of this report" — elenir);
+bitiş başlığına kadar 50 kelimeden kısa adaylar içindekiler satırıdır. Kalanların ilki seçilir;
+hiç aday kalmazsa en uzun aday yedeğine dönülür.
 """
 
 from __future__ import annotations
@@ -19,8 +21,16 @@ from __future__ import annotations
 import re
 import warnings
 
-from bs4 import BeautifulSoup, NavigableString, Tag
-from bs4.element import CData, Comment, Declaration, Doctype, ProcessingInstruction
+from bs4 import BeautifulSoup
+from bs4.element import (
+    CData,
+    Comment,
+    Declaration,
+    Doctype,
+    NavigableString,
+    ProcessingInstruction,
+    Tag,
+)
 
 try:  # bs4 >= 4.11
     from bs4 import XMLParsedAsHTMLWarning
@@ -40,7 +50,6 @@ MIN_SECTION_WORDS = 15
 MAX_SENTENCE_CHARS = 1000
 MIN_SENTENCE_WORDS = 3
 HEADING_MAX_WORDS = 8  # bundan kısa paragraflar başlık sayılıp sonraki paragrafa katılır
-HEADING_REST_MAX_CHARS = 150  # bölüm başlık satırının başlıktan sonra kalan en fazla uzunluğu
 
 # --------------------------------------------------------------------------- HTML → metin
 
@@ -156,41 +165,146 @@ def html_to_text(html: str | bytes) -> str:
 
 _PART_PREFIX = r"(?:part[ \t]+i{1,3}[ \t]*[.,:\-–—]?[ \t]*)?"
 _TITLE_SEP = r"[\s.:\-–—]*"
+_APOS = "'’`´ʼ"
 _RISK_TITLE = r"risk\s+factors"
-_MDNA_TITLE = r"(?:management['’`]?s?\s+discussion|md\s*&\s*a)"
+# MD&A başlığının tamamı (varsa) başlığa dahildir; böylece satırın kalanı gövde cümlesi
+# ise ayrıca tanınabilir.
+_MDNA_TITLE = (
+    rf"(?:management[{_APOS}]?s?\s+discussion"
+    r"(?:\s+and\s+analysis(?:\s+of\s+(?:the\s+)?financial\s+condition"
+    r"(?:\s+and\s+(?:the\s+)?results\s+of\s+operations)?)?)?|md\s*&\s*a)"
+)
+HEADING_MAX_CHARS = 150  # başlık satırının (gövde hariç) en fazla uzunluğu
+TOC_MAX_WORDS = 50  # başlangıç ile bitiş arası bundan kısa aday içindekiler satırıdır
+
+
+def _code_re(code: str) -> str:
+    """'1A' → '1[ \t]*A' ("Item 1 A." yazımına da izin verir)."""
+    m = re.fullmatch(r"(\d{1,2})([A-Za-z]?)", code)
+    if not m or not m.group(2):
+        return re.escape(code)
+    return rf"{m.group(1)}[ \t]*{m.group(2)}"
 
 
 def _start_re(code: str, title: str) -> re.Pattern:
-    # Başlık satırının kalanı ("...and Analysis of Financial Condition...") kısa ise başlığa
-    # dahil edilir; uzunsa (başlık ile gövde aynı satırdaysa) gövdeden yemek için alınmaz.
     return re.compile(
-        rf"^[ \t]*{_PART_PREFIX}item[ \t]*{re.escape(code)}(?![0-9a-z]){_TITLE_SEP}{title}"
-        rf"(?:[^\n]{{0,{HEADING_REST_MAX_CHARS}}}(?=\n|\Z))?",
+        rf"^[ \t]*{_PART_PREFIX}item[ \t]*{_code_re(code)}(?![0-9a-z]){_TITLE_SEP}{title}",
         re.I | re.M,
     )
 
 
-def _end_re(codes: list[str], part_ii: bool = False) -> re.Pattern:
-    alts = "|".join(re.escape(c) for c in codes)
-    pattern = rf"^[ \t]*{_PART_PREFIX}item[ \t]*(?:{alts})(?![0-9a-z])"
-    if part_ii:
-        pattern = rf"(?:{pattern}|^[ \t]*part[ \t]+ii(?![0-9a-z]))"
-    return re.compile(pattern, re.I | re.M)
+def _end_re(codes: list[str]) -> re.Pattern:
+    alts = "|".join(_code_re(c) for c in codes)
+    return re.compile(rf"^[ \t]*{_PART_PREFIX}item[ \t]*(?:{alts})(?![0-9a-z])", re.I | re.M)
 
 
-_ANY_ITEM = re.compile(r"^[ \t]*item[ \t]*\d{1,2}[a-c]?(?![0-9a-z])", re.I | re.M)
-_PART_II = re.compile(r"^[ \t]*part[ \t]+ii(?![0-9a-z])", re.I | re.M)
+_ANY_ITEM = re.compile(r"^[ \t]*item[ \t]*\d{1,2}(?:[ \t]*[a-c])?(?![0-9a-z])", re.I | re.M)
+# Part II bitişi yalnızca satırın tamamı "PART II" (+ isteğe bağlı "— OTHER INFORMATION",
+# sayfa numarası) ise kabul edilir; "Part II, Item 7 of this report ..." başlık değildir.
+_PART_II = re.compile(
+    r"^[ \t]*part[ \t]+ii[ \t]*(?:[.:\-–—][ \t]*)?(?:other[ \t]+information[ \t]*\.?[ \t]*)?"
+    r"(?:\d{1,3}[ \t]*)?$",
+    re.I | re.M,
+)
 _NOT_APPLICABLE = re.compile(r"not\s+applicable|smaller\s+reporting", re.I)
+_REST_SEP = re.compile(r"^[ \t.:\-–—]*")
+_PAGE_REF = re.compile(r"^(?:page[ \t]*)?\d{1,3}$", re.I)
+_CONTINUATION = re.compile(r"[,;][ \t]*[a-z]|\.[ \t]+[a-z]")
 
-# (bölüm kodu, başlangıç deseni, bitiş deseni, Part II içinde olmalı mı)
-_SPECS: dict[str, list[tuple[str, re.Pattern, re.Pattern, bool]]] = {
+
+def _line_bounds(text: str, pos: int) -> tuple[int, int]:
+    ls = text.rfind("\n", 0, pos) + 1
+    le = text.find("\n", pos)
+    return ls, (len(text) if le == -1 else le)
+
+
+def _continues_previous_line(text: str, line_start: int) -> bool:
+    """Önceki satır (arada boş satır yoksa) virgülle veya küçük harfli kelimeyle bitiyorsa
+    bu satır bir cümlenin devamıdır (ör. "see Part I,<br>Item 1A. Risk Factors, ...")."""
+    if line_start == 0:
+        return False
+    prev_end = line_start - 1  # '\n'
+    prev_start = text.rfind("\n", 0, prev_end) + 1
+    prev = text[prev_start:prev_end].rstrip()
+    if not prev:
+        return False
+    if prev.endswith(","):
+        return True
+    last = prev.split()[-1]
+    return last.isalpha() and last.islower()
+
+
+def _rest_breaks_heading(rest: str, line: str) -> bool:
+    """Başlık belirtecinden sonra gelen metin bir cümle devamı mı?"""
+    if not rest:
+        return False
+    if rest[0] in ",;":
+        return True
+    # Küçük harfle devam ("of this report", "contains", "discusses"); satırın tamamı küçük
+    # harfse (ör. "item 1b. unresolved staff comments") bu kural uygulanmaz.
+    if rest[0].islower() and any(c.isupper() for c in line):
+        return True
+    return False
+
+
+def _is_end_heading(text: str, m: re.Match) -> bool:
+    """Bitiş başlığı ("Item 1B. Unresolved Staff Comments") başlık benzeri bir satır mı?"""
+    ls, le = _line_bounds(text, m.start())
+    line = text[ls:le].strip()
+    if len(line) > HEADING_MAX_CHARS:
+        return False
+    rest = _REST_SEP.sub("", text[m.end():le]).rstrip()
+    if _rest_breaks_heading(rest, line) or _CONTINUATION.search(rest):
+        return False
+    return not _continues_previous_line(text, ls)
+
+
+def _start_heading(text: str, m: re.Match) -> int | None:
+    """Başlangıç başlığı başlık benzeriyse gövdenin başladığı konumu, değilse None döner.
+
+    Başlık "Risk Factors" / "Management's Discussion..." kelimelerinde biter. Satırın kalanı
+    yalnızca sayfa numarası veya kısa bir ek ise başlığa dahildir; büyük harfle başlayan bir
+    cümle ise (başlık ile gövde aynı satırda) gövdeye aittir.
+    """
+    ls, le = _line_bounds(text, m.end())
+    head_start = _line_bounds(text, m.start())[0]
+    line = text[ls:le]
+    tail = text[m.end():le]
+    rest = _REST_SEP.sub("", tail).rstrip()
+    if _rest_breaks_heading(rest, line):
+        return None
+    if _continues_previous_line(text, head_start):
+        return None
+    if rest and not _PAGE_REF.match(rest):
+        words = rest.split()
+        if len(words) >= 4 or rest[-1] in ".!?":
+            # Gövde cümlesi başlıkla aynı satırda: gövde bu cümleyle başlar.
+            if m.end() - head_start > HEADING_MAX_CHARS:
+                return None
+            return m.end() + (len(tail) - len(tail.lstrip(" \t.:-–—")))
+    if le - head_start > HEADING_MAX_CHARS:
+        return None
+    return le
+
+
+def _find_end(text: str, pos: int, end_re: re.Pattern, part_ii: bool) -> int:
+    ends = [m.start() for m in end_re.finditer(text, pos) if _is_end_heading(text, m)][:1]
+    if part_ii:
+        ends += [m.start() for m in _PART_II.finditer(text, pos)][:1]
+    if not ends:
+        ends = [m.start() for m in _ANY_ITEM.finditer(text, pos) if _is_end_heading(text, m)][:1]
+    return min(ends) if ends else len(text)
+
+
+# (bölüm kodu, başlangıç deseni, bitiş deseni, bitişte PART II, Part II içinde olmalı mı)
+_SPECS: dict[str, list[tuple[str, re.Pattern, re.Pattern, bool, bool]]] = {
     "10-K": [
-        ("1A", _start_re("1A", _RISK_TITLE), _end_re(["1B", "1C", "2"], part_ii=True), False),
-        ("7", _start_re("7", _MDNA_TITLE), _end_re(["7A", "8"]), False),
+        ("1A", _start_re("1A", _RISK_TITLE), _end_re(["1B", "1C", "2"]), True, False),
+        ("7", _start_re("7", _MDNA_TITLE), _end_re(["7A", "8"]), False, False),
     ],
     "10-Q": [
-        ("2", _start_re("2", _MDNA_TITLE), _end_re(["3", "4"], part_ii=True), False),
-        ("1A", _start_re("1A", _RISK_TITLE), _end_re(["2", "5", "6"]), True),
+        ("2", _start_re("2", _MDNA_TITLE), _end_re(["3", "4"]), True, False),
+        ("1A", _start_re("1A", _RISK_TITLE), _end_re(["2", "5", "6"]), False, True),
     ],
 }
 
@@ -212,31 +326,49 @@ def _strip_span(text: str, start: int, end: int) -> tuple[int, int]:
     return start, end
 
 
+def _select_span(
+    text: str, start_re: re.Pattern, end_re: re.Pattern, part_ii: bool, min_pos: int
+) -> tuple[int, int] | None:
+    """Başlık benzeri ve içindekiler satırı olmayan İLK adayı seçer.
+
+    İçindekiler: başlangıç ile bitiş arası `TOC_MAX_WORDS` kelimeden kısa. Hiç uygun aday
+    yoksa eski kurala (tüm adaylar arasından en uzun gövde) dönülür.
+    """
+    longest: tuple[int, int] | None = None
+    for m in start_re.finditer(text):
+        if m.start() < min_pos:
+            continue
+        body_start = _start_heading(text, m)
+        heading_like = body_start is not None
+        if body_start is None:
+            body_start = m.end()
+        span = _strip_span(text, body_start, _find_end(text, body_start, end_re, part_ii))
+        if heading_like and len(text[span[0]:span[1]].split()) >= TOC_MAX_WORDS:
+            return span
+        if longest is None or (span[1] - span[0]) > (longest[1] - longest[0]):
+            longest = span
+    return longest
+
+
 def extract_sections(text: str, form: str) -> dict[str, dict]:
     """Düz metinden risk faktörleri ve MD&A bölümlerini çıkarır.
 
     Dönüş: `{"1A": {"item_code", "title", "text", "char_start", "char_end"}, ...}`.
     `text == kaynak[char_start:char_end]`; başlık satırı ("Item 1A. Risk Factors") hariçtir.
     Bulunamayan veya "not applicable" geçilen bölüm sözlükte yer almaz.
+
+    Başlangıç/bitiş başlıkları "başlık benzeri satır" olmalıdır (≤ 150 karakter, başlıktan
+    sonra ", of this ..." / "contains ..." gibi cümle devamı yok). İçindekiler satırları
+    elenir ve kalan adaylardan ilki seçilir.
     """
     base = _base_form(form)
     if base is None or not text:
         return {}
-    part_ii_positions = [m.start() for m in _PART_II.finditer(text)]
+    first_part_ii = next((m.start() for m in _PART_II.finditer(text)), None)
     result: dict[str, dict] = {}
-    for code, start_re, end_re, needs_part_ii in _SPECS[base]:
-        best: tuple[int, int] | None = None
-        for m in start_re.finditer(text):
-            if needs_part_ii and part_ii_positions and m.start() < part_ii_positions[0]:
-                continue
-            body_start = m.end()
-            end_match = end_re.search(text, body_start)
-            if end_match is None:
-                end_match = _ANY_ITEM.search(text, body_start)
-            end = end_match.start() if end_match else len(text)
-            span = _strip_span(text, body_start, end)
-            if best is None or (span[1] - span[0]) > (best[1] - best[0]):
-                best = span
+    for code, start_re, end_re, end_part_ii, needs_part_ii in _SPECS[base]:
+        min_pos = first_part_ii if (needs_part_ii and first_part_ii is not None) else 0
+        best = _select_span(text, start_re, end_re, end_part_ii, min_pos)
         if best is None:
             continue
         body = text[best[0]:best[1]]

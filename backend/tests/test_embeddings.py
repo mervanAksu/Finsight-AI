@@ -41,13 +41,13 @@ def kestrel_chunks():
 
 def test_hashing_embedder_shape_dtype_and_norm():
     emb = HashingEmbedder()
-    assert emb.name == "hashing-fallback" and emb.dim == 1024
-    assert emb.default_min_similarity == 0.12
+    assert emb.name == "hashing-fallback" and emb.dim == 4096
+    assert emb.default_min_similarity == 0.08
     vecs = emb.embed(["Revenue grew strongly.", "Supplier shortages hurt margins.", ""])
-    assert vecs.shape == (3, 1024) and vecs.dtype == np.float32
+    assert vecs.shape == (3, 4096) and vecs.dtype == np.float32
     assert np.allclose(np.linalg.norm(vecs[:2], axis=1), 1.0, atol=1e-6)
     assert not vecs[2].any()  # boş metin → sıfır vektör (NaN değil)
-    assert emb.embed([]).shape == (0, 1024)
+    assert emb.embed([]).shape == (0, 4096)
 
 
 def test_hashing_is_deterministic_and_uses_hashlib(monkeypatch):
@@ -129,15 +129,15 @@ def test_hash_collision_noise_rarely_exceeds_threshold():
     docs = emb.embed([" ".join(rnd.choices(vocab_b, k=150)) for _ in range(100)])
     sims = (queries @ docs.T).ravel()
     assert abs(float(sims.mean())) < 0.01
-    assert 0.02 < float(sims.std()) < 0.045  # ≈ 1/sqrt(1024) = 0.031
+    assert 0.01 < float(sims.std()) < 0.022  # ≈ 1/sqrt(4096) = 0.016
     assert float((sims >= emb.default_min_similarity).mean()) < 0.002
 
 
 def test_to_from_bytes_roundtrip():
     vec = HashingEmbedder().embed(["Liquidity remains sufficient."])[0]
     raw = to_bytes(vec)
-    assert len(raw) == 1024 * 4
-    back = from_bytes(raw, 1024)
+    assert len(raw) == 4096 * 4
+    back = from_bytes(raw, 4096)
     assert back.dtype == np.float32 and np.array_equal(back, vec)
     back[0] = 5.0  # yazılabilir kopya
     assert to_bytes(np.array([1.0, 2.0])) == np.array([1.0, 2.0], dtype=np.float32).tobytes()
@@ -194,3 +194,33 @@ def test_sentence_transformer_embedder_with_fake_module(monkeypatch):
     assert out.dtype == np.float32 and np.allclose(out[0], [0.6, 0.8, 0.0])
     monkeypatch.setenv("FINSIGHT_EMBEDDING_MODEL", "custom/model")
     assert SentenceTransformerEmbedder().name == "custom/model"
+
+
+def test_signed_collisions_do_not_erase_relevant_chunk(kestrel_chunks):
+    # Entegrasyon bulgusu: dim=1024'te ters işaretli çakışmalar tedarikçi parçasının
+    # benzerliğini ~0'a indiriyordu (0.017; paragrafın kendisiyle 0.14).
+    emb = HashingEmbedder()
+    question = "Which suppliers provide semiconductors and magnets?"
+    q = emb.embed([question])[0]
+    sims = emb.embed(kestrel_chunks) @ q
+    best = int(np.argmax(sims))
+    assert "magnets" in kestrel_chunks[best]
+    assert float(sims[best]) >= emb.default_min_similarity
+    for target, overlap in ((100, 20), (150, 30)):
+        sections = extract_sections(html_to_text((NLP / "kestrel_10k.html").read_bytes()), "10-K")
+        chunks = [c for c in chunk_text(sections["1A"]["text"], target, overlap) if "magnets" in c]
+        assert chunks and all(float(emb.embed([c])[0] @ q) >= emb.default_min_similarity
+                              for c in chunks)
+
+
+def test_threshold_separates_noise_from_single_topic_sentence():
+    # Ölçüm: ~130 kelimelik parçada tek konu cümlesi çoğunlukla eşiği geçer; ilgisiz metin
+    # gürültüsü çok nadiren geçer (bkz. embeddings.py eşik notu).
+    rnd = random.Random(1)
+    vocab = [f"term{i}" for i in range(5000)]
+    topic = ("A cyberattack or ransomware incident affecting our information systems could "
+             "disrupt operations.")
+    emb = HashingEmbedder()
+    q = emb.embed(["ransomware cyberattack risk"])[0]
+    docs = emb.embed([topic + " " + " ".join(rnd.choices(vocab, k=120)) for _ in range(100)])
+    assert float((docs @ q >= emb.default_min_similarity).mean()) > 0.8

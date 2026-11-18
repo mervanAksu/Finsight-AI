@@ -56,9 +56,10 @@ def test_lexicon_confidence_grows_with_consistent_hits():
 def test_lexicon_negation_flips_sign():
     model = LexiconModel()
     assert model.score_sentence("Results were not strong this year.")["label"] == "negative"
-    assert model.score_sentence("We never had a breach.")["label"] == "positive"
-    assert model.score_sentence("There was no impairment of goodwill.")["label"] == "positive"
-    # Olumsuzlama yalnızca önceki 3 kelimeye bakar.
+    # D10: olumsuzlanmış olumsuz kelime olumluya çevrilmez, nötrdür (önceden "positive").
+    assert model.score_sentence("We never had a breach.") == {"label": "neutral", "score": 0.75}
+    assert model.score_sentence("There was no impairment of goodwill.")["label"] == "neutral"
+    # Olumsuzlama yalnızca önceki 4 kelimeye bakar.
     far = "We did not expect that the overall quarter would be so strong."
     assert model.score_sentence(far)["label"] == "positive"
     assert model.score_sentence("Margins didn't improve.")["label"] == "negative"
@@ -163,3 +164,29 @@ def test_summarize_default_top_n_is_five():
     sentences = [f"n{i}" for i in range(9)]
     preds = [{"label": "negative", "score": 0.5 + i / 100} for i in range(9)]
     assert len(summarize(sentences, preds)["top_negative"]) == 5
+
+
+# ---- D10: güvence vermeme kalıpları, 4 kelimelik pencere, olumsuzlanmış olumsuz ----
+
+
+@pytest.mark.parametrize("sentence", [
+    "There can be no assurance that we will achieve profitability.",
+    "We cannot assure you that our growth strategy will be successful.",
+    "We can not assure investors that margins will improve.",
+    "There is no assurance that the expansion will succeed.",
+])
+def test_no_assurance_phrases_are_negative(sentence):
+    assert LexiconModel().score_sentence(sentence)["label"] == "negative"
+
+
+def test_negated_negative_within_four_words_is_neutral():
+    model = LexiconModel()
+    s = "We did not experience any material disruption during the year."
+    assert model.score_sentence(s) == {"label": "neutral", "score": 0.75}
+    # Pencere dışındaki olumsuz kelime olumsuz kalır.
+    far = "We did not expect that the overall supply would see disruption."
+    assert model.score_sentence(far)["label"] == "negative"
+    # Olumsuzlanmış olumlu kelime hâlâ olumsuzdur (4 kelime içinde).
+    assert model.score_sentence("Demand was not particularly very strong.")["label"] == "negative"
+    # Olumsuzlanmış olumsuz + olumlu kelime → olumlu
+    assert model.score_sentence("Margins were strong with no impairment.")["label"] == "positive"

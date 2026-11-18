@@ -9,14 +9,23 @@ Akış:
    atılır (benzerlikleri yalnızca hash çakışması gürültüsüdür).
 2. Benzerlik eşiğini geçen parça yoksa `not_found` döner ve cevap üretmek için LLM
    **çağrılmaz** (yukarıdaki çeviri çağrısı cevap üretmez; yalnızca arama sorgusudur).
-3. LLM varsa: numaralı `<source n=...>` blokları + soru gönderilir; cevaptaki geçersiz
-   `[n]` atıfları temizlenir; hiç geçerli atıf kalmazsa çıkarımsal moda düşülür.
+3. LLM varsa: numaralı `<source n=...>` blokları + soru gönderilir; cevaptaki atıflar
+   `[n]` biçimine normalize edilir, geçersizler temizlenir; tavsiye cümleleri ve atıfsız
+   sayısal cümleler çıkarılır; hiç geçerli atıf kalmazsa çıkarımsal moda düşülür.
    LLM kaynaklara rağmen "raporlarda bulunamadı" derse `not_found` döner.
 4. LLM yoksa (veya hata verirse): çıkarımsal (extractive) mod — en ilgili 3 parçadan soruyla
    en çok örtüşen cümleler `[n]` atıfıyla alıntılanır.
 
 `sources` yalnızca atıf yapılanları değil, getirilen tüm (eşiği geçen) parçaları içerir.
 `model`: cevabı LLM ürettiyse LLM model adı, aksi halde gömücü adı.
+
+Yatırım tavsiyesi yok (NFR-07, CLAUDE.md): soruda al/sat/tut, hedef fiyat vb. niyet varsa
+cevabın başına sabit ret cümlesi eklenir ve `advice_refused = True` döner; LLM'e de bu bağlam
+iletilir. LLM cevabından tavsiye kalıbı içeren cümleler ve atıf taşımayan sayısal cümleler
+çıkarılır (kaynaksız sayısal iddia olamaz).
+
+Gömme uyumluluğu: gömme boyutu `embedder.dim`'den farklı (veya `embedding_model` alanı
+`embedder.name`'den farklı) parçalar atlanır; hiç uyumlu parça yoksa `not_found` + `warning`.
 """
 
 from __future__ import annotations
@@ -61,9 +70,88 @@ QUERY_REWRITE_PROMPT = """Kullanıcının sorusunu, İngilizce SEC raporlarında
 anahtar kelime araması yapmak için kısa bir İngilizce arama sorgusuna çevir. Yalnızca sorguyu \
 yaz; açıklama, tırnak veya başka metin ekleme."""
 
-_CITATION = re.compile(r"\[(\s*\d+(?:\s*[,;]\s*\d+)*\s*)\]")
-_SOURCE_TAG = re.compile(r"<(/?)(sources?)\b", re.I)
+ADVICE_REFUSAL = (
+    "FinSight AI yatırım tavsiyesi vermez; aşağıda yalnızca raporlarda yer alan bilgiler "
+    "özetlenmiştir."
+)
+ADVICE_PROMPT_NOTE = (
+    "Not: Bu soru yatırım tavsiyesi (al/sat/tut önerisi, hedef fiyat veya yatırım yapılıp "
+    "yapılmayacağı) içeriyor. Tavsiye VERME ve tavsiye cümlesi yazma; yalnızca soruyla ilgili, "
+    "kaynaklarda yer alan olguları [n] atfıyla aktar."
+)
+EMBEDDING_MISMATCH_WARNING = (
+    "Parçalar farklı bir gömme modeliyle oluşturulmuş; analizi yeniden çalıştırın."
+)
+
+# Atıf biçimleri: [1], [1, 2], [1-2], [1–3], [Kaynak 1], [Source 2], [^1], 【1】.
+_CITATION = re.compile(
+    r"(?:\[|【)\s*\^?\s*(?:(?:kaynak|source|ref)\.?\s*)?"
+    r"(\d+(?:\s*(?:[,;\-–]|\band\b|\bve\b)\s*(?:(?:kaynak|source|ref)\.?\s*)?\d+)*)"
+    r"\s*(?:\]|】)",
+    re.I,
+)
+_VALID_CITATION = re.compile(r"\[\d+\]")
+_SOURCE_TAG = re.compile(r"<\s*(/?)\s*(sources?)\b", re.I)
 _NOT_FOUND_HINT = re.compile(r"bulunamad", re.I)
+MAX_CITATION_RANGE = 20
+
+# Soruda yatırım tavsiyesi niyeti (TR + EN). Şirketin kendi alım/satımı ("does the company
+# sell products") tavsiye sayılmaz; kişi zamiri, hisse/stock nesnesi veya kalıp ifade aranır.
+_ADVICE_QUESTION = re.compile(
+    "|".join([
+        r"(?:al|sat|tut)mal[ıi]\s*m[ıi]y[ıi](?:m|z)",
+        r"(?:al[ıi]n|sat[ıi]l|tutul)(?:[ıi]r|mal[ıi])\s*m[ıi]",
+        r"yat[ıi]r[ıi]m\s+yap(?:mal[ıi]|[ıi]l[ıi]r|ay[ıi]m|s[ıi]n|al[ıi]m|mak\s+mant[ıi]kl[ıi])",
+        r"hisse(?:si|sini|yi|leri|lerini)?\s+(?:(?:şimdi|simdi|bugün|bugun)\s+)?"
+        r"(?:al|sat|tut)(?:ay[ıi]m|al[ıi]m|s[ıi]n|mal[ıi]|mak)",
+        r"\b(?:al|sat|tut)ay[ıi]m\s+m[ıi]",
+        r"\bhedef\s+fiyat",
+        r"\bal\s*[/\-]?\s*sat\s+(?:öneri|oneri|tavsiye|sinyal)",
+        r"\b(?:al|sat|tut)\s+(?:önerisi|onerisi|tavsiyesi)",
+        r"yat[ıi]r[ıi]m\s+tavsiye",
+        r"\b(?:should|shall|would|could|do|must|can)\s+(?:i|we|you|one)\s+"
+        r"(?:still\s+|now\s+)?(?:buy|sell|hold|invest|short)\b",
+        r"\bis\s+(?:it|this|the\s+stock|this\s+stock|[a-z]+\s+stock)\s+(?:a\s+)?"
+        r"(?:good\s+|bad\s+|strong\s+)?(?:buy|sell|hold|investment)\b",
+        r"\b(?:buy|sell|hold)\s+(?:the|this|its|their|these)\s+(?:stock|shares?)\b",
+        r"\b(?:buy|sell|hold)\s+(?:rating|recommendation|signal)\b",
+        r"\bbuy\s*(?:,|/|or)\s*(?:sell|hold)\b",
+        r"\b(?:price\s+target|target\s+price)\b",
+        r"\bworth\s+(?:buying|investing|selling)\b",
+        r"\binvestment\s+advice\b",
+    ]),
+    re.I,
+)
+
+# LLM cevabında tavsiye kalıbı içeren cümleler (cevaptan çıkarılır).
+_ADVICE_SENTENCE = re.compile(
+    "|".join([
+        r"(?:satın\s+)?(?:al|sat|tut)man[ıi]z[ıi]\s+(?:öneri|tavsiye)",
+        r"(?:satın\s+)?(?:al|sat|tut)mal[ıi]s[ıi]n[ıi]z",
+        r"yat[ıi]r[ıi]m\s+yapman[ıi]z[ıi]\s+(?:öneri|tavsiye)",
+        r"yat[ıi]r[ıi]m\s+yapmal[ıi]s[ıi]n[ıi]z",
+        r"(?:iyi|kötü|kotu|cazip|mantıklı|mantikli|doğru|dogru)\s+bir\s+yat[ıi]r[ıi]m",
+        r"\b(?:al|sat|tut)\s+(?:öneri|tavsiye)(?:si|miz|m)",
+        r"\bi\s+(?:would\s+)?(?:recommend|suggest|advise)\s+(?:buying|selling|holding|"
+        r"investing|that\s+you\s+(?:buy|sell|hold|invest))",
+        r"\byou\s+(?:should|must|ought\s+to)\s+(?:buy|sell|hold|invest|short)\b",
+        r"\b(?:good|great|attractive|bad|solid)\s+investment\b",
+        r"\bstrong\s+(?:buy|sell)\b",
+        r"\b(?:buy|sell|hold)\s+(?:rating|recommendation)\b",
+        r"\bhedef\s+fiyat",
+        r"\b(?:price\s+target|target\s+price)\b",
+    ]),
+    re.I,
+)
+# Atıfsız cümlede sayı aranırken sayı sayılmayan belirteçler (form ve madde adları).
+_NON_NUMERIC_TOKENS = re.compile(r"\b(?:10-K|10-Q|8-K|10-KT)(?:/A)?\b|\bItem\s+\d+[A-C]?\b",
+                                 re.I)
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[\"“'(*•\-]?[A-ZÇĞİÖŞÜ0-9])")
+
+
+def is_advice_question(question: str) -> bool:
+    """Soru yatırım tavsiyesi (al/sat/tut, hedef fiyat, yatırım yapmalı mı) istiyor mu?"""
+    return bool(_ADVICE_QUESTION.search(question or ""))
 
 
 def _attr(value) -> str:
@@ -77,7 +165,8 @@ def _neutralize(text: str) -> str:
     return _SOURCE_TAG.sub(lambda m: "‹" + m.group(1) + m.group(2), text)
 
 
-def build_user_prompt(question: str, retrieved: list[tuple[dict, float]]) -> str:
+def build_user_prompt(question: str, retrieved: list[tuple[dict, float]],
+                      advice_intent: bool = False) -> str:
     blocks = []
     for n, (chunk, _sim) in enumerate(retrieved, start=1):
         section = chunk.get("section")
@@ -88,27 +177,80 @@ def build_user_prompt(question: str, retrieved: list[tuple[dict, float]]) -> str
             f'date="{_attr(chunk.get("filing_date"))}" section="{_attr(section_attr)}">\n'
             f"{_neutralize(str(chunk.get('text', '')))}\n</source>"
         )
+    note = f"\n\n{ADVICE_PROMPT_NOTE}" if advice_intent else ""
     return (
         "Kaynaklar:\n" + "\n\n".join(blocks)
-        + f"\n\nSoru: {question.strip()}\n\nCevabı yalnızca yukarıdaki kaynaklara dayanarak, "
-        "her iddiaya [n] atfı ekleyerek yaz."
+        + f"\n\nSoru: {question.strip()}{note}\n\nCevabı yalnızca yukarıdaki kaynaklara "
+        "dayanarak, her iddiaya [n] atfı ekleyerek yaz."
     )
 
 
+def _citation_numbers(group: str) -> list[int]:
+    nums: list[int] = []
+    for part in re.split(r"\s*(?:[,;]|\band\b|\bve\b)\s*", group, flags=re.I):
+        part = re.sub(r"(?:kaynak|source|ref)\.?", "", part, flags=re.I).strip()
+        rng = re.fullmatch(r"(\d+)\s*[-–]\s*(\d+)", part)
+        if rng:
+            a, b = int(rng.group(1)), int(rng.group(2))
+            if a <= b and b - a <= MAX_CITATION_RANGE:
+                nums.extend(range(a, b + 1))
+            else:
+                nums.extend([a, b])
+        elif part.isdigit():
+            nums.append(int(part))
+    return nums
+
+
 def clean_citations(answer: str, n_sources: int) -> tuple[str, set[int]]:
-    """Geçersiz `[n]` atıflarını siler; kalan geçerli numaraları döndürür."""
+    """Atıfları `[1][2]` biçimine normalize eder ([1-2], [1, 2], [Kaynak 1], 【1】, [^1]);
+    geçersiz numaraları siler; kalan geçerli numaraları döndürür."""
     used: set[int] = set()
 
     def repl(m: re.Match) -> str:
-        nums = [int(x) for x in re.split(r"[,;]", m.group(1)) if x.strip()]
-        valid = [n for n in nums if 1 <= n <= n_sources]
+        valid: list[int] = []
+        for n in _citation_numbers(m.group(1)):
+            if 1 <= n <= n_sources and n not in valid:
+                valid.append(n)
         used.update(valid)
-        return "[" + ", ".join(str(n) for n in valid) + "]" if valid else ""
+        out = "".join(f"[{n}]" for n in valid)
+        start = m.start()
+        if out and start > 0 and not answer[start - 1].isspace() and answer[start] == "【":
+            out = " " + out  # "var【1】" → "var [1]"
+        return out
 
     cleaned = _CITATION.sub(repl, answer)
     cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
     return cleaned, used
+
+
+def _sentence_allowed(sentence: str) -> bool:
+    if _ADVICE_SENTENCE.search(sentence):
+        return False
+    if not _VALID_CITATION.search(sentence):
+        bare = _NON_NUMERIC_TOKENS.sub(" ", sentence)
+        if re.search(r"\d", bare):
+            return False  # sayısal iddia kaynaksız olamaz
+    return True
+
+
+def filter_answer(answer: str) -> tuple[str, set[int]]:
+    """LLM cevabından tavsiye cümlelerini ve atıfsız sayısal cümleleri çıkarır.
+
+    `clean_citations` sonrasında çağrılır; kalan metni ve içindeki atıf numaralarını döndürür.
+    """
+    lines: list[str] = []
+    for line in answer.split("\n"):
+        if not line.strip():
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+        kept = [s for s in _SENTENCE_SPLIT.split(line.strip()) if _sentence_allowed(s)]
+        if kept:
+            lines.append(" ".join(kept))
+    text = "\n".join(lines).strip()
+    used = {int(x) for x in re.findall(r"\[(\d+)\]", text)}
+    return text, used
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -152,15 +294,32 @@ def extractive_answer(query_text: str, retrieved: list[tuple[dict, float]]) -> s
     )
 
 
-def _response(answer: str, found: bool, sources: list[dict], mode: str, model, t0: float) -> dict:
-    return {
+def _response(answer: str, found: bool, sources: list[dict], mode: str, model, t0: float,
+              advice: bool = False, warning: str | None = None) -> dict:
+    if advice:
+        answer = f"{ADVICE_REFUSAL}\n\n{answer}"
+    out = {
         "answer": answer,
         "found": found,
         "sources": sources,
         "mode": mode,
         "model": model,
         "latency_ms": int(round((time.perf_counter() - t0) * 1000)),
+        "advice_refused": advice,
     }
+    if warning:
+        out["warning"] = warning
+    return out
+
+
+def _compatible(chunk: dict, dim: int | None, model_name: str) -> bool:
+    model = chunk.get("embedding_model")
+    if model and model != model_name:
+        return False
+    emb = chunk.get("embedding")
+    if emb is None:
+        return False
+    return dim is None or int(np.asarray(emb).size) == int(dim)
 
 
 def _rewrite_query(question: str, llm: LLMClient) -> str | None:
@@ -182,6 +341,16 @@ def answer_question(question: str, chunks: Sequence[dict], embedder: Embedder,
     (`question` ve `disclaimer` hariç)."""
     t0 = time.perf_counter()
     threshold = embedder.default_min_similarity if min_similarity is None else min_similarity
+    advice = is_advice_question(question)
+
+    # O3: farklı gömme modeliyle/boyutuyla oluşturulmuş parçalar atlanır.
+    dim = getattr(embedder, "dim", None)
+    usable = [c for c in chunks if _compatible(c, dim, embedder.name)]
+    if chunks and not usable:
+        log.warning("Hiçbir parça %s gömücüsüyle uyumlu değil.", embedder.name)
+        return _response(NOT_FOUND_ANSWER, False, [], "not_found", embedder.name, t0,
+                         advice, EMBEDDING_MISMATCH_WARNING)
+    chunks = usable
 
     is_hashing = getattr(embedder, "name", "") == HASHING_NAME
     queries = [question]
@@ -193,7 +362,7 @@ def answer_question(question: str, chunks: Sequence[dict], embedder: Embedder,
 
     retrieved: list[tuple[dict, float]] = []
     if chunks:
-        matrix = np.vstack([np.asarray(c["embedding"], dtype=np.float32) for c in chunks])
+        matrix = np.vstack([np.asarray(c["embedding"], dtype=np.float32).ravel() for c in chunks])
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         matrix = matrix / norms
@@ -215,24 +384,26 @@ def answer_question(question: str, chunks: Sequence[dict], embedder: Embedder,
             retrieved.append((chunks[idx], sim))
 
     if not retrieved:
-        return _response(NOT_FOUND_ANSWER, False, [], "not_found", embedder.name, t0)
+        return _response(NOT_FOUND_ANSWER, False, [], "not_found", embedder.name, t0, advice)
 
     sources = [_source_entry(n, c, s) for n, (c, s) in enumerate(retrieved, start=1)]
 
     if llm is not None:
         try:
-            raw = llm.complete(SYSTEM_PROMPT, build_user_prompt(question, retrieved))
+            raw = llm.complete(SYSTEM_PROMPT, build_user_prompt(question, retrieved, advice))
+            if not isinstance(raw, str):
+                raise TypeError("LLM yanıtı metin değil")
         except Exception as exc:
             log.warning("LLM cevabı alınamadı (%s); çıkarımsal moda düşülüyor.",
                         type(exc).__name__)
         else:
-            answer, used = clean_citations(raw, len(sources))
+            cleaned, _ = clean_citations(raw, len(sources))
+            answer, used = filter_answer(cleaned)
             if used:
-                return _response(answer, True, sources, "llm", llm.model, t0)
+                return _response(answer, True, sources, "llm", llm.model, t0, advice)
             if _NOT_FOUND_HINT.search(raw or ""):
-                return _response(NOT_FOUND_ANSWER, False, [], "not_found", llm.model, t0)
+                return _response(NOT_FOUND_ANSWER, False, [], "not_found", llm.model, t0, advice)
             log.info("LLM cevabında geçerli atıf yok; çıkarımsal moda düşülüyor.")
 
     answer = extractive_answer(query_text, retrieved)
-    return _response(answer, True, sources, "extractive", embedder.name, t0)
-
+    return _response(answer, True, sources, "extractive", embedder.name, t0, advice)

@@ -210,3 +210,62 @@ def test_no_data():
     res = compute_ratios({})
     assert res["periods"] == []
     assert len(res["ratios"]) == 10 and all(r["values"] == [] for r in res["ratios"])
+
+
+# ---- O1 / D1 / D3: dönem seçimi, tarih toleransı, negatif önceki özkaynak ----
+
+from finsight.ratios import NOTE_PRIOR_EQUITY, select_periods  # noqa: E402
+
+
+def test_periods_use_union_when_revenue_tag_disappears():
+    # Gelir 2022'den sonra listede olmayan bir etikete geçti; net kâr ve varlıklar sürüyor.
+    facts = {
+        "revenue": [fact("revenue", date(y, 12, 31), 100) for y in (2021, 2022)],
+        "net_income": [fact("net_income", date(y, 12, 31), 10) for y in range(2021, 2025)],
+        "total_assets": [fact("total_assets", date(y, 12, 31), 1000) for y in range(2021, 2025)],
+    }
+    res = compute_ratios(facts)
+    assert res["periods"] == [date(2022, 12, 31), date(2023, 12, 31), date(2024, 12, 31)]
+    assert value_at(res, "net_margin", date(2024, 12, 31))["reason"] == "eksik veri: revenue"
+    assert value_at(res, "roa", date(2024, 12, 31))["value"] == pytest.approx(10 / 1000)
+
+
+def test_close_dates_are_one_period_and_match_with_tolerance():
+    # 52–53 haftalık yıl: gelir/net kâr 28 Aralık, bilanço 31 Aralık → tek dönem (en son tarih)
+    flow_end, bs_end = date(2024, 12, 28), date(2024, 12, 31)
+    facts = {"revenue": [fact("revenue", flow_end, 1000)],
+             "net_income": [fact("net_income", flow_end, 100)],
+             "total_assets": [fact("total_assets", bs_end, 2000),
+                              fact("total_assets", date(2023, 12, 30), 1800)],
+             "stockholders_equity": [fact("stockholders_equity", bs_end, 800)]}
+    assert select_periods(facts) == [date(2023, 12, 30), bs_end]
+    res = compute_ratios(facts, periods=1)
+    assert res["periods"] == [bs_end]
+    roa = value_at(res, "roa", bs_end)
+    assert roa["value"] == pytest.approx(100 / 1900) and roa["note"] is None
+    assert value_at(res, "net_margin", bs_end)["value"] == pytest.approx(0.1)
+
+
+def test_tolerance_is_limited_to_seven_days():
+    facts = {"revenue": [fact("revenue", date(2024, 12, 20), 1000)],
+             "total_assets": [fact("total_assets", date(2024, 12, 31), 2000)],
+             "net_income": [fact("net_income", date(2024, 12, 20), 100)]}
+    res = compute_ratios(facts, periods=1)  # 11 gün fark: aynı dönem ama ±7 gün dışı
+    assert res["periods"] == [date(2024, 12, 31)]
+    assert value_at(res, "roa", date(2024, 12, 31))["reason"] == "eksik veri: net_income"
+
+
+def test_periods_more_than_30_days_apart_stay_separate():
+    facts = {"revenue": [fact("revenue", date(2024, 12, 31), 1), fact("revenue", date(2025, 2, 1), 1)]}
+    assert select_periods(facts, 0) == [date(2024, 12, 31), date(2025, 2, 1)]
+
+
+def test_roe_uses_period_end_when_prior_equity_negative():
+    facts = facts_one_year(**BASE)
+    facts["stockholders_equity"].append(fact("stockholders_equity", PREV, -200))
+    roe = value_at(compute_ratios(facts), "roe", END)
+    assert roe["status"] == "ok"
+    assert roe["value"] == pytest.approx(100 / 800)  # ortalama (300) değil, dönem sonu
+    assert roe["note"] == NOTE_PRIOR_EQUITY
+    facts["stockholders_equity"][-1] = fact("stockholders_equity", PREV, 0)
+    assert value_at(compute_ratios(facts), "roe", END)["note"] == NOTE_PRIOR_EQUITY

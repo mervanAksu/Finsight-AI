@@ -220,3 +220,120 @@ def test_chunk_text_splits_oversized_paragraph():
     assert chunk_text("", 100, 10) == []
     with pytest.raises(ValueError):
         chunk_text("x", target_words=10, overlap_words=10)
+
+
+# --------------------------------------------------------------------------- başlık benzeri satır (Y1/D4)
+
+_FILL = " ".join(["Demand for our products may decline and our results could suffer materially."] * 30)
+_BUS = " ".join(["We design and sell industrial products to customers worldwide every year."] * 60)
+_MD = " ".join(["Revenue increased primarily due to higher volumes and favorable pricing."] * 30)
+_TOC = (
+    "<table><tr><td>Item 1.</td><td>Business</td><td>3</td></tr>"
+    "<tr><td>Item 1A.</td><td>Risk Factors</td><td>8</td></tr>"
+    "<tr><td>Item 1B.</td><td>Unresolved Staff Comments</td><td>15</td></tr>"
+    "<tr><td>Item 7.</td><td>Management’s Discussion and Analysis of Financial Condition and "
+    "Results of Operations</td><td>20</td></tr>"
+    "<tr><td>Item 7A.</td><td>Quantitative and Qualitative Disclosures About Market Risk</td>"
+    "<td>30</td></tr><tr><td>Item 8.</td><td>Financial Statements</td><td>31</td></tr></table>"
+)
+_MDNA_HEAD = (
+    "<p>Item 7. Management’s Discussion and Analysis of Financial Condition and Results of "
+    "Operations</p>"
+)
+
+
+def _doc(risk_extra="", mdna_extra="", bus_extra="", risk_head="<p>Item 1A. Risk Factors</p>",
+         mdna_head=_MDNA_HEAD, bus_head="<p>Item 1. Business</p>"):
+    return (
+        f"<html><body>{_TOC}<p>PART I</p>{bus_head}<p>{_BUS}</p>{bus_extra}"
+        f"{risk_head}<p>{_FILL}</p>{risk_extra}<p>Final risk sentence here for the end.</p>"
+        "<p>Item 1B. Unresolved Staff Comments</p><p>None.</p><p>Item 2. Properties</p>"
+        "<p>We lease offices in many places around the world today.</p>"
+        f"<p>PART II</p>{mdna_head}<p>{_MD}</p>{mdna_extra}<p>Final MD&amp;A sentence for the end.</p>"
+        "<p>ITEM 7A. QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK</p>"
+        "<p>Interest rate risk is limited.</p><p>Item 8. Financial Statements</p>"
+        "<p>See the statements.</p></body></html>"
+    )
+
+
+def _sections(html: str) -> dict:
+    return extract_sections(html_to_text(html), "10-K")
+
+
+def test_risk_section_not_cut_by_part_ii_cross_reference():
+    # Gözden geçirici senaryo 1: "Part II, Item 7 of this report ..." PART II başlığı değildir.
+    extra = ("<p>Part II, Item 7 of this report discusses how these risks have affected our "
+             f"results in recent periods.</p><p>{_FILL}</p>")
+    risk = _sections(_doc(risk_extra=extra))["1A"]["text"]
+    assert "Part II, Item 7 of this report" in risk
+    assert risk.endswith("Final risk sentence here for the end.")
+
+
+def test_mdna_not_cut_by_item_8_cross_reference():
+    # Senaryo 2: "Item 8 of this Form 10-K contains ..." bitiş başlığı değildir.
+    extra = ("<p>Item 8 of this Form 10-K contains the notes referenced in this discussion of "
+             f"liquidity.</p><p>{_MD}</p>")
+    mdna = _sections(_doc(mdna_extra=extra))["7"]["text"]
+    assert "Item 8 of this Form 10-K contains" in mdna
+    assert mdna.endswith("Final MD&A sentence for the end.")
+    assert "QUANTITATIVE" not in mdna
+
+
+def test_wrapped_cross_reference_in_item_1_is_not_risk_heading():
+    # Senaryo 3b: Item 1 başında <br> ile satır başına düşen "Item 1A. Risk Factors, of this ...".
+    xref = ("<p>For more information about the risks we face, see Part I,<br>Item 1A. Risk "
+            "Factors, of this Annual Report on Form 10-K.</p>")
+    sections = _sections(_doc(bus_head="<p>Item 1. Business</p>" + xref))
+    risk = sections["1A"]["text"]
+    assert risk.startswith("Demand for our products may decline")
+    assert "We design and sell industrial products" not in risk
+    assert "Annual Report on Form 10-K" not in risk
+
+
+def test_wrapped_item_2_cross_reference_does_not_end_risk_section():
+    # Senaryo 10: "Item 2. Properties, and damage to them ..." bitiş başlığı değildir.
+    extra = ("<p>Our facilities are described under<br>Item 2. Properties, and damage to them "
+             f"could disrupt operations.</p><p>{_FILL}</p>")
+    risk = _sections(_doc(risk_extra=extra))["1A"]["text"]
+    assert "and damage to them could disrupt operations." in risk
+    assert risk.endswith("Final risk sentence here for the end.")
+    assert len(risk.split()) > 700
+
+
+@pytest.mark.parametrize(
+    "risk_head",
+    ["<p>Item 1 A. Risk Factors</p>", "<p>ITEM 1 A — RISK FACTORS</p>",
+     "<table><tr><td>Item 1A</td><td>—</td><td>Risk Factors</td></tr></table>",
+     "<p>PART I — ITEM 1A. RISK FACTORS</p>"],
+)
+def test_risk_heading_spacing_variants(risk_head):
+    risk = _sections(_doc(risk_head=risk_head))["1A"]["text"]
+    assert risk.startswith("Demand for our products may decline")
+    assert risk.endswith("Final risk sentence here for the end.")
+
+
+@pytest.mark.parametrize("apos", ["’", "'", "´", "ʼ", "`"])
+def test_mdna_heading_apostrophe_variants(apos):
+    head = f"<p>Item 7. Management{apos}s Discussion and Analysis</p>"
+    mdna = _sections(_doc(mdna_head=head))["7"]["text"]
+    assert mdna.startswith("Revenue increased primarily")
+    assert mdna.endswith("Final MD&A sentence for the end.")
+
+
+def test_body_sentence_on_heading_line_is_kept_in_section():
+    head = "<p><b>Item 1A. Risk Factors</b> Investing in our stock involves a high degree of risk.</p>"
+    risk = _sections(_doc(risk_head=head))["1A"]["text"]
+    assert risk.startswith("Investing in our stock involves a high degree of risk.")
+    head7 = ("<p>Item 7. Management’s Discussion and Analysis of Financial Condition and Results "
+             "of Operations The following discussion should be read with our statements.</p>")
+    mdna = _sections(_doc(mdna_head=head7))["7"]["text"]
+    assert mdna.startswith("The following discussion should be read with our statements.")
+
+
+def test_split_title_heading_and_toc_rows_are_skipped():
+    head = ("<div>Item 7.</div><div>Management’s Discussion and Analysis of Financial Condition "
+            "and Results of Operations</div>")
+    sections = _sections(_doc(mdna_head=head))
+    assert sections["7"]["text"].startswith("Revenue increased primarily")
+    # içindekiler satırı (Item 1A → Item 1B arası 0 kelime) seçilmez
+    assert sections["1A"]["char_start"] > html_to_text(_doc()).index("PART I")

@@ -2,11 +2,14 @@
 
 Yöntem:
 1. Her iki metin `split_paragraphs` ile paragraflara bölünür.
-2. Paragraflar numpy ile hesaplanan TF-IDF vektörlerine çevrilir: küçük harf, noktalama
+2. Paragraflar seyrek (sözlük tabanlı) TF-IDF vektörlerine çevrilir: küçük harf, noktalama
    temizliği, İngilizce durak kelime listesi; özellikler kelime + ardışık kelime ikilisi
    (2-gram); alt doğrusal tf (1 + log tf), düzgünleştirilmiş idf, L2 normalizasyon.
-3. Kosinüs benzerlik matrisi üzerinde açgözlü (greedy) eşleştirme: en yüksek benzerlikli
-   çiftten başlanır, her paragraf en fazla bir kez eşleşir.
+   Yoğun (n × |V|) matris kurulmaz: 400 + 400 paragrafta yoğun float32 matris ~290 MB
+   tutuyordu; seyrek temsil yalnızca sıfır olmayan ağırlıkları saklar (birkaç MB).
+3. Benzerlikler ters indeksle (terim → paragraflar) seyrek nokta çarpımıyla hesaplanır;
+   yalnızca `MODIFIED_THRESHOLD` üstü çiftler tutulur. Açgözlü (greedy) eşleştirme: en yüksek
+   benzerlikli çiftten başlanır, her paragraf en fazla bir kez eşleşir.
 
 Eşikler ve gerekçeleri:
 - `UNCHANGED_THRESHOLD = 0.90`: Aynı paragraf 1.0 verir. Yıl, tutar veya tek kelime
@@ -60,8 +63,8 @@ def _features(text: str) -> Counter:
     return feats
 
 
-def tfidf_matrix(texts: list[str]) -> np.ndarray:
-    """Satırları L2 normalize TF-IDF vektörleri olan (n, |V|) float32 matris."""
+def tfidf_vectors(texts: list[str]) -> list[dict[int, float]]:
+    """Her metin için L2 normalize seyrek TF-IDF vektörü: {terim_indeksi: ağırlık}."""
     feats = [_features(t) for t in texts]
     vocab: dict[str, int] = {}
     df: Counter = Counter()
@@ -71,19 +74,52 @@ def tfidf_matrix(texts: list[str]) -> np.ndarray:
                 vocab[term] = len(vocab)
         df.update(f.keys())
     n = len(texts)
-    mat = np.zeros((n, max(len(vocab), 1)), dtype=np.float32)
-    if not vocab:
-        return mat
-    idf = np.zeros(len(vocab), dtype=np.float32)
-    for term, j in vocab.items():
-        idf[j] = math.log((1 + n) / (1 + df[term])) + 1.0
-    for i, f in enumerate(feats):
-        for term, c in f.items():
-            j = vocab[term]
-            mat[i, j] = (1.0 + math.log(c)) * idf[j]
-    norms = np.linalg.norm(mat, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    return mat / norms
+    idf = {term: math.log((1 + n) / (1 + df[term])) + 1.0 for term in vocab}
+    vectors: list[dict[int, float]] = []
+    for k in range(n):
+        f, feats[k] = feats[k], Counter()  # tepe belleği düşürmek için işlenen sayaç bırakılır
+        vec = {vocab[term]: (1.0 + math.log(c)) * idf[term] for term, c in f.items()}
+        norm = math.sqrt(sum(w * w for w in vec.values()))
+        if norm > 0:
+            vec = {j: w / norm for j, w in vec.items()}
+        vectors.append(vec)
+    return vectors
+
+
+def tfidf_matrix(texts: list[str]) -> np.ndarray:
+    """Satırları L2 normalize TF-IDF vektörleri olan (n, |V|) float32 matris.
+
+    Yalnızca küçük girdiler (testler, inceleme) içindir; karşılaştırma seyrek vektörleri
+    (`tfidf_vectors`) kullanır.
+    """
+    vectors = tfidf_vectors(texts)
+    width = max((max(v) + 1 for v in vectors if v), default=1)
+    mat = np.zeros((len(texts), width), dtype=np.float32)
+    for i, vec in enumerate(vectors):
+        for j, w in vec.items():
+            mat[i, j] = w
+    return mat
+
+
+def sparse_similarities(left: list[dict[int, float]], right: list[dict[int, float]],
+                        min_similarity: float) -> dict[tuple[int, int], float]:
+    """Seyrek kosinüs benzerlikleri (vektörler L2 normalize): yalnızca ≥ `min_similarity`
+    çiftler, [0, 1] aralığına kırpılmış olarak döner."""
+    index: dict[int, list[tuple[int, float]]] = {}
+    for i, vec in enumerate(left):
+        for term, w in vec.items():
+            index.setdefault(term, []).append((i, w))
+    out: dict[tuple[int, int], float] = {}
+    for j, vec in enumerate(right):
+        acc: dict[int, float] = {}
+        for term, w in vec.items():
+            for i, wi in index.get(term, ()):
+                acc[i] = acc.get(i, 0.0) + w * wi
+        for i, dot in acc.items():
+            sim = min(1.0, max(0.0, dot))
+            if sim >= min_similarity:
+                out[(i, j)] = sim
+    return out
 
 
 def _normalized(text: str) -> str:
@@ -104,17 +140,16 @@ def compare_risk_sections(old_text: str, new_text: str) -> dict:
 
     pairs: list[tuple[float, int, int]] = []
     if n_old and n_new:
-        mat = tfidf_matrix(old_paras + new_paras)
-        sims = np.clip(mat[:n_old] @ mat[n_old:].T, 0.0, 1.0)
+        vectors = tfidf_vectors(old_paras + new_paras)
+        sims = sparse_similarities(vectors[:n_old], vectors[n_old:], MODIFIED_THRESHOLD)
         # Metni özdeş paragraflar (yalnızca durak kelimelerden oluşanlar dahil) 1.0 sayılır.
         new_index: dict[str, list[int]] = {}
         for j, p in enumerate(new_paras):
             new_index.setdefault(_normalized(p), []).append(j)
         for i, p in enumerate(old_paras):
             for j in new_index.get(_normalized(p), []):
-                sims[i, j] = 1.0
-        for i, j in np.argwhere(sims >= MODIFIED_THRESHOLD):
-            pairs.append((float(sims[i, j]), int(i), int(j)))
+                sims[(i, j)] = 1.0
+        pairs = [(sim, i, j) for (i, j), sim in sims.items()]
     # Açgözlü eşleştirme: yüksek benzerlik önce; eşitlikte belge sırası korunur.
     pairs.sort(key=lambda p: (-p[0], p[1], p[2]))
     used_old: set[int] = set()
