@@ -5,7 +5,7 @@ import type { ChangeEvent, KeyboardEvent } from "react";
 import { LuLoaderCircle, LuSearch, LuX } from "react-icons/lu";
 import { api } from "../api";
 import { useI18n } from "../i18n";
-import type { SearchResult } from "../types";
+import type { SearchReason, SearchResult } from "../types";
 import { cx } from "./ui";
 
 interface CompanySearchProps {
@@ -33,6 +33,7 @@ export function CompanySearch({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [localReason, setLocalReason] = useState<SearchReason | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -52,10 +53,11 @@ export function CompanySearch({
     const controller = new AbortController();
     setPhase("loading");
     const timer = window.setTimeout(() => {
-      api.search(q, 8, controller.signal).then(
-        (res) => {
+      api.searchWithScope(q, 8, controller.signal).then(
+        (page) => {
           const skip = new Set(excludeKey ? excludeKey.split(",") : []);
-          setResults(res.filter((r) => !skip.has(r.ticker)));
+          setResults(page.results.filter((r) => !skip.has(r.ticker)));
+          setLocalReason(page.scope === "local" ? page.reason : null);
           setPhase("done");
           setActiveIndex(-1);
         },
@@ -178,6 +180,12 @@ export function CompanySearch({
           {phase === "done" && results.length === 0 && <p className="search-msg">{t("search.noResults")}</p>}
           {phase === "loading" && results.length === 0 && <p className="search-msg">{t("search.searching")}</p>}
           {phase === "error" && <p className="search-msg is-error">{t("search.error")}</p>}
+          {phase === "done" && localReason && (
+            <p className="search-msg is-warn" role="status">
+              <strong>{t("search.localOnly")}</strong>{" "}
+              {localReason === "sec_user_agent_missing" ? t("search.reasonUserAgent") : t("search.reasonUnavailable")}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -42,6 +42,8 @@ RATIO_PERIODS = 3
 TICKER_MAP_TTL = 6 * 3600       # başarılı company_tickers listesi süreç içinde 6 saat tutulur
 TICKER_MAP_RETRY = 300          # başarısız denemeden sonra 5 dk yalnızca yerel arama
 DISCLAIMER_HEADER = "X-FinSight-Disclaimer"  # CSV'de uyarı metni (URL kodlu, ASCII)
+SEARCH_SCOPE_HEADER = "X-FinSight-Search-Scope"    # FR-01: "sec" veya "local"
+SEARCH_REASON_HEADER = "X-FinSight-Search-Reason"  # scope=local ise neden kodu
 
 # O1: "çalışan iş var mı?" kontrolü ile iş oluşturma arasında başka istek araya girmesin
 # (aynı şirket için iki iş açılmasın). Tek süreç içindir; çok süreçli dağıtımda Aşama 4.
@@ -97,6 +99,7 @@ class _TickerMapCache:
         self._map: dict[str, dict] | None = None
         self._fetched_at = 0.0
         self._failed_at: float | None = None
+        self.failure_reason: str | None = None  # "sec_user_agent_missing" | "sec_unavailable"
 
     def get(self) -> dict[str, dict] | None:
         now = time.monotonic()
@@ -109,10 +112,17 @@ class _TickerMapCache:
                 self._map = build_ticker_map(self._factory().company_tickers())
                 self._fetched_at = now
                 self._failed_at = None
-            except Exception as exc:  # User-Agent yok, ağ yok, SEC hatası → yerel arama
+                self.failure_reason = None
+            except ConfigError as exc:  # SEC_USER_AGENT yok: mesaj gizli bilgi içermez
+                log.warning("SEC şirket listesi alınamadı: %s Arama yalnızca analiz edilmiş "
+                            "şirketlerde yapılacak.", exc)
+                self._failed_at = now
+                self.failure_reason = "sec_user_agent_missing"
+            except Exception as exc:  # ağ yok, SEC hatası → yerel arama
                 log.warning("company_tickers alınamadı (%s); yalnızca yerel arama.",
                             type(exc).__name__)
                 self._failed_at = now
+                self.failure_reason = "sec_unavailable"
             return self._map
 
     def peek(self) -> dict[str, dict] | None:
@@ -135,9 +145,18 @@ def same_cik_tickers(ticker_map: dict[str, dict] | None, ticker: str) -> list[st
 router = APIRouter(prefix="/api")
 
 
+def sec_user_agent_configured() -> bool:
+    try:
+        get_user_agent()
+    except ConfigError:
+        return False
+    return True
+
+
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok", "version": __version__, "models": jobs.model_status()}
+    return {"status": "ok", "version": __version__, "models": jobs.model_status(),
+            "sec": {"user_agent_configured": sec_user_agent_configured()}}
 
 
 @router.get("/companies")
@@ -147,12 +166,23 @@ def list_companies(session: Session = Depends(get_session)) -> list[dict]:
 
 
 @router.get("/companies/search")
-def search(request: Request, q: str = Query(..., min_length=1, max_length=100),
+def search(request: Request, response: Response,
+           q: str = Query(..., min_length=1, max_length=100),
            limit: int = Query(10, ge=1, le=50),
            session: Session = Depends(get_session)) -> list[dict]:
-    """FR-01: SEC ticker listesinde arama; liste alınamazsa yalnızca işlenmiş şirketler."""
+    """FR-01: SEC ticker listesinde arama; liste alınamazsa yalnızca işlenmiş şirketler.
+
+    Hangi kapsamda arandığı yanıt başlığında bildirilir (sessiz düşüş olmasın): arayüz
+    "yalnızca analiz edilmiş şirketler" uyarısını ve nedenini gösterir.
+    """
     ingested = repo.all_tickers(session)
-    ticker_map = request.app.state.ticker_maps.get()
+    maps = request.app.state.ticker_maps
+    ticker_map = maps.get()
+    if ticker_map:
+        response.headers[SEARCH_SCOPE_HEADER] = "sec"
+    else:
+        response.headers[SEARCH_SCOPE_HEADER] = "local"
+        response.headers[SEARCH_REASON_HEADER] = maps.failure_reason or "sec_unavailable"
     results = search_companies(ticker_map, q, limit) if ticker_map else []
     if len(results) < limit:
         seen = {r["ticker"] for r in results}
@@ -365,10 +395,15 @@ def create_app(*, database_url: str | None = None,
     app.state.client_factory = client_factory or jobs.make_sec_client
     app.state.check_sec_config = client_factory is None
     app.state.ticker_maps = _TickerMapCache(app.state.client_factory)
+    if client_factory is None and not sec_user_agent_configured():
+        log.warning("SEC_USER_AGENT tanımlı değil: arama yalnızca analiz edilmiş şirketlerde "
+                    "çalışır, yeni şirket çekilemez. Depo kökündeki .env.example dosyasını .env "
+                    "olarak kopyalayıp SEC_USER_AGENT satırını doldurun.")
 
     app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(),
                        allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
-                       expose_headers=[DISCLAIMER_HEADER, "Content-Disposition"])
+                       expose_headers=[DISCLAIMER_HEADER, SEARCH_SCOPE_HEADER,
+                                       SEARCH_REASON_HEADER, "Content-Disposition"])
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled_error)
     app.include_router(router)

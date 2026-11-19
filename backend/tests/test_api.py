@@ -358,6 +358,41 @@ def test_search_falls_back_to_local_companies(factory):
     assert res.status_code == 200
     assert res.json() == [{"ticker": "EXMP", "cik": "0000000001", "name": "EXMP Example Corp",
                            "ingested": True}]
+    assert res.headers[api.SEARCH_SCOPE_HEADER] == "local"
+    assert res.headers[api.SEARCH_REASON_HEADER] == "sec_unavailable"
+
+
+def test_search_scope_header_sec_when_list_available(client, factory):
+    seed_example(factory)
+    res = client.get("/api/companies/search", params={"q": "apple"})
+    assert res.headers[api.SEARCH_SCOPE_HEADER] == "sec"
+    assert api.SEARCH_REASON_HEADER not in res.headers
+
+
+def test_search_reports_missing_user_agent(factory, monkeypatch):
+    """FR-01, NFR-01: SEC_USER_AGENT yoksa arama sessizce daralmaz; neden başlıkta ve
+    /health'te görünür (arayüz kullanıcıya .env'i doldurmasını söyler)."""
+    from finsight.config import ConfigError
+
+    seed_example(factory)
+    monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+
+    def no_user_agent():
+        raise ConfigError("SEC_USER_AGENT tanımlı değil veya e-posta içermiyor.")
+
+    app = api.create_app(session_factory=factory, client_factory=no_user_agent,
+                         serve_frontend=False)
+    with TestClient(app) as c:
+        res = c.get("/api/companies/search", params={"q": "exmp"})
+        health = c.get("/api/health").json()
+        pre = c.get("/api/companies/search", params={"q": "exmp"},
+                    headers={"Origin": "http://localhost:5173"})
+    assert res.status_code == 200 and res.json()[0]["ticker"] == "EXMP"
+    assert res.headers[api.SEARCH_SCOPE_HEADER] == "local"
+    assert res.headers[api.SEARCH_REASON_HEADER] == "sec_user_agent_missing"
+    assert health["sec"] == {"user_agent_configured": False}
+    exposed = pre.headers.get("access-control-expose-headers", "")
+    assert api.SEARCH_SCOPE_HEADER in exposed and api.SEARCH_REASON_HEADER in exposed
 
 
 def test_root_info_frontend_and_cors(factory, tmp_path):

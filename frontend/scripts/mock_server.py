@@ -170,6 +170,8 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(DIST_DIR), **kwargs)
 
     # ------------------------------------------------------------ yardımcılar
+    search_reason: str | None = None
+
     def log_message(self, fmt: str, *args) -> None:  # sessiz
         return
 
@@ -178,9 +180,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-    def _json(self, payload, status: int = 200) -> None:
+    def _json(self, payload, status: int = 200, headers: dict[str, str] | None = None) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -264,7 +268,8 @@ class Handler(SimpleHTTPRequestHandler):
         q = {k: v[0] for k, v in query.items() if v}
 
         if parts == ["api", "health"]:
-            self._json(META["health"])
+            sec = {"user_agent_configured": Handler.search_reason != "sec_user_agent_missing"}
+            self._json({**META["health"], "sec": sec})
             return
         if parts == ["api", "companies"]:
             out = []
@@ -285,13 +290,19 @@ class Handler(SimpleHTTPRequestHandler):
             needle = (q.get("q") or "").strip().lower()
             limit = max(1, min(50, int(q.get("limit") or 10)))
             res = []
+            local = Handler.search_reason is not None  # --search-local: SEC listesi yok
             for c in search_index():
+                if local and state_of(c["ticker"]) == "none":
+                    continue
                 hay = f"{c['ticker']} {c['name']} {c['cik']} {c['cik'].lstrip('0')}".lower()
                 if not needle or needle in hay:
                     res.append({"ticker": c["ticker"], "cik": c["cik"], "name": c["name"],
                                 "ingested": state_of(c["ticker"]) != "none"})
             res.sort(key=lambda r: (not r["ticker"].lower().startswith(needle), r["ticker"]))
-            self._json(res[:limit])
+            scope = {"X-FinSight-Search-Scope": "local" if local else "sec"}
+            if local:
+                scope["X-FinSight-Search-Reason"] = Handler.search_reason
+            self._json(res[:limit], headers=scope)
             return
         if len(parts) == 3 and parts[:2] == ["api", "jobs"]:
             try:
@@ -504,7 +515,10 @@ def main() -> None:
     ap.add_argument("--latency", type=int, default=250, help="yapay gecikme (ms)")
     ap.add_argument("--empty", action="store_true",
                     help="hiç işlenmiş şirket olmadan başla (boş ana sayfa durumu)")
+    ap.add_argument("--search-local", choices=["sec_user_agent_missing", "sec_unavailable"],
+                    help="SEC şirket listesi alınamamış gibi davran (yalnızca yerel arama)")
     args = ap.parse_args()
+    Handler.search_reason = args.search_local
     if args.empty:
         with STATE_LOCK:
             for tk in STATE:

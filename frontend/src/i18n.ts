@@ -66,6 +66,10 @@ const tr = {
   "search.error": "Arama yapılamadı",
   "search.clear": "Aramayı temizle",
   "search.results": "Arama sonuçları",
+  "search.localOnly": "Yalnızca analiz edilmiş şirketler gösteriliyor.",
+  "search.reasonUserAgent":
+    "SEC şirket listesi alınamadı çünkü SEC_USER_AGENT tanımlı değil. Depo kökündeki .env.example dosyasını .env olarak kopyalayın, SEC_USER_AGENT satırını doldurun ve sunucuyu yeniden başlatın.",
+  "search.reasonUnavailable": "SEC şirket listesine şu an ulaşılamıyor (internet bağlantısını kontrol edin); birkaç dakika sonra yeniden denenir.",
 
   "ingest.start": "Analiz et",
   "ingest.queued": "Sırada",
@@ -326,6 +330,10 @@ const en: Record<MsgKey, string> = {
   "search.error": "Search failed",
   "search.clear": "Clear search",
   "search.results": "Search results",
+  "search.localOnly": "Showing analyzed companies only.",
+  "search.reasonUserAgent":
+    "The SEC company list could not be loaded because SEC_USER_AGENT is not set. Copy .env.example in the repository root to .env, fill in SEC_USER_AGENT and restart the server.",
+  "search.reasonUnavailable": "The SEC company list is unreachable right now (check your internet connection); it is retried in a few minutes.",
 
   "ingest.start": "Analyze",
   "ingest.queued": "Queued",

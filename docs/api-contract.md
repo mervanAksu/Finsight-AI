@@ -72,6 +72,9 @@ Ortak nesneler:
  "models": {"sentiment": "ProsusAI/finbert", "embedding": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
             "llm": {"provider": "anthropic", "model": "claude-haiku-5-5", "enabled": true}}}
 ```
+v1.3: yanıtta `"sec": {"user_agent_configured": true}` alanı da bulunur. `false` ise
+`SEC_USER_AGENT` tanımlı değildir; arama yalnızca işlenmiş şirketlerde çalışır ve yeni şirket
+çekilemez.
 Yedek modeller kullanılıyorsa adlar `"lexicon-fallback"`, `"hashing-fallback"`; LLM yoksa `{"provider": "none", "model": null, "enabled": false}`.
 FinBERT doğruluğu etkileyebilecek bir ayarla çalışıyorsa duygu modeli adına ek gelir: `"ProsusAI/finbert+int8"` (int8 kuantizasyon), `"ProsusAI/finbert+len256"` (max_length 256). Varsayılan ayarlarda ad `"ProsusAI/finbert"`dir. Bu, `/sentiment` ve `sentiment_summary` içindeki `model` alanı için de geçerlidir.
 
@@ -90,6 +93,15 @@ SEC ticker listesinde (önbellekteki `company_tickers.json`) ticker, ad veya CIK
 [{"ticker": "MSFT", "cik": "0000789019", "name": "MICROSOFT CORP", "ingested": true}]
 ```
 Liste henüz indirilmemişse ve SEC'e erişilemiyorsa yalnızca işlenmiş şirketlerde arar.
+
+v1.3: aramanın kapsamı yanıt başlıklarında bildirilir (gövde değişmez, CORS ile açıktır):
+
+| Başlık | Değer |
+| --- | --- |
+| `X-FinSight-Search-Scope` | `sec` (SEC ticker listesi + işlenmiş şirketler) veya `local` (yalnızca işlenmiş şirketler) |
+| `X-FinSight-Search-Reason` | Yalnızca `local` iken: `sec_user_agent_missing` (`SEC_USER_AGENT` tanımlı değil) veya `sec_unavailable` (ağ / SEC hatası; 5 dk sonra yeniden denenir) |
+
+Arayüz `local` kapsamında sonuç listesinin altında nedenini gösterir; sessiz düşüş olmaz.
 
 ## POST /api/companies/{ticker}/ingest
 Gövde: `{"analyze": true}` (varsayılan true). Arka planda veri çekme + analiz başlatır (FR-15).

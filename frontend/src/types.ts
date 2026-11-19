@@ -46,6 +46,8 @@ export interface Health {
   status: string;
   version: string;
   models: { sentiment: string; embedding: string; llm: LlmInfo };
+  /** v1.3: SEC erişim ayarı (eski sunucularda yok) */
+  sec?: { user_agent_configured: boolean };
 }
 
 // GET /api/companies
@@ -69,6 +71,14 @@ export interface SearchResult {
   cik: string;
   name: string;
   ingested: boolean;
+}
+/** v1.3: yanıt başlıklarından okunur (X-FinSight-Search-Scope / -Reason) */
+export type SearchScope = "sec" | "local";
+export type SearchReason = "sec_user_agent_missing" | "sec_unavailable";
+export interface SearchPage {
+  results: SearchResult[];
+  scope: SearchScope | null;
+  reason: SearchReason | null;
 }
 
 // POST /api/companies/{ticker}/ingest

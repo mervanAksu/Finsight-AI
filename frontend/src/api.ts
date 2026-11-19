@@ -12,6 +12,8 @@ import type {
   RatiosResponse,
   RiskChangesResponse,
   ScoreResponse,
+  SearchPage,
+  SearchReason,
   SearchResult,
   SentimentResponse,
 } from "./types";
@@ -52,6 +54,10 @@ export function apiUrl(path: string): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestWithHeaders<T>(path, init)).body;
+}
+
+async function requestWithHeaders<T>(path: string, init?: RequestInit): Promise<{ body: T; headers: Headers }> {
   let res: Response;
   try {
     res = await fetch(apiUrl(path), {
@@ -72,8 +78,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, detail);
   }
-  return (await res.json()) as T;
+  return { body: (await res.json()) as T, headers: res.headers };
 }
+
+const SEARCH_REASONS: readonly SearchReason[] = ["sec_user_agent_missing", "sec_unavailable"];
 
 const enc = encodeURIComponent;
 
@@ -84,6 +92,19 @@ export const api = {
 
   search: (q: string, limit = 10, signal?: AbortSignal) =>
     request<SearchResult[]>(`/api/companies/search?q=${enc(q)}&limit=${limit}`, { signal }),
+
+  /** Arama + kapsam: sonuçlar SEC listesinden mi, yalnızca yerel veritabanından mı (FR-01). */
+  searchWithScope: async (q: string, limit = 10, signal?: AbortSignal): Promise<SearchPage> => {
+    const { body, headers } = await requestWithHeaders<SearchResult[]>(
+      `/api/companies/search?q=${enc(q)}&limit=${limit}`,
+      { signal },
+    );
+    const scopeRaw = headers.get("X-FinSight-Search-Scope");
+    const scope = scopeRaw === "sec" || scopeRaw === "local" ? scopeRaw : null;
+    const reasonRaw = headers.get("X-FinSight-Search-Reason");
+    const reason = SEARCH_REASONS.find((r) => r === reasonRaw) ?? (scope === "local" ? "sec_unavailable" : null);
+    return { results: body, scope, reason };
+  },
 
   ingest: (ticker: string, analyze = true) =>
     request<IngestResponse>(`/api/companies/${enc(ticker)}/ingest`, {

@@ -1036,6 +1036,13 @@ button:disabled {
 .search-msg.is-error {
   color: var(--negative);
 }
+.search-msg.is-warn {
+  margin: 0;
+  border-top: 1px solid var(--border);
+  background: var(--warning-soft);
+  color: var(--text);
+  line-height: 1.45;
+}
 
 /* ------------------------------------------------------------------ Ana sayfa */
 .hero {
