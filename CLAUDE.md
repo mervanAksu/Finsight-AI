@@ -9,6 +9,7 @@ bu uyarıyı taşır.
 Tasarımın tamamı: `docs/raporlar/00-Asama1-Analiz-ve-Tasarim-Planlama.md`
 (FR-01…FR-16, NFR-01…NFR-12, tablolar, oranlar, skor ağırlıkları).
 API sözleşmesi (backend ile frontend arasındaki tek doğruluk kaynağı): `docs/api-contract.md`.
+Aşama 4 (güncel/TTM veri, tazelik, önbellek politikası): `docs/asama4-sozlesme.md`.
 
 ## Çalışma modeli: orkestra şefi + alt ajanlar
 
@@ -35,6 +36,9 @@ Ana oturum **orkestra şefidir**. Ağır işi kendisi yapmaz; işi böler, alt a
 | `test-engineer` | Test yazma, sahte veri (fixture), uçtan uca doğrulama |
 | `code-reviewer` | Salt okunur bağımsız inceleme; bulgu raporu üretir, kod değiştirmez |
 | `researcher` | SEC belgeleri ve akademik kaynaklardan bilgi doğrulama, künye kontrolü |
+| `security-auditor` | Salt okunur güvenlik denetimi: tehdit modeli, OWASP/CWE bulguları (`docs/guvenlik/`) |
+| `red-team` | Saldırı simülasyonu: bulguları çalıştırılabilir saldırı testlerine dönüştürür |
+| `security-engineer` | Savunma: bulguları kapatır, her düzeltmeyi saldırı testiyle kanıtlar |
 
 Beceriler (`.claude/skills/`): `sec-edgar`, `financial-analysis`, `verify-changes`,
 `ui-design-system`, `academic-report`. İlgili iş başlamadan önce SKILL.md okunur.
