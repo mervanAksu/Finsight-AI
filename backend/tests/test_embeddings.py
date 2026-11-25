@@ -54,8 +54,11 @@ def test_hashing_is_deterministic_and_uses_hashlib(monkeypatch):
     text = "Disruption in the supply of semiconductors could delay shipments."
     first = HashingEmbedder().embed([text])
     # Python hash() kullanılmadığını doğrula: builtins.hash bozulsa bile sonuç aynı.
-    monkeypatch.setattr(builtins, "hash", lambda *_: (_ for _ in ()).throw(AssertionError))
-    second = HashingEmbedder().embed([text])
+    # Yama yalnızca bu çağrı süresince etkin: pytest ≥ 9.2'nin rapor nesneleri hash() kullanır;
+    # yama test sonuna kadar kalırsa pytest'in kendisi INTERNALERROR verir.
+    with monkeypatch.context() as m:
+        m.setattr(builtins, "hash", lambda *_: (_ for _ in ()).throw(AssertionError))
+        second = HashingEmbedder().embed([text])
     assert np.array_equal(first, second)
     emb = HashingEmbedder(dim=64)
     digest = int.from_bytes(hashlib.blake2b(b"supply", digest_size=8).digest(), "little")
