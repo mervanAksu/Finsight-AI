@@ -83,6 +83,18 @@ def test_html_to_text_lxml_fast_path_matches_bs4(index):
         text_extract.html_to_text(html, backend="bs4")
 
 
+def test_lxml_parse_error_falls_back_to_bs4(monkeypatch):
+    """Windows'taki libxml2 boş belgede ``XMLSyntaxError`` verebilir; bs4 yoluna düşülür."""
+    from lxml import etree
+
+    def boom(_html):
+        raise etree.XMLSyntaxError("bos belge", None, 0, 0)
+
+    monkeypatch.setattr(text_extract, "_walk_lxml", boom)
+    assert text_extract.html_to_text("<p>metin</p>", backend="lxml") == "metin"
+    assert text_extract.html_to_text("", backend="lxml") == ""
+
+
 def test_html_to_text_default_backend_is_lxml_and_drops_hidden_blocks():
     html = (NLP / "kestrel_10k.html").read_bytes()
     text = text_extract.html_to_text(html)

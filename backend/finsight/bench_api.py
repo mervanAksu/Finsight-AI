@@ -376,29 +376,36 @@ def run_load(base_url: str, actions: Sequence[Action], *, users: int, duration: 
     süresi, son eylemin bitişine kadardır (RPS bu süreye bölünür)."""
     recorder = Recorder()
     stop = threading.Event()
+    # İstemciler ölçüm penceresinden ÖNCE kurulur: Windows'ta httpx.Client'ın SSL bağlamını
+    # yüklemesi yüzlerce ms sürebilir; pencere içinde kalırsa kısa ölçümlerde hiç istek atılmaz.
+    clients = [make_client(base_url, timeout) for _ in range(users)]
     start = clock()
     deadline = start + duration
 
     def user(uid: int) -> None:
         rng = random.Random(seed * 1000 + uid)
-        with make_client(base_url, timeout) as client:
-            while not stop.is_set() and clock() < deadline:
-                run_action(client, pick_action(actions, rng), rng, recorder)
-                if think_ms > 0:
-                    stop.wait(think_ms / 1000 * rng.uniform(0.5, 1.5))
+        client = clients[uid]
+        while not stop.is_set() and clock() < deadline:
+            run_action(client, pick_action(actions, rng), rng, recorder)
+            if think_ms > 0:
+                stop.wait(think_ms / 1000 * rng.uniform(0.5, 1.5))
 
     threads = [threading.Thread(target=user, args=(i,), daemon=True, name=f"user-{i}")
                for i in range(users)]
-    for th in threads:
-        th.start()
     try:
         for th in threads:
-            th.join()
-    except KeyboardInterrupt:
-        stop.set()
-        for th in threads:
-            th.join(timeout)
-    return recorder.records, clock() - start
+            th.start()
+        try:
+            for th in threads:
+                th.join()
+        except KeyboardInterrupt:
+            stop.set()
+            for th in threads:
+                th.join(timeout)
+        return recorder.records, clock() - start
+    finally:
+        for c in clients:
+            c.close()
 
 
 def preflight(base_url: str, ticker: str, timeout: float) -> dict:

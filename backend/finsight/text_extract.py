@@ -256,9 +256,13 @@ def html_to_text(html: str | bytes, backend: str | None = None) -> str:
     if backend is None:
         backend = "lxml" if _parser_name() == "lxml" else "bs4"
     if backend == "lxml":
+        from lxml import etree
+
         try:
             return _postprocess(_walk_lxml(html))
-        except _TreeTooDeep:
+        except (_TreeTooDeep, etree.LxmlError):
+            # Derin ağaç veya libxml2 sürümüne bağlı ayrıştırma hatası (ör. Windows'taki
+            # libxml2 boş belgede XMLSyntaxError verir): olay tabanlı bs4 yoluna düş.
             return _postprocess(_walk_bs4(html))
     if backend == "bs4":
         return _postprocess(_walk_bs4(html))

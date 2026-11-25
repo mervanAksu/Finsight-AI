@@ -89,10 +89,11 @@ def test_sec01_legit_ingest_still_works(client, origin):
 
 def test_sec01_ask_text_plain_csrf_already_blocked(client):
     """Denetim §3 kontrolü — ``/ask`` gövdesi zorunlu Pydantic modeli; ``text/plain`` basit
-    istek JSON olarak ayrıştırılmaz → 422 (CSRF'e kapalı, bugün de)."""
+    istek JSON olarak ayrıştırılmaz → 422 (CSRF'e kapalı, bugün de). SEC-01 düzeltmesinden sonra
+    Origin denetimi isteği daha önce 403 ile keser; ikisi de "engellendi" demektir."""
     res = client.post(ASK, content=b'{"question": "Revenue?"}',
                       headers={"Content-Type": "text/plain", "Origin": ATTACKER_ORIGIN})
-    assert res.status_code == 422
+    assert res.status_code in (403, 422)
 
 
 def test_cors_preflight_from_attacker_not_allowed(client):

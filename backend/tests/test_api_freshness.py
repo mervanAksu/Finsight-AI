@@ -220,6 +220,8 @@ def test_dead_job_lock_is_cleaned(factory):
     seed(factory)
     with factory() as s:
         job, _ = repo.create_job_if_idle(s, TICKER)
+        # O2: 30 dk'lık eskime yalnızca çalışan (running) işlere uygulanır.
+        assert repo.claim_job(s, job["id"])
         later = utcnow() + repo.STALE_JOB_AFTER + timedelta(minutes=1)
         job2, new = repo.create_job_if_idle(s, TICKER, now=later)
         assert new and job2["id"] != job["id"]
