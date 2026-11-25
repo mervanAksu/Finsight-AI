@@ -19,14 +19,13 @@ import logging
 import sys
 import time
 
-from . import DISCLAIMER
-from .config import (ConfigError, get_cache_dir, get_max_rps, get_sec_json_ttl,
+from . import DISCLAIMER, jobs
+from .config import (ConfigError, get_cache_dir, get_sec_json_ttl,
                      get_user_agent)
 from .db import init_db, make_engine, make_session_factory
 from .edgar import build_ticker_map
 from .models import Company
 from .pipeline import collect
-from .rate_limiter import RateLimiter
 from .repository import save_collected
 from .sec_client import FileCache, SecClient
 from .xbrl import yoy_changes
@@ -108,6 +107,11 @@ def print_analysis(summary: dict) -> None:
     print("\nAnaliz")
     print(f"  Duygu modeli : {sm} ({_model_kind(sm, LEXICON_NAME)})")
     print(f"  Gömme modeli : {em} ({_model_kind(em, HASHING_NAME)})")
+    device = summary.get("sentiment_device")
+    if device:
+        gpu = "GPU kullanılıyor" if "cuda" in device.lower() or "mps" in device.lower() \
+            else "GPU kullanılmıyor"
+        print(f"  Duygu cihazı : {device} ({gpu})")
     print("  LLM          : " + (f"{llm['provider']} / {llm['model']}" if llm
                                  else "yok (soru-cevap çıkarımsal modda çalışır)"))
     statuses = {"analyzed": "analiz edildi", "skipped": "önceden analiz edilmiş, atlandı",
@@ -211,7 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         client = SecClient(
             get_user_agent(),
-            limiter=RateLimiter(get_max_rps()),
+            # NFR-02: API süreci, refresh CLI ve bu CLI aynı (dosya tabanlı) hız bütçesini paylaşır.
+            limiter=jobs.shared_limiter(),
             cache=FileCache(get_cache_dir(), json_ttl_seconds=get_sec_json_ttl()),
         )
     except ConfigError as e:

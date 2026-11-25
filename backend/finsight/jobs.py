@@ -311,137 +311,175 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
     company = repo.load_company_by_id(session, company_id)
     if company is None:
         raise KeyError(f"Şirket bulunamadı (id={company_id})")
-    # O2: ilk çalıştırmada FinBERT / sentence-transformers yüklemesi dakikalar sürebilir;
-    # kullanıcı işin takıldığını sanmasın.
-    report("Modeller yükleniyor", 0.0)
-    t = time.perf_counter()
-    sm = sentiment_model or get_sentiment()
-    emb = embedder or get_embedder_cached()
-    llm = get_llm()
-    timed("model_load", t)
-    report(f"Modeller hazır ({sm.name}, {emb.name})", 0.0)
+    # Seçim model yüklemesinden ÖNCE (docs/performans-asama4.md §6.1): ilk belge modeller
+    # yüklenirken iner. Session yalnızca bu (çağıran) iş parçacığında kullanılır.
+    all_filings = repo.load_filings(session, company_id)
     include_quarterly = analyze_quarterly_enabled() if analyze_quarterly is None \
         else analyze_quarterly
-    summary: dict = {
-        "sentiment_model": sm.name, "embedding_model": emb.name,
-        "llm": {"provider": llm.provider, "model": llm.model} if llm else None,
-        "filings": [], "warnings": [], "notes": [], "risk": None, "score": None,
-        "quarterly_analysis": include_quarterly,
-    }
-
-    def warning(message: str) -> None:
-        log.warning(message)
-        summary["warnings"].append(message)
-        if warn is not None:
-            warn(message)
-
-    def finish() -> dict:
-        summary["timings"] = {k: round(v, 3) for k, v in timings.items()}
-        summary["total_seconds"] = round(time.perf_counter() - started, 3)
-        summary["sentiment_stats"] = sentiment_stats(
-            totals, cache_enabled=sentence_cache, cache_preloaded=preloaded)
-        return summary
-
-    all_filings = repo.load_filings(session, company_id)
     selected = select_filings_for_analysis(all_filings, include_quarterly=include_quarterly)
-    if not include_quarterly and select_filings_for_analysis(all_filings) != selected:
-        summary["notes"].append("Hızlı mod (FINSIGHT_ANALYZE_10Q=0): en son 10-Q listelendi "
-                                "ama analiz edilmedi.")
-    if not selected:
-        warning("Analiz edilecek 10-K / 10-Q başvurusu bulunamadı.")
-    cache: dict[str, dict] | None = None
-    preloaded = 0
-    n = max(len(selected), 1)
-    for i, filing in enumerate(selected):
-        label = _filing_label(filing)
-        entry = {"accession_no": filing["accession_no"], "form": filing["form"],
-                 "filing_date": filing["filing_date"], "status": "analyzed", "sections": [],
-                 "sentences": 0, "chunks": 0}
-        summary["filings"].append(entry)
-        if not force and repo.is_filing_analyzed(session, filing["id"], sm.name, emb.name):
-            entry["status"] = "skipped"
-            report(f"Önceden analiz edilmiş, atlandı ({label})", (i + 1) / n * 0.8)
-            continue
-        if sentence_cache and cache is None:
-            t = time.perf_counter()
-            try:
-                cache = repo.load_sentence_predictions(session, company_id, sm.name)
-            except Exception as exc:  # önbellek yalnızca hızlandırır; okunamazsa boş başla
-                session.rollback()
-                log.warning("Cümle önbelleği okunamadı (%s); boş önbellekle devam ediliyor.",
-                            type(exc).__name__)
-                cache = {}
-            preloaded = len(cache)
-            timed("cache_load", t)
-        try:
-            report(f"Belge indiriliyor ({label})", i / n * 0.8)
-            t = time.perf_counter()
-            body = client.document(company["cik"], filing["accession_no"],
-                                   filing["primary_document"])
-            document = store_document(body, company["cik"], filing["accession_no"],
-                                      filing["primary_document"], documents_dir)
-            timed("download", t)
-            report(f"Bölümler ve duygu analizi ({label})", (i + 0.3) / n * 0.8)
-            stats: dict = {}
-            sections = analyze_sections(body, filing["form"], sentiment_model=sm,
-                                        prediction_cache=cache, stats=stats)
-            for key in ("html_to_text", "sections", "sentiment"):
-                timings[key] += float(stats.get(f"{key}_s", 0.0))
-            for key in ("sentences", "predicted", "cache_hits", "duplicates", "sentiment_s"):
-                totals[key] = totals.get(key, 0) + stats.get(key, 0)
-            entry["sentiment"] = sentiment_stats(stats, cache_enabled=sentence_cache)
-            report(f"Gömme ({label})", (i + 0.7) / n * 0.8)
-            t = time.perf_counter()
-            embed_sections(sections, embedder=emb)
-            t = timed("embedding", t)
-            saved = repo.save_analysis_document(session, filing["id"], {
-                "sections": sections, "sentiment_model": sm.name, "embedding_model": emb.name,
-                "embedding_dim": emb.dim, "chunk_words": default_chunk_words(emb),
-            }, document=document)
-            timed("save", t)
-            entry.update(saved)
-            if not saved["sections"]:
-                warning(f"{label}: risk / MD&A bölümü bulunamadı.")
-        except Exception as exc:  # bir başvurunun hatası diğerlerini durdurmaz
-            session.rollback()
-            entry["status"] = "error"
-            entry["error"] = safe_error(exc)
-            warning(f"{label}: {entry['error']}")
-            log.debug("Başvuru analizi hatası", exc_info=True)
+    # Tek işçili havuz: aynı anda en fazla bir belge indirmesi; tüm SEC istekleri yine
+    # SecClient'tan (paylaşılan hız sınırlayıcı + önbellek) geçer.
+    prefetch_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sec-prefetch")
+    fetches: dict[int, Future] = {}
 
-    if not any(f["status"] in ("analyzed", "skipped") for f in summary["filings"]):
-        # K2: analiz edilen başvuru yoksa eski/eksik verilerle skor yazılmaz.
-        warning("Hiçbir başvuru analiz edilemedi; risk karşılaştırması ve skor güncellenmedi.")
-        return finish()
+    def prefetch(filing: dict) -> None:
+        if filing["id"] not in fetches:
+            fetches[filing["id"]] = prefetch_pool.submit(
+                client.document, company["cik"], filing["accession_no"],
+                filing["primary_document"])
 
-    report("Risk karşılaştırması", 0.85)
-    t = time.perf_counter()
-    old, new = latest_two_annual(selected)
-    if old is not None and new is not None:
-        try:
-            comparison = compare_risk(repo.load_section_text(session, old["id"], "1A"),
-                                      repo.load_section_text(session, new["id"], "1A"))
-            if comparison is None:
-                warning("Risk karşılaştırması yapılamadı: iki 10-K'nın birinde Item 1A yok.")
-            else:
-                repo.save_risk_comparison(session, company_id, old["id"], new["id"], comparison)
-                summary["risk"] = comparison["counts"]
-        except Exception as exc:
-            session.rollback()
-            warning(f"Risk karşılaştırması: {safe_error(exc)}")
+    def needs_analysis(filing: dict, sentiment_name: str, embedding_name: str) -> bool:
+        return force or not repo.is_filing_analyzed(session, filing["id"], sentiment_name,
+                                                    embedding_name)
+
+    # Model adları yüklemeden bilinir; tahmin yanlışsa (ör. FinBERT yüklenemedi) en kötü
+    # ihtimalle bir belge gereksiz iner (sonucu kullanılmaz).
+    if sentiment_model is not None and embedder is not None:
+        expected = (sentiment_model.name, embedder.name)
     else:
-        warning("Risk karşılaştırması için iki 10-K yok.")
-    timed("risk", t)
+        status = model_status()
+        expected = (sentiment_model.name if sentiment_model else status["sentiment"],
+                    embedder.name if embedder else status["embedding"])
+    first = next((f for f in selected if needs_analysis(f, *expected)), None)
+    if first is not None:
+        prefetch(first)
+    try:
+        # O2: ilk çalıştırmada FinBERT / sentence-transformers yüklemesi dakikalar sürebilir;
+        # kullanıcı işin takıldığını sanmasın.
+        report("Modeller yükleniyor", 0.0)
+        t = time.perf_counter()
+        sm = sentiment_model or get_sentiment()
+        emb = embedder or get_embedder_cached()
+        llm = get_llm()
+        timed("model_load", t)
+        report(f"Modeller hazır ({sm.name}, {emb.name})", 0.0)
+        summary: dict = {
+            "sentiment_model": sm.name, "embedding_model": emb.name,
+            "llm": {"provider": llm.provider, "model": llm.model} if llm else None,
+            "filings": [], "warnings": [], "notes": [], "risk": None, "score": None,
+            "quarterly_analysis": include_quarterly,
+            "sentiment_device": getattr(sm, "device_info", None),
+        }
 
-    report("Skor hesaplanıyor", 0.95)
-    t = time.perf_counter()
-    score = compute_and_save_score(session, company_id)
-    repo.touch_analysis(session, company_id)
-    timed("score", t)
-    summary["score"] = {"total": score.get("total"), "band": score.get("band"),
-                        "as_of_period": score.get("as_of_period"),
-                        "basis": score.get("basis"), "as_of_filing": score.get("as_of_filing")}
-    return finish()
+        def warning(message: str) -> None:
+            log.warning(message)
+            summary["warnings"].append(message)
+            if warn is not None:
+                warn(message)
+
+        def finish() -> dict:
+            summary["timings"] = {k: round(v, 3) for k, v in timings.items()}
+            summary["total_seconds"] = round(time.perf_counter() - started, 3)
+            summary["sentiment_stats"] = sentiment_stats(
+                totals, cache_enabled=sentence_cache, cache_preloaded=preloaded)
+            return summary
+
+        if not include_quarterly and select_filings_for_analysis(all_filings) != selected:
+            summary["notes"].append("Hızlı mod (FINSIGHT_ANALYZE_10Q=0): en son 10-Q listelendi "
+                                    "ama analiz edilmedi.")
+        if not selected:
+            warning("Analiz edilecek 10-K / 10-Q başvurusu bulunamadı.")
+        cache: dict[str, dict] | None = None
+        preloaded = 0
+        n = max(len(selected), 1)
+        for i, filing in enumerate(selected):
+            label = _filing_label(filing)
+            entry = {"accession_no": filing["accession_no"], "form": filing["form"],
+                     "filing_date": filing["filing_date"], "status": "analyzed", "sections": [],
+                     "sentences": 0, "chunks": 0}
+            summary["filings"].append(entry)
+            if not force and repo.is_filing_analyzed(session, filing["id"], sm.name, emb.name):
+                entry["status"] = "skipped"
+                report(f"Önceden analiz edilmiş, atlandı ({label})", (i + 1) / n * 0.8)
+                continue
+            if sentence_cache and cache is None:
+                t = time.perf_counter()
+                try:
+                    cache = repo.load_sentence_predictions(session, company_id, sm.name)
+                except Exception as exc:  # önbellek yalnızca hızlandırır; okunamazsa boş başla
+                    session.rollback()
+                    log.warning("Cümle önbelleği okunamadı (%s); boş önbellekle devam ediliyor.",
+                                type(exc).__name__)
+                    cache = {}
+                preloaded = len(cache)
+                timed("cache_load", t)
+            try:
+                report(f"Belge indiriliyor ({label})", i / n * 0.8)
+                t = time.perf_counter()
+                prefetch(filing)
+                # "download" süresi = yalnızca bekleme (belge çoğu zaman önceki başvurunun
+                # çıkarımı sırasında inmiştir). Hata aynı istisna olarak yükselir.
+                body = fetches.pop(filing["id"]).result()
+                nxt = next((f for f in selected[i + 1:]
+                            if needs_analysis(f, sm.name, emb.name)), None)
+                if nxt is not None:
+                    prefetch(nxt)  # FinBERT / gömme çalışırken arka planda iner
+                document = store_document(body, company["cik"], filing["accession_no"],
+                                          filing["primary_document"], documents_dir)
+                timed("download", t)
+                report(f"Bölümler ve duygu analizi ({label})", (i + 0.3) / n * 0.8)
+                stats: dict = {}
+                sections = analyze_sections(body, filing["form"], sentiment_model=sm,
+                                            prediction_cache=cache, stats=stats)
+                for key in ("html_to_text", "sections", "sentiment"):
+                    timings[key] += float(stats.get(f"{key}_s", 0.0))
+                for key in ("sentences", "predicted", "cache_hits", "duplicates", "sentiment_s"):
+                    totals[key] = totals.get(key, 0) + stats.get(key, 0)
+                entry["sentiment"] = sentiment_stats(stats, cache_enabled=sentence_cache)
+                report(f"Gömme ({label})", (i + 0.7) / n * 0.8)
+                t = time.perf_counter()
+                embed_sections(sections, embedder=emb)
+                t = timed("embedding", t)
+                saved = repo.save_analysis_document(session, filing["id"], {
+                    "sections": sections, "sentiment_model": sm.name, "embedding_model": emb.name,
+                    "embedding_dim": emb.dim, "chunk_words": default_chunk_words(emb),
+                }, document=document)
+                timed("save", t)
+                entry.update(saved)
+                if not saved["sections"]:
+                    warning(f"{label}: risk / MD&A bölümü bulunamadı.")
+            except Exception as exc:  # bir başvurunun hatası diğerlerini durdurmaz
+                session.rollback()
+                entry["status"] = "error"
+                entry["error"] = safe_error(exc)
+                warning(f"{label}: {entry['error']}")
+                log.debug("Başvuru analizi hatası", exc_info=True)
+
+        if not any(f["status"] in ("analyzed", "skipped") for f in summary["filings"]):
+            # K2: analiz edilen başvuru yoksa eski/eksik verilerle skor yazılmaz.
+            warning("Hiçbir başvuru analiz edilemedi; risk karşılaştırması ve skor güncellenmedi.")
+            return finish()
+
+        report("Risk karşılaştırması", 0.85)
+        t = time.perf_counter()
+        old, new = latest_two_annual(selected)
+        if old is not None and new is not None:
+            try:
+                comparison = compare_risk(repo.load_section_text(session, old["id"], "1A"),
+                                          repo.load_section_text(session, new["id"], "1A"))
+                if comparison is None:
+                    warning("Risk karşılaştırması yapılamadı: iki 10-K'nın birinde Item 1A yok.")
+                else:
+                    repo.save_risk_comparison(session, company_id, old["id"], new["id"], comparison)
+                    summary["risk"] = comparison["counts"]
+            except Exception as exc:
+                session.rollback()
+                warning(f"Risk karşılaştırması: {safe_error(exc)}")
+        else:
+            warning("Risk karşılaştırması için iki 10-K yok.")
+        timed("risk", t)
+
+        report("Skor hesaplanıyor", 0.95)
+        t = time.perf_counter()
+        score = compute_and_save_score(session, company_id)
+        repo.touch_analysis(session, company_id)
+        timed("score", t)
+        summary["score"] = {"total": score.get("total"), "band": score.get("band"),
+                            "as_of_period": score.get("as_of_period"),
+                            "basis": score.get("basis"), "as_of_filing": score.get("as_of_filing")}
+        return finish()
+    finally:
+        prefetch_pool.shutdown(wait=True, cancel_futures=True)
 
 
 # --------------------------------------------------------------------------- arka plan işi

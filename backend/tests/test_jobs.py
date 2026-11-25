@@ -28,6 +28,9 @@ from finsight.sec_client import SecError  # noqa: E402
 def light_models(monkeypatch, tmp_path):
     monkeypatch.setenv("FINSIGHT_DOCUMENTS_DIR", str(tmp_path / "docs"))
     monkeypatch.delenv("FINSIGHT_ANALYZE_10Q", raising=False)
+    # ingest CLI artık jobs.shared_limiter() kullanıyor; testin geçici önbellek klasörüne
+    # bağlanan süreç düzeyi sınırlayıcı diğer testlere sızmasın.
+    monkeypatch.setattr(jobs, "_limiter", None)
     use_light_models()
     yield
     jobs.reset_models()
@@ -474,3 +477,118 @@ def test_ingest_cli_save_error_does_not_stop_other_companies(monkeypatch, tmp_pa
     assert calls["n"] == 2
     out = capsys.readouterr().out
     assert "Example Corp" in out  # ikinci deneme işlendi ve özet yazıldı
+
+
+# --------------------------------------------------------------------------- indirme/çıkarım örtüşmesi
+
+
+class _Timeline:
+    def __init__(self):
+        import threading
+
+        self.lock = threading.Lock()
+        self.events: list[tuple[str, str, float, float]] = []
+
+    def add(self, kind, name, start, end):
+        with self.lock:
+            self.events.append((kind, name, start, end))
+
+
+def _slow_world(factory, tmp_path, delay: float):
+    """Belge indirmesi ve duygu çıkarımı `delay` sn süren dünya; zaman çizelgesi kaydeder."""
+    import threading
+    import time
+
+    from finsight.sentiment import LexiconModel
+
+    timeline = _Timeline()
+    sec = FakeSec()
+    inner = sec.fetcher
+
+    def fetch(url, headers):
+        start = time.perf_counter()
+        if "/Archives/" in url:
+            time.sleep(delay)
+        out = inner(url, headers)
+        timeline.add("download", threading.current_thread().name, start, time.perf_counter())
+        return out
+
+    class SlowSentiment:
+        def __init__(self):
+            self._inner = LexiconModel(dictionary_path="")
+            self.name = self._inner.name
+
+        def predict(self, sentences):
+            start = time.perf_counter()
+            time.sleep(delay)
+            out = self._inner.predict(sentences)
+            timeline.add("sentiment", "main", start, time.perf_counter())
+            return out
+
+    run(factory, sec, analyze=False)
+    sec.fetcher = fetch
+    return sec, SlowSentiment(), timeline
+
+
+def test_download_overlaps_inference_same_summary_and_score(tmp_path):
+    """docs/performans-asama4.md §6.1: sonraki belge çıkarım sırasında iner; sonuç aynıdır."""
+    import time
+
+    delay = 0.25
+    f_fast, f_slow = memory_session_factory(), memory_session_factory()
+    sec_fast = FakeSec()
+    run(f_fast, sec_fast, analyze=False)
+    fast = _analyze(f_fast, sec_fast, tmp_path / "a")
+
+    sec, slow_model, timeline = _slow_world(f_slow, tmp_path, delay)
+    started = time.perf_counter()
+    slow = _analyze(f_slow, sec, tmp_path / "b", sentiment_model=slow_model)
+    elapsed = time.perf_counter() - started
+
+    keys = ("accession_no", "form", "status", "sections", "sentences", "chunks")
+    assert [{k: f[k] for k in keys} for f in slow["filings"]] == \
+        [{k: f[k] for k in keys} for f in fast["filings"]]
+    assert slow["score"]["total"] == fast["score"]["total"]
+    assert slow["risk"] == fast["risk"]
+
+    downloads = [e for e in timeline.events if e[0] == "download" and e[3] - e[2] >= delay]
+    inference = [e for e in timeline.events if e[0] == "sentiment"]
+    assert len(downloads) == 3 and len(inference) >= 2  # 2. 10-K cümle önbelleğinden
+    assert all(e[1].startswith("sec-prefetch") for e in downloads)  # havuzdan
+    # Aynı anda en fazla bir SEC isteği (tek işçi)
+    ordered = sorted(downloads, key=lambda e: e[2])
+    assert all(a[3] <= b[2] + 1e-3 for a, b in zip(ordered, ordered[1:]))
+    # En az bir indirme bir çıkarımla örtüşür
+    assert any(d[2] < s[3] and s[2] < d[3] for d in downloads for s in inference)
+    # Sıralı olsaydı ≥ (3 indirme + çıkarım sayısı) × delay; örtüşme en az bir delay kazandırır
+    assert elapsed < (3 + len(inference)) * delay - 0.15, elapsed
+
+
+def test_ingest_cli_uses_shared_limiter_and_prints_device(monkeypatch, tmp_path, capsys):
+    from finsight import ingest
+
+    monkeypatch.setenv("SEC_USER_AGENT", "FinSight-AI Test test@example.com")
+    monkeypatch.setenv("SEC_CACHE_DIR", str(tmp_path / "cache"))
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def fake_client(ua, **kw):
+        seen.update(kw)
+        raise Stop
+
+    monkeypatch.setattr(ingest, "SecClient", fake_client)
+    with pytest.raises(Stop):
+        ingest.main([TICKER, "--no-db"])
+    assert seen["limiter"] is jobs.shared_limiter()
+
+    ingest.print_analysis({"sentiment_model": "ProsusAI/finbert",
+                           "embedding_model": "hashing-fallback", "llm": None, "filings": [],
+                           "sentiment_device": "CUDA GeForce MX130 (sm_50) fp32"})
+    out = capsys.readouterr().out
+    assert "Duygu cihazı : CUDA GeForce MX130 (sm_50) fp32 (GPU kullanılıyor)" in out
+    ingest.print_analysis({"sentiment_model": "lexicon-fallback",
+                           "embedding_model": "hashing-fallback", "llm": None, "filings": [],
+                           "sentiment_device": "CPU (ONNX Runtime)"})
+    assert "(GPU kullanılmıyor)" in capsys.readouterr().out

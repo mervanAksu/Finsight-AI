@@ -548,3 +548,17 @@ def test_v14_facts_latest_and_compare_basis():
     cmp_body = compare_view([{"company": COMPANY, "ratios": ratios, "score": score}])
     c = cmp_body["companies"][0]
     assert c["basis"] == "ttm" and c["as_of_period"] == c["period_end"] == "2026-12-31"
+
+
+def test_csv_text_cells_neutralized_numbers_untouched():
+    """CSV-DID (CWE-1236): formül önekli METİN hücreleri ' ile; sayılar ve sıradan metin aynen."""
+    from finsight.views import export_csv, neutralize_csv_text
+
+    for payload in ("=1+1", "+1", "-x", "@SUM(A1)", "\t=1", "\r=1"):
+        assert neutralize_csv_text(payload) == "'" + payload
+    assert neutralize_csv_text("Net kâr") == "Net kâr"
+    text = export_csv([{"label": "=HYPERLINK(\"x\")", "value": -1250.0, "key": "-",
+                        "accession_no": "0000000001-26-000010"}])
+    assert "'=HYPERLINK" in text and "'-" in text
+    assert ",-1250," in text and "'-1250" not in text
+    assert "0000000001-26-000010" in text and "'0000000001" not in text
