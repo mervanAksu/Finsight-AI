@@ -107,3 +107,57 @@ Toplam, yuvarlanmamış bileşen puanlarından hesaplanır; gösterge nesnelerin
 Her bileşen için `explanation` Türkçe tek cümle: hangi gösterge, değeri ve puana etkisi.
 Örnek: "Net kâr marjı %24,3 (eşik %0–%20 → 100 puan)." Bu ağırlık ve eşikler doğrulanmış
 bir model değildir; başlangıç önerisidir ve 4. aşamada duyarlılık analizine tabi tutulur.
+
+## 4. Son on iki ay (TTM) — dinamik seri (Aşama 4, yöntem sürümü `v2-2026-11-ttm`)
+
+Kaynak: `docs/asama4-sozlesme.md` §2–3. Kod: `xbrl.extract_ttm`, `xbrl.build_dynamic`,
+`ratios.compute_ratios(..., dynamic=...)`, `scoring.compute_score(..., dynamic=...)`.
+Tüm tarih eşleşmeleri ±7 gün toleranslıdır (52–53 haftalık yıllar).
+
+- `E_A`: revenue ∪ net_income ∪ total_assets yıllık serisinin en son dönem sonu.
+- `E_Q`: aynı kalemlerin etiketlerinde `form ∈ {10-Q, 10-Q/A}` olup `E_A`'dan 30–300 gün
+  sonra biten en son dönem sonu. Yoksa dayanak yıllıktır (`basis: "annual"`).
+- **Süreli kalem:** `TTM = A + YTD_cur − YTD_prior`, üç parça da **yıllık serinin birincil
+  etiketinden** (§1 birincil etiket kuralı). Birincil etikette parça eksikse o kalem için TTM
+  yoktur; başka etikete GEÇİLMEZ (A ile YTD farklı tanımlı olabilir). Neden: "TTM parçaları
+  birincil etiket (X) altında eksik; Y etiketine geçilmedi" (Y'de parçalar varsa), aksi
+  halde parça nedeni + "(etiket X)".
+  - `A`: `E_A`'da biten 330–400 günlük 10-K değeri.
+  - `YTD_cur`: başlangıcı ≈ `E_A + 1 gün`, bitişi ≈ `E_Q`. 2./3. çeyrekte 3 aylık değer
+    (başlangıcı `E_Q − 3 ay`) bu süzgece takılır; 1. çeyrekte 3 ay = YTD.
+  - `YTD_prior`: başlangıcı ≈ `A.start`, bitişi ≈ `YTD_cur.end − 1 yıl`.
+  - Aynı dönemi raporlayan birden çok başvuru (10-Q/A, sonraki 10-Q'daki yeniden düzenlenmiş
+    karşılaştırma) → en son `filed`. Gerekçe: yaygın LTM uygulaması en son raporlanan
+    (yeniden düzenlenmiş, karşılaştırılabilir) değerleri kullanır; şirket önceki dönemi yeni
+    muhasebe politikası / sınıflandırmayla yeniden sunduğunda TTM'nin üç parçası aynı tanımla
+    hesaplanmış olur. Aynı dönem için daha önce FARKLI değer raporlanmışsa parçada
+    `restated: true` ve `original_value` (ilk raporlanan değer) gösterilir.
+  - Parça eksikse TTM üretilmez (neden: "yıllık değer (A) yok", "mali yıl başından bugüne
+    (YTD) değeri yok", "önceki yılın aynı YTD dönemi yok"); o kalem için yıllık değer kullanılır
+    ve neden `reasons` / `basis_notes`'a yazılır. Oranlama, yıllıklaştırma, uydurma yok.
+- **Anlık kalem:** `E_Q` tarihli 10-Q bilançosu; ortalama için önceki değer `E_Q − 1 yıl`
+  tarihli bilanço (önceki yılın aynı çeyreği; 330–400 gün kuralı). İkisi de birincil
+  etiketten; önceki değer yoksa None ve oranda "ortalama yerine dönem sonu değeri" notu.
+- **Dayanak:** `basis = "ttm"` ancak gelir veya net kârdan en az biri gerçekten TTM ise.
+  Yalnızca bilanço kalemleri E_Q'ya geçtiyse dayanak yıllık kalır (skor / oran sütunu E_A)
+  ve `note` yazılır.
+- **Önceki TTM** (büyüme): `A_önceki + YTD_prior − YTD_prior2`. Yoksa büyüme yıllık YoY'a
+  düşer, göstergenin `note` alanı: "TTM büyümesi hesaplanamadı; yıllık YoY kullanıldı".
+- **Türetme:** brüt kâr TTM yoksa gelir TTM − maliyet TTM (`tag = "derived"`); toplam
+  yükümlülük `E_Q`'da yoksa `LiabilitiesAndStockholdersEquity − özkaynak` (10-Q; her bileşen
+  kendi yıllık birincil etiketinden). Türetilmiş TTM'de `derived_from` tam bileşen
+  sözlükleridir: `{role: "component", metric, tag, accession_no, form, period_start,
+  period_end, value, parts?}` (NFR-06).
+- **İzlenebilirlik (NFR-06):** TTM noktası `basis: "ttm"`, `form`/`accession_no` YTD_cur'un
+  başvurusu, `derived_from: [{role: annual|ytd_current|ytd_prior, accession_no, form, tag,
+  period_start, period_end, value}]`. Yıllık noktalar `basis: "annual"`.
+- **Oranlar:** yıllık dönemler değişmez; `periods` sonuna `E_Q` sütunu eklenir (etiket
+  "TTM 2026-09-30"). TTM sütununda yıllığa düşen girdi varsa `note`: "TTM yok, yıllık değer
+  kullanıldı: <kalem>".
+- **Skor:** ağırlık ve eşikler §3 ile aynı (`weights_version` v1-2026-11); son dönem `E_Q`.
+  Metin tonu: en son analiz edilen başvurunun MD&A'sı (10-K Item 7 veya daha yeni 10-Q Part I
+  Item 2), risk tonu en son 10-K'nın Item 1A'sı; risk farkı iki son 10-K arasında.
+  Yanıtta `basis`, `as_of_filing`, `data_through`, `method_version`.
+- Veritabanında TTM noktaları `financial_fact.basis = "ttm"` ile, TTM üretilemeyen kalemlerin
+  nedenleri `company.ttm_reasons` (JSON) ile saklanır. `/facts` `values` yıllık seridir; son
+  nokta ayrı `latest` alanındadır. Artık üretilmeyen TTM satırları yeniden çekmede silinir.

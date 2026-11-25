@@ -1,12 +1,14 @@
 """100 puanlık açıklanabilir finansal sağlık skoru (FR-11; NFR-06, NFR-12).
 
-Kurallar .claude/skills/financial-analysis/SKILL.md §3 ile birebir aynıdır (sürüm v1-2026-11).
+Kurallar .claude/skills/financial-analysis/SKILL.md §3 ile birebir aynıdır (ağırlık sürümü
+v1-2026-11; yöntem sürümü v2-2026-11-ttm: skor en son başvuruya dayanan dinamik seri üzerinde
+— son 10-K'dan sonra 10-Q varsa TTM, yoksa yıllık; docs/asama4-sozlesme.md §3).
 Skor bir özet göstergedir; derecelendirme veya yatırım tavsiyesi değildir. Ağırlıklar ve
 eşikler doğrulanmış bir model değil, başlangıç önerisidir.
 
 - Her bileşen 0–100; bileşen puanı, kullanılabilen göstergelerin ortalamasıdır.
 - Toplam = Σ(ağırlık × puan) / Σ(kullanılabilen ağırlık); kullanılabilen ağırlık < 50 → None.
-- Tüm göstergeler son mali yıl (ratios["periods"][-1]) içindir.
+- Tüm göstergeler son dönem (ratios["periods"][-1]; TTM varsa E_Q) içindir.
 """
 
 from datetime import date
@@ -19,9 +21,12 @@ from .ratios import (
     is_prior_fiscal_year,
     match_period,
 )
-from .xbrl import yoy_ratio
+from .xbrl import BASIS_ANNUAL, BASIS_TTM, build_dynamic, yoy_ratio
 
 WEIGHTS_VERSION = "v1-2026-11"
+# Yöntem sürümü (ağırlıklar ve eşikler değişmedi; veri dayanağı TTM oldu).
+METHOD_VERSION = "v2-2026-11-ttm"
+NOTE_GROWTH_ANNUAL_FALLBACK = "TTM büyümesi hesaplanamadı; yıllık YoY kullanıldı"
 MIN_AVAILABLE_WEIGHT = 50
 
 _RATIO_LABELS = {d["key"]: d["label"] for d in RATIO_DEFS}
@@ -108,7 +113,8 @@ def _indicator(spec: tuple, value, points: float | None, reason: str | None = No
     key, label, kind, a, b = spec
     return {"key": key, "label": label, "value": value,
             "display": display if display is not None else _fmt(kind, value),
-            "points": points, "reason": reason, "threshold": _threshold(kind, a, b)}
+            "points": points, "reason": reason, "threshold": _threshold(kind, a, b),
+            "note": None}
 
 
 def _from_value(spec: tuple, value, reason: str | None = None) -> dict:
@@ -143,6 +149,40 @@ def _fact_prior(facts: dict, metric: str, end: date | None) -> dict | None:
     return max(prior, key=lambda i: i["period_end"]) if prior else None
 
 
+class _FactView:
+    """Skorun kalem erişimi: as_of dinamik serinin (TTM) dönemiyse build_dynamic'in latest /
+    prior noktaları, değilse yıllık seri (oranlarla aynı ±7 gün kuralı)."""
+
+    def __init__(self, facts: dict, dynamic: dict | None, as_of: date | None) -> None:
+        self.facts = facts
+        self.dynamic: dict = dynamic or {}
+        self.as_of = as_of
+        self.use_dynamic = (dynamic is not None and dynamic.get("basis") == BASIS_TTM
+                            and as_of is not None and dynamic.get("as_of_period") == as_of)
+
+    def at(self, metric: str) -> dict | None:
+        if self.use_dynamic:
+            return (self.dynamic.get("latest") or {}).get(metric)
+        return _fact_at(self.facts, metric, self.as_of)
+
+    def growth_pair(self, metric: str) -> tuple[dict | None, dict | None, str | None]:
+        """(güncel, önceki, not). TTM varsa TTM ↔ önceki TTM; önceki TTM yoksa yıllık YoY'a
+        düşülür ve not döner (sözleşme §2 "Önceki TTM")."""
+        if not self.use_dynamic:
+            cur = _fact_at(self.facts, metric, self.as_of)
+            prev = _fact_prior(self.facts, metric, cur["period_end"]) if cur else None
+            return cur, prev, None
+        cur = (self.dynamic.get("latest") or {}).get(metric)
+        prev = (self.dynamic.get("prior") or {}).get(metric)
+        if cur is not None and cur.get("basis") == BASIS_TTM and prev is not None \
+                and prev.get("basis") == BASIS_TTM:
+            return cur, prev, None
+        series = sorted(self.facts.get(metric) or [], key=lambda i: i["period_end"])
+        a_cur = series[-1] if series else None
+        a_prev = _fact_prior(self.facts, metric, a_cur["period_end"]) if a_cur else None
+        return a_cur, a_prev, NOTE_GROWTH_ANNUAL_FALLBACK
+
+
 def _latest_ratios(ratios: dict, as_of: date | None) -> dict[str, dict]:
     out = {}
     for r in (ratios or {}).get("ratios", []):
@@ -161,9 +201,14 @@ def _ratio_indicator(spec: tuple, latest: dict[str, dict]) -> dict:
 
 # ---- bileşenler ----
 
-def _growth_indicator(spec: tuple, facts: dict, metric: str, as_of: date | None) -> dict:
-    cur = _fact_at(facts, metric, as_of)
-    prev = _fact_prior(facts, metric, cur["period_end"]) if cur is not None else None
+def _growth_indicator(spec: tuple, view: _FactView, metric: str) -> dict:
+    cur, prev, note = view.growth_pair(metric)
+    ind = _growth_value(spec, metric, cur, prev)
+    ind["note"] = note
+    return ind
+
+
+def _growth_value(spec: tuple, metric: str, cur: dict | None, prev: dict | None) -> dict:
     if cur is None:
         return _from_value(spec, None, f"eksik veri: {metric}")
     if prev is None:
@@ -175,8 +220,8 @@ def _growth_indicator(spec: tuple, facts: dict, metric: str, as_of: date | None)
     return _from_value(spec, change, None if change is not None else "payda sıfır")
 
 
-def _build_component(comp: dict, latest: dict, facts: dict, signals: dict,
-                     as_of: date | None) -> tuple[dict, float | None]:
+def _build_component(comp: dict, latest: dict, view: _FactView, signals: dict
+                     ) -> tuple[dict, float | None]:
     key, specs = comp["key"], comp["indicators"]
     override: float | None = None
     note: str | None = None
@@ -185,7 +230,7 @@ def _build_component(comp: dict, latest: dict, facts: dict, signals: dict,
         indicators = [_ratio_indicator(s, latest) for s in specs]
     elif key == "leverage":
         indicators = [_ratio_indicator(s, latest) for s in specs]
-        equity = _fact_at(facts, "stockholders_equity", as_of)
+        equity = view.at("stockholders_equity")
         de = latest.get("debt_to_equity") or {}
         if (equity is not None and equity["value"] <= 0) or de.get("reason") == REASON_EQUITY:
             override = 0.0
@@ -193,8 +238,8 @@ def _build_component(comp: dict, latest: dict, facts: dict, signals: dict,
             note = f"özkaynak negatif veya sıfır ({shown}), kural gereği puan 0"
     elif key == "cash_quality":
         ocf_spec, fcf_spec = specs
-        ni = _fact_at(facts, "net_income", as_of)
-        ocf = _fact_at(facts, "operating_cash_flow", as_of)
+        ni = view.at("net_income")
+        ocf = view.at("operating_cash_flow")
         if ni is not None and ni["value"] <= 0 and ocf is not None:
             positive = ocf["value"] > 0
             reason = (REASON_NET_INCOME + "; faaliyetlerden nakit akışı "
@@ -205,15 +250,19 @@ def _build_component(comp: dict, latest: dict, facts: dict, signals: dict,
         indicators = [first, _ratio_indicator(fcf_spec, latest)]
     elif key == "growth":
         rev_spec, ni_spec = specs
-        indicators = [_growth_indicator(rev_spec, facts, "revenue", as_of),
-                      _growth_indicator(ni_spec, facts, "net_income", as_of)]
+        indicators = [_growth_indicator(rev_spec, view, "revenue"),
+                      _growth_indicator(ni_spec, view, "net_income")]
+        notes = sorted({i["note"] for i in indicators if i["note"]})
+        note = "; ".join(notes) or None
     elif key == "text_tone":
         mdna_spec, risk_spec = specs
         mdna, risk = signals.get("mdna_net_tone"), signals.get("risk_net_tone")
         if mdna is not None:
             indicators = [_from_value(mdna_spec, mdna)]
+            indicators[0]["source"] = signals.get("mdna_filing")
         elif risk is not None:
             indicators = [_from_value(risk_spec, risk)]
+            indicators[0]["source"] = signals.get("risk_filing")
         else:
             indicators = [_from_value(mdna_spec, None, "MD&A tonu yok"),
                           _from_value(risk_spec, None, "risk bölümü tonu yok")]
@@ -248,23 +297,50 @@ def _build_component(comp: dict, latest: dict, facts: dict, signals: dict,
     return out, score
 
 
+def _as_of_filing(view: _FactView) -> dict | None:
+    """Skorun dayandığı başvuru: dinamik serinin kaynağı; yoksa as_of dönemindeki temel
+    kalemlerin (gelir, net kâr, toplam varlık) en son başvurusu."""
+    if view.use_dynamic:
+        return view.dynamic.get("as_of_filing")
+    items = [i for m in ("revenue", "net_income", "total_assets")
+             if (i := _fact_at(view.facts, m, view.as_of)) is not None and i.get("accession_no")]
+    if not items:
+        return None
+    best = max(items, key=lambda i: (i.get("filed") or date.min, i["accession_no"]))
+    return {"form": best.get("form"), "accession_no": best["accession_no"],
+            "filing_date": best.get("filed")}
+
+
 def compute_score(ratios: dict, facts: dict[str, list[dict]],
-                  text_signals: dict | None) -> dict:
+                  text_signals: dict | None, dynamic: dict | None = None) -> dict:
     """Skoru hesaplar; çıktı API /score şeklidir (disclaimer hariç).
 
-    ratios: ratios.compute_ratios çıktısı. facts: xbrl.extract_all çıktısı.
-    text_signals: {"mdna_net_tone", "risk_net_tone", "risk_added"} (değerler None olabilir).
+    ratios: ratios.compute_ratios çıktısı (dinamik seri için ``dynamic`` ile çağrılmış).
+    facts: xbrl.extract_all çıktısı (yıllık seri). dynamic: xbrl.build_dynamic çıktısı;
+    verilmezse yıllık seriden kurulur (basis "annual").
+    text_signals: {"mdna_net_tone", "risk_net_tone", "risk_added"} (değerler None olabilir;
+    isteğe bağlı "mdna_filing" / "risk_filing" ton göstergesinin kaynağı olarak eklenir).
     Toplam 1 ondalığa yuvarlanır; bant yuvarlanmış toplamdan belirlenir.
+
+    v1.4 alanları: ``basis`` ("ttm" | "annual"), ``as_of_filing`` ({form, accession_no,
+    filing_date}), ``data_through`` (= as_of_period), ``method_version``, ``basis_notes``
+    (TTM'si hesaplanamayıp yıllık değere düşen kalemler).
     """
     signals = text_signals or {}
     periods = (ratios or {}).get("periods") or []
     as_of = periods[-1] if periods else None
     latest = _latest_ratios(ratios, as_of)
     facts = facts or {}
+    if dynamic is None:
+        dynamic = build_dynamic(facts)
+    view = _FactView(facts, dynamic, as_of)
+    basis = BASIS_TTM if view.use_dynamic else BASIS_ANNUAL
+    basis_notes = ([f"{m}: {r}" for m, r in sorted((dynamic.get("reasons") or {}).items())]
+                   if view.use_dynamic else [])
 
     components, weighted, used_weight = [], 0.0, 0
     for comp in COMPONENTS:
-        out, raw = _build_component(comp, latest, facts, signals, as_of)
+        out, raw = _build_component(comp, latest, view, signals)
         components.append(out)
         if raw is not None:
             weighted += comp["weight"] * raw
@@ -288,6 +364,14 @@ def compute_score(ratios: dict, facts: dict[str, list[dict]],
                if missing else "")
             + ")."
         )
+    filing = _as_of_filing(view) if as_of is not None else None
+    if as_of is not None:
+        source = (f" ({filing['form']}, {_iso_text(filing.get('filing_date'))})"
+                  if filing else "")
+        explanation += (f" Veri dayanağı: {_iso_text(as_of)} tarihinde biten son on iki ay "
+                        f"(TTM){source}." if basis == BASIS_TTM else
+                        f" Veri dayanağı: {_iso_text(as_of)} tarihinde biten mali yıl"
+                        f"{source}.")
     explanation += (f" Ağırlıklar ve eşikler (sürüm {WEIGHTS_VERSION}) doğrulanmış bir model "
                     "değil, başlangıç önerisidir; bant gösterim içindir, derecelendirme "
                     "veya yatırım tavsiyesi değildir.")
@@ -300,4 +384,13 @@ def compute_score(ratios: dict, facts: dict[str, list[dict]],
         "components": components,
         "missing_components": missing,
         "explanation": explanation,
+        "basis": basis,
+        "as_of_filing": filing,
+        "data_through": as_of,
+        "method_version": METHOD_VERSION,
+        "basis_notes": basis_notes,
     }
+
+
+def _iso_text(value) -> str:
+    return value.isoformat() if isinstance(value, date) else str(value or "")

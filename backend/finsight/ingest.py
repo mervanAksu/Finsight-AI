@@ -20,7 +20,8 @@ import sys
 import time
 
 from . import DISCLAIMER
-from .config import ConfigError, get_cache_dir, get_max_rps, get_user_agent
+from .config import (ConfigError, get_cache_dir, get_max_rps, get_sec_json_ttl,
+                     get_user_agent)
 from .db import init_db, make_engine, make_session_factory
 from .edgar import build_ticker_map
 from .models import Company
@@ -57,6 +58,26 @@ def print_summary(data: dict) -> None:
             ch = f"{change:.2f}" if change is not None else "-"
             print(f"{metric:<22}{item['period_end'].isoformat():<12}"
                   f"{item['value']:>20,.0f}{ch:>10}  {item['form']} {item['accession_no']}")
+    print_ttm(data.get("ttm"))
+
+
+def print_ttm(ttm: dict | None) -> None:
+    """Son 10-K'dan sonraki 10-Q'ya dayanan TTM noktaları (docs/asama4-sozlesme.md §2)."""
+    if not ttm:
+        return
+    if ttm.get("as_of_period") is None:
+        print(f"TTM: yok — {ttm.get('reason') or 'veri yok'} (skor yıllık veriye dayanır)")
+        return
+    print(f"TTM (son on iki ay, {ttm['as_of_period'].isoformat()} itibarıyla; "
+          f"son yıllık dönem {ttm['annual_period'].isoformat()}):")
+    for metric, points in ttm["facts"].items():
+        p = points[-1]
+        parts = " ".join(f"{d['role']}={d['value']:,.0f}" for d in p.get("derived_from") or []
+                         if isinstance(d, dict) and "role" in d and "metric" not in d)
+        print(f"  {metric:<22}{p['value']:>20,.0f}  {p['form']} {p['accession_no']}"
+              + (f"  [{parts}]" if parts else ""))
+    for metric, reason in sorted((ttm.get("reasons") or {}).items()):
+        print(f"  {metric:<22}TTM yok: {reason}")
 
 
 def write_csv(path: str, rows: list[dict]) -> None:
@@ -111,8 +132,13 @@ def print_analysis(summary: dict) -> None:
         print("  Risk farkı   : yapılamadı (iki 10-K'nın Item 1A bölümü gerekli)")
     score = summary.get("score") or {}
     if score.get("total") is not None:
+        basis = "son on iki ay (TTM)" if score.get("basis") == "ttm" else "yıllık"
         print(f"  Skor         : {score['total']:.1f} / 100 ({score['band']}, "
-              f"dönem sonu {score['as_of_period']}) — derecelendirme değildir")
+              f"dönem sonu {score['as_of_period']}, dayanak {basis}) — derecelendirme değildir")
+        filing = score.get("as_of_filing")
+        if filing:
+            print(f"  Dayandığı başvuru: {filing.get('form')} {filing.get('accession_no')} "
+                  f"({filing.get('filing_date')})")
     else:
         print("  Skor         : hesaplanamadı veya güncellenmedi (uyarılara bakın)")
     for note in summary.get("notes") or []:
@@ -186,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         client = SecClient(
             get_user_agent(),
             limiter=RateLimiter(get_max_rps()),
-            cache=FileCache(get_cache_dir()),
+            cache=FileCache(get_cache_dir(), json_ttl_seconds=get_sec_json_ttl()),
         )
     except ConfigError as e:
         print(f"Yapılandırma hatası: {e}", file=sys.stderr)

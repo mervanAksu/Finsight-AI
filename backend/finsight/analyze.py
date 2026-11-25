@@ -327,6 +327,45 @@ def latest_annual_summaries(sections: Sequence[dict]) -> tuple[dict | None, dict
     return latest, by_code
 
 
+def _filing_brief(filing: dict | None) -> dict | None:
+    if not filing:
+        return None
+    return {"form": filing.get("form"), "accession_no": filing.get("accession_no"),
+            "filing_date": filing.get("filing_date")}
+
+
+def latest_tone_summaries(sections: Sequence[dict]) -> dict:
+    """Skorun metin tonu girdileri (docs/asama4-sozlesme.md §3).
+
+    - MD&A: **en son** analiz edilmiş başvurunun MD&A'sı (10-K Item 7 veya daha yeni 10-Q
+      Part I Item 2). En son başvuruda MD&A yoksa bir öncekine bakılır.
+    - Risk: en son 10-K'nın Item 1A'sı (10-Q'nun Part II Item 1A'sı kullanılmaz).
+
+    sections: ``latest_annual_summaries`` ile aynı biçim. Dönüş: ``{"by_code": {"7": MD&A
+    özeti, "1A": risk özeti}, "mdna_filing", "risk_filing"}`` (compute_text_signals girdisi;
+    MD&A özeti 10-Q'dan gelse de "7" anahtarıyla verilir).
+    """
+    periodic = [s for s in sections
+                if _base_form((s.get("filing") or {}).get("form")) in (ANNUAL_FORM,
+                                                                      QUARTERLY_FORM)]
+    mdna, mdna_filing = None, None
+    for s in sorted(periodic, key=lambda s: _sort_key(s["filing"]), reverse=True):
+        code = "7" if _base_form(s["filing"].get("form")) == ANNUAL_FORM else "2"
+        if s.get("item_code") == code:
+            mdna, mdna_filing = s.get("summary", s), s["filing"]
+            break
+    risk_filing, annual = latest_annual_summaries(sections)
+    by_code: dict[str, dict] = {}
+    if mdna is not None:
+        by_code["7"] = mdna
+    if RISK_CODE in annual:
+        by_code[RISK_CODE] = annual[RISK_CODE]
+    else:
+        risk_filing = None
+    return {"by_code": by_code, "mdna_filing": _filing_brief(mdna_filing),
+            "risk_filing": _filing_brief(risk_filing)}
+
+
 def compute_text_signals(latest_10k_sections_summary, risk_comparison: dict | None) -> dict:
     """Skorun metin sinyalleri (scoring.compute_score girdisi).
 
@@ -346,7 +385,10 @@ def compute_text_signals(latest_10k_sections_summary, risk_comparison: dict | No
 
 
 def score_company(facts: dict[str, list[dict]], text_signals: dict | None,
-                  periods: int = 3) -> tuple[dict, dict]:
-    """``compute_ratios(facts, periods)`` → ``compute_score``; (oranlar, skor) döndürür."""
-    ratios = compute_ratios(facts, periods=periods)
-    return ratios, compute_score(ratios, facts, text_signals or {})
+                  periods: int = 3, dynamic: dict | None = None) -> tuple[dict, dict]:
+    """``compute_ratios(facts, periods, dynamic)`` → ``compute_score``; (oranlar, skor).
+
+    dynamic: xbrl.build_dynamic çıktısı (TTM); verilmezse yalnızca yıllık seri kullanılır.
+    """
+    ratios = compute_ratios(facts, periods=periods, dynamic=dynamic)
+    return ratios, compute_score(ratios, facts, text_signals or {}, dynamic=dynamic)

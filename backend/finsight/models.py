@@ -48,6 +48,9 @@ class Company(Base):
     # Aynı CIK'e bağlı tüm ticker'lar (JSON liste, büyük harf; ör. ["GOOGL", "GOOG"]).
     # ``ticker`` ilk kayıttaki birincil ticker'dır; aramalar bu listeye de bakar.
     tickers: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Aşama 4: son çekimde TTM üretilemeyen kalemlerin nedenleri (JSON sözlük: metric → neden);
+    # /score.basis_notes ve key_metrics.ttm_reason belirli nedeni göstersin diye saklanır.
+    ttm_reasons: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     filings: Mapped[list["Filing"]] = relationship(back_populates="company")
 
@@ -94,6 +97,10 @@ class FinancialFact(Base):
     filed: Mapped[date] = mapped_column(Date)
     # Aşama 3: türetilmiş değerlerde kullanılan etiketler (JSON liste), aksi NULL.
     derived_from: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Aşama 4: "annual" (veya NULL, eski kayıt) = 10-K yıllık değer; "ttm" = son 10-K'dan sonra
+    # 10-Q varsa son on iki ay noktası / 10-Q bilançosu (docs/asama4-sozlesme.md §2). TTM
+    # noktalarında derived_from parça listesidir ([{role, accession_no, tag, ...}]).
+    basis: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 # --------------------------------------------------------------------------- Aşama 3 tabloları
@@ -276,3 +283,19 @@ class IngestionJob(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     # Her ilerleme yazımında güncellenir; uzun süre değişmeyen aktif iş ölü sayılır.
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, default=utcnow)
+
+
+class JobLock(Base):
+    """Şirket başına tek etkin iş kilidi (Aşama 4, güvenlik denetimi SEC-16 madde 3).
+
+    ``key`` birincil anahtardır: aynı şirket için iki süreç (API, ``finsight.refresh`` CLI,
+    otomatik yenileyici) aynı anda iş açmaya çalışırsa yalnızca birinin INSERT'i başarılı olur
+    (veritabanı düzeyinde atomik; SQLite ve PostgreSQL). İş bitince (done/error) satır silinir;
+    işi ölü sayılan kilit ``repository.create_job_if_idle`` tarafından temizlenir.
+    """
+
+    __tablename__ = "job_lock"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)  # "cik:0000789019"/"t:MSFT"
+    job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

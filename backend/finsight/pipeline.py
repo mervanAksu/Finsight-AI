@@ -4,7 +4,7 @@ from datetime import date
 
 from .edgar import older_filing_files, parse_filings, resolve_company
 from .sec_client import SecClient
-from .xbrl import extract_all
+from .xbrl import extract_all, extract_ttm
 
 
 def company_tickers(cik: str, requested: str | None, subs: dict,
@@ -23,16 +23,20 @@ def company_tickers(cik: str, requested: str | None, subs: dict,
 
 
 def collect(client: SecClient, query: str, ticker_map: dict, years: int = 3,
-            today: date | None = None) -> dict:
+            today: date | None = None, *, fresh: bool = False) -> dict:
     """Bir şirketin başvuru listesini ve yıllık finansal kalemlerini toplar.
 
     years: başvuru listesinin kaç takvim yılı geriye gideceği. Finansal kalemler bir yıl fazla
     çekilir (``extract_all(cf, years=years + 1)``): ROA/ROE ortalamaları ve YoY için en eski
     dönemin bir önceki mali yıl sonu da gerekir (financial-analysis §1).
+
+    Aşama 4: ``ttm`` anahtarı ``xbrl.extract_ttm`` çıktısıdır (son 10-K'dan sonra 10-Q varsa
+    TTM noktaları; docs/asama4-sozlesme.md §2). fresh=True: submissions ve companyfacts
+    önbellek okunmadan SEC'ten alınır (yenileme akışı).
     """
     company = resolve_company(query, ticker_map)
     cik = company["cik"]
-    subs = client.submissions(cik)
+    subs = client.submissions(cik, fresh=fresh)
     today = today or date.today()
     since = date(today.year - years, 1, 1)
 
@@ -40,7 +44,10 @@ def collect(client: SecClient, query: str, ticker_map: dict, years: int = 3,
     for name in older_filing_files(subs, since):
         filings += parse_filings(client.submissions_file(name), since=since)
 
-    facts = extract_all(client.companyfacts(cik), years=years + 1)
+    companyfacts = client.companyfacts(cik, fresh=fresh)
+    all_annual = extract_all(companyfacts, years=0)
+    facts = {m: s[-(years + 1):] for m, s in all_annual.items()}  # = extract_all(years+1)
+    ttm = extract_ttm(companyfacts, all_annual)
     primary = company["ticker"] or (subs.get("tickers") or [None])[0]
     return {
         "company": {
@@ -55,4 +62,5 @@ def collect(client: SecClient, query: str, ticker_map: dict, years: int = 3,
         },
         "filings": filings,
         "facts": facts,
+        "ttm": ttm,
     }

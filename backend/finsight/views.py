@@ -31,9 +31,9 @@ from . import DISCLAIMER
 from .analyze import latest_annual_summaries
 from .edgar import item_label, pad_cik, split_items
 from .ratios import RATIO_DEFS
-from .scoring import WEIGHTS_VERSION
+from .scoring import METHOD_VERSION, WEIGHTS_VERSION
 from .sentiment import summarize
-from .xbrl import DERIVED_TAG, METRIC_LABELS, METRICS, yoy_ratio
+from .xbrl import BASIS_ANNUAL, BASIS_TTM, DERIVED_TAG, METRIC_LABELS, METRICS, yoy_ratio
 
 KEY_METRICS = ("revenue", "net_income", "operating_cash_flow", "total_assets",
                "total_liabilities", "stockholders_equity")
@@ -136,21 +136,43 @@ def filing_folder_url(cik, accession_no: str | None) -> str | None:
     return f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_no.replace('-', '')}/"
 
 
+def _part_view(part: dict, cik=None) -> dict:
+    return {"role": part.get("role"), "metric": part.get("metric"),
+            "xbrl_tag": f"us-gaap:{part.get('tag')}", "form": part.get("form"),
+            "accession_no": part.get("accession_no"),
+            "period_start": _iso(part.get("period_start")),
+            "period_end": _iso(part.get("period_end")), "value": _num(part.get("value")),
+            "url": filing_folder_url(cik, part.get("accession_no"))}
+
+
 def source_view(item: dict, cik=None) -> dict:
     """Bir FactItem'in kaynağı (NFR-06). Türetilmiş değerde xbrl_tag "derived".
 
     url: başvuru klasörü (cik verilmişse; sözleşme v1.1).
+    v1.4: TTM noktasında ``basis: "ttm"`` ve ``parts`` (hesaba giren her parça: role annual /
+    ytd_current / ytd_prior, etiket, accession, dönem, değer); ``derived_from`` yine etiket
+    listesidir (türetilmiş TTM'de kullanılan etiketler).
     """
     tag = item.get("tag")
     derived = tag == DERIVED_TAG
-    return {
+    basis = item.get("basis") or BASIS_ANNUAL
+    raw = list(item.get("derived_from") or [])
+    parts = [p for p in raw if isinstance(p, dict)]
+    tags = [p for p in raw if not isinstance(p, dict)]
+    if parts and derived:
+        tags = sorted({str(p["tag"]) for p in parts if p.get("tag")})
+    out = {
         "xbrl_tag": DERIVED_TAG if derived else f"us-gaap:{tag}",
         "form": item.get("form"),
         "accession_no": item.get("accession_no"),
         "filed": _iso(item.get("filed")),
-        "derived_from": list(item.get("derived_from") or []) if derived else None,
+        "derived_from": tags if derived else None,
         "url": filing_folder_url(cik, item.get("accession_no")),
     }
+    if basis == BASIS_TTM:
+        out["basis"] = BASIS_TTM
+        out["parts"] = [_part_view(p, cik) for p in parts]
+    return out
 
 
 # --------------------------------------------------------------------------- finansal
@@ -174,31 +196,48 @@ def _fact_values(series: Sequence[dict], cik=None) -> list[dict]:
     } for item, change in zip(ordered, changes)]
 
 
-def facts_view(company: dict, facts: dict[str, list[dict]], metric: str | None = None) -> dict:
-    """GET /facts: kalemler METRICS sırasıyla, değerler eskiden yeniye, yoy ham oran."""
+def facts_view(company: dict, facts: dict[str, list[dict]], metric: str | None = None,
+               dynamic: dict | None = None) -> dict:
+    """GET /facts: kalemler METRICS sırasıyla, değerler eskiden yeniye, yoy ham oran.
+
+    v1.4: dynamic (xbrl.build_dynamic) verilirse her kalemde ``latest``: TTM (süreli) veya
+    E_Q 10-Q bilanço (anlık) noktası — {period_start, period_end, value, yoy, source, basis};
+    TTM yoksa None. ``values`` yalnızca yıllık seri olarak kalır.
+    """
     keys = [metric] if metric else list(METRICS)
     metrics = []
     for key in keys:
         if key not in METRICS:
             continue
-        metrics.append({
+        entry = {
             "metric": key,
             "label": METRIC_LABELS.get(key, key),
             "kind": "instant" if METRICS[key][1] else "duration",
             "values": _fact_values(facts.get(key) or [], company.get("cik")),
-        })
+        }
+        if dynamic is not None:
+            ttm = _ttm_metric(dynamic, key, company.get("cik"))
+            entry["latest"] = {**ttm, "basis": BASIS_TTM} if ttm is not None else None
+        metrics.append(entry)
     return json_safe({"company": company_view(company), "metrics": metrics,
                       "disclaimer": DISCLAIMER})
 
 
 def ratios_view(company: dict, ratios: dict) -> dict:
-    """GET /ratios: compute_ratios çıktısı + company + disclaimer."""
-    return json_safe({
+    """GET /ratios: compute_ratios çıktısı + company + disclaimer.
+
+    v1.4: compute_ratios ``dynamic`` ile çağrıldıysa ``period_info`` ([{period_end, basis,
+    label}]; TTM dönemi etiketi "TTM 2026-09-30"), oranlarda ``basis`` ve değerlerde ``basis``.
+    """
+    out = {
         "company": company_view(company),
         "periods": [_iso(p) for p in ratios.get("periods") or []],
         "ratios": ratios.get("ratios") or [],
         "disclaimer": DISCLAIMER,
-    })
+    }
+    if "period_info" in ratios:
+        out["period_info"] = ratios["period_info"]
+    return json_safe(out)
 
 
 def score_brief(score: dict | None) -> dict | None:
@@ -213,6 +252,8 @@ def score_view(score: dict | None) -> dict:
         return {"total": None, "band": None, "as_of_period": None,
                 "weights_version": WEIGHTS_VERSION, "components": [],
                 "missing_components": [], "explanation": None,
+                "basis": None, "as_of_filing": None, "data_through": None,
+                "method_version": METHOD_VERSION, "basis_notes": [],
                 "disclaimer": DISCLAIMER}
     out = {
         "total": score.get("total"),
@@ -222,13 +263,52 @@ def score_view(score: dict | None) -> dict:
         "components": score.get("components") or [],
         "missing_components": score.get("missing_components") or [],
         "explanation": score.get("explanation"),
+        **score_basis(score),
         "disclaimer": DISCLAIMER,
     }
     return json_safe(out)
 
 
-def key_metrics(facts: dict[str, list[dict]], cik=None) -> list[dict]:
-    """Genel bakıştaki ana kalemler (sözleşmedeki sıra), son dönem değeri ve YoY."""
+def score_basis(score: dict) -> dict:
+    """v1.4 skor dayanağı alanları. v1 (Aşama 4 öncesi) kayıtlı skorlarda method_version
+    "v1-2026-11" ve basis "annual" sayılır (o sürüm yalnızca yıllık veriyle çalışıyordu)."""
+    filing = score.get("as_of_filing")
+    return {
+        "basis": score.get("basis") or BASIS_ANNUAL,
+        "as_of_filing": ({"form": filing.get("form"), "accession_no": filing.get("accession_no"),
+                          "filing_date": _iso(filing.get("filing_date"))} if filing else None),
+        "data_through": _iso(score.get("data_through") or score.get("as_of_period")),
+        "method_version": score.get("method_version") or WEIGHTS_VERSION,
+        "basis_notes": list(score.get("basis_notes") or []),
+    }
+
+
+def _ttm_metric(dynamic: dict | None, key: str, cik=None) -> dict | None:
+    """Kalemin TTM (veya 10-Q bilanço) noktası: {value, period_start, period_end, yoy,
+    source}; yoy önceki TTM'ye (anlık kalemde E_Q − 1 yıl bilançosuna) göre ham oran."""
+    if not dynamic or dynamic.get("basis") != BASIS_TTM:
+        return None
+    item = (dynamic.get("latest") or {}).get(key)
+    if item is None or (item.get("basis") or BASIS_ANNUAL) != BASIS_TTM \
+            or _num(item.get("value")) is None:
+        return None
+    prior = (dynamic.get("prior") or {}).get(key)
+    yoy = None
+    if prior is not None and (prior.get("basis") or BASIS_ANNUAL) == BASIS_TTM:
+        yoy = yoy_ratio([prior, item])[1]
+    return {"value": _num(item.get("value")), "period_start": _iso(item.get("period_start")),
+            "period_end": _iso(item["period_end"]), "yoy": _num(yoy),
+            "source": source_view(item, cik)}
+
+
+def key_metrics(facts: dict[str, list[dict]], cik=None,
+                dynamic: dict | None = None) -> list[dict]:
+    """Genel bakıştaki ana kalemler (sözleşmedeki sıra), son YILLIK dönem değeri ve YoY.
+
+    v1.4: ``basis`` ("ttm" | "annual") ve ``ttm`` (son 10-K'dan sonra 10-Q varsa TTM / 10-Q
+    bilanço noktası, yoksa None). Mevcut value/period_end/yoy alanlarının anlamı değişmez
+    (son yıllık değer).
+    """
     out = []
     for key in KEY_METRICS:
         series = _valued(facts.get(key) or [])
@@ -243,6 +323,12 @@ def key_metrics(facts: dict[str, list[dict]], cik=None) -> list[dict]:
                 "source": source_view(latest, cik),
                 "reason": None,
             })
+        if dynamic is not None:
+            ttm = _ttm_metric(dynamic, key, cik)
+            entry["ttm"] = ttm
+            entry["basis"] = BASIS_TTM if ttm is not None else BASIS_ANNUAL
+            if ttm is None and dynamic.get("basis") == BASIS_TTM:
+                entry["ttm_reason"] = (dynamic.get("reasons") or {}).get(key)
         out.append(entry)
     return out
 
@@ -349,22 +435,31 @@ def risk_view(risk: dict | None) -> dict:
 
 def overview_view(company: dict, facts: dict[str, list[dict]], score: dict | None,
                   filings: Sequence[dict], sentiment: Sequence[dict],
-                  risk: dict | None, analyzed: bool | None = None) -> dict:
+                  risk: dict | None, analyzed: bool | None = None, *,
+                  dynamic: dict | None = None,
+                  latest_filing: dict | None = None) -> dict:
     """GET /overview. `filings` yeniden eskiye sıralı olmalıdır (ilk 5'i gösterilir).
 
     analyzed: metin analizi yapılmış mı (verilmezse duygu bölümü varlığından çıkarılır).
+    v1.4: dynamic (xbrl.build_dynamic) verilirse key_metrics'e basis/ttm eklenir;
+    ``latest_filing`` en son analiz edilen başvurudur (verilmezse `filings` içinde analiz
+    edilmiş ilk başvuru); score'a basis / as_of_filing / data_through / method_version.
     """
     if analyzed is None:
         analyzed = bool(sentiment) or any(f.get("analyzed") for f in filings)
     score_part = None
     if score:
         score_part = {"total": _num(score.get("total")), "band": score.get("band"),
-                      "as_of_period": _iso(score.get("as_of_period"))}
+                      "as_of_period": _iso(score.get("as_of_period")),
+                      **{k: v for k, v in score_basis(score).items() if k != "basis_notes"}}
+    if latest_filing is None:
+        latest_filing = next((f for f in filings if f.get("analyzed")), None)
     return json_safe({
         "company": company_view(company),
         "analyzed": bool(analyzed),
         "score": score_part,
-        "key_metrics": key_metrics(facts, company.get("cik")),
+        "key_metrics": key_metrics(facts, company.get("cik"), dynamic),
+        "latest_filing": filing_ref(latest_filing),
         "latest_filings": [filing_ref(f) for f in list(filings)[:LATEST_FILINGS]],
         "sentiment_summary": sentiment_summary_view(sentiment),
         "risk_summary": risk_counts(risk),
@@ -424,9 +519,13 @@ def compare_view(entries: Sequence[dict]) -> dict:
     for e in entries:
         period_end, values = _latest_ratio_values(e.get("ratios") or {})
         company = e["company"]
+        info = (e.get("ratios") or {}).get("period_info") or []
         companies.append({"ticker": company.get("ticker"), "name": company.get("name"),
                           "period_end": period_end, "score": score_brief(e.get("score")),
-                          "ratios": values})
+                          "ratios": values,
+                          # v1.4: son sütunun dayanağı (TTM / yıllık) ve dönemi
+                          "basis": info[-1]["basis"] if info else BASIS_ANNUAL,
+                          "as_of_period": period_end})
     meta = [{k: d[k] for k in ("key", "label", "unit", "higher_is_better")} for d in RATIO_DEFS]
     return json_safe({"ratio_meta": meta, "companies": companies, "disclaimer": DISCLAIMER})
 
@@ -501,3 +600,18 @@ def export_csv(rows: Sequence[dict]) -> str:
     for row in rows:
         writer.writerow([_csv_cell(row.get(col)) for col in EXPORT_COLUMNS])
     return "\ufeff" + buf.getvalue()  # UTF-8 BOM (U+FEFF)
+
+
+# --------------------------------------------------------------------------- tazelik (v1.4)
+
+
+def freshness_view(freshness: dict) -> dict:
+    """GET /freshness: refresh.compute_freshness çıktısı + disclaimer (HTTP 200; SEC'e
+    ulaşılamazsa stale None ve Türkçe error)."""
+    keys = ("checked_at", "sec_latest", "analyzed_latest", "new_filings", "stale", "error",
+            "xbrl_pending", "xbrl_note")
+    out = {k: freshness.get(k) for k in keys}
+    out["new_filings"] = list(out["new_filings"] or [])
+    out["xbrl_pending"] = bool(out["xbrl_pending"])
+    out["disclaimer"] = DISCLAIMER
+    return json_safe(out)

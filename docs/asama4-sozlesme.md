@@ -86,8 +86,22 @@ Yıllık noktalar `basis: "annual"` taşır (alan yoksa annual sayılır). Grafi
   edilir) çağırır.
 - `python -m finsight.refresh [--all | TICKER ...]`: kayıtlı şirketlerden yalnızca eskimiş olanları
   günceller (Windows Görev Zamanlayıcı ile periyodik çalıştırılabilir).
+  CLI başlarken kullandığı veritabanını (parola gizli) ve SEC önbellek klasörünü yazdırır.
+  Varsayılan `DATABASE_URL=sqlite:///finsight.db` ve `SEC_CACHE_DIR=.sec_cache` **göreli**
+  yollardır: Görev Zamanlayıcı'da eylemin "Başlangıç konumu" (Start in) `backend\` klasörü
+  olmalı ya da `.env`'de `DATABASE_URL` / `SEC_CACHE_DIR` mutlak yol verilmelidir; aksi halde
+  CLI API'nin kullandığından farklı, boş bir veritabanına bakar. Yenileme işi hata ile biterse
+  çıkış kodu 1'dir.
+- `xbrl_pending` (ek, inceleme kararı): en son kayıtlı 10-Q'nun XBRL değerleri TTM'de yoksa
+  (companyfacts gecikmesi) `true` + `xbrl_note`; `stale`'i etkilemez.
 - İsteğe bağlı: `FINSIGHT_AUTO_REFRESH_MINUTES` (varsayılan kapalı/0) → API süreci içinde arka
   planda eskimiş şirketleri sırayla günceller (tek iş parçacığı, mevcut iş kilidini kullanır).
+  Uygulama (SEC-16 + inceleme): yenileyicinin kendi tazelik bütçesi vardır (dakikada 10;
+  kullanıcı `/freshness` bütçesini paylaşmaz), şirketler 6 sn arayla kontrol edilir, bütçe
+  dolunca tur kesilir ve sonraki tur kalınan şirketten sürer; SEC 429/403/5xx'te bekleme
+  2^n katına çıkar (en fazla 24 saat); tek şirketin ardışık hatası yalnızca o şirketi atlatır;
+  `uvicorn --workers N`'de kilit dosyası (`SEC_CACHE_DIR/auto-refresh.lock`) tek sahip sağlar.
+  İş açma veritabanı düzeyinde atomiktir (`job_lock` tablosu).
 
 ## 5. SEC önbellek politikası (NFR-01…03, performans)
 

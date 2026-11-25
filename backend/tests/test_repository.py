@@ -383,7 +383,7 @@ def test_init_db_adds_missing_columns_to_old_sqlite_file(tmp_path, data):
     added = init_db(engine)
     assert set(added) == {"company.sic_description", "company.exchanges",
                           "company.analysis_updated_at", "company.tickers", "filing.analyzed",
-                          "financial_fact.derived_from"}
+                          "financial_fact.derived_from", "financial_fact.basis"}
     insp = inspect(engine)
     assert {"filing_section", "text_chunk", "chunk_embedding", "sentiment_result",
             "risk_comparison", "risk_change", "company_score", "qa_log", "ingestion_job",

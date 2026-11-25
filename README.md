@@ -130,6 +130,11 @@ uvicorn finsight.api:app --reload
   Özetin sonunda adım başına süreler ve duygu analizi hızı (cümle/sn) yazılır; bkz.
   [Performans](#performans).
 - Şirketler arayüzden de eklenebilir ("Analiz et" düğmesi → arka plan işi).
+- Yeni rapor kontrolü ve artımlı güncelleme: `python -m finsight.refresh --all`
+  (`--dry-run` yalnızca listeler). Windows Görev Zamanlayıcı ile çalıştırırken eylemin
+  **Başlangıç konumu** `backend\` klasörü olmalı veya `.env`'de `DATABASE_URL` ve
+  `SEC_CACHE_DIR` mutlak yol verilmelidir (varsayılanlar göreli yoldur); CLI başlarken
+  kullandığı veritabanını ve önbellek klasörünü yazdırır. Ayrıntı: `docs/asama4-sozlesme.md` §4.
 
 **Arayüz:** `cd frontend && npm install && npm run build` ile `frontend/dist` üretildiyse
 arayüz API ile aynı adresten sunulur: <http://127.0.0.1:8000>. Geliştirme için `npm run dev`

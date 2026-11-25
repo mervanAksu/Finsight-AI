@@ -17,6 +17,8 @@ Girdi: xbrl.extract_all çıktısı. Ortalamaya yetmesi için entegrasyon katman
 
 from datetime import date
 
+from .xbrl import BASIS_ANNUAL, BASIS_TTM
+
 NOTE_PERIOD_END = "ortalama yerine dönem sonu değeri"
 NOTE_PRIOR_EQUITY = "önceki dönem özkaynağı negatif; ortalama yerine dönem sonu değeri"
 MATCH_TOLERANCE_DAYS = 7  # akış/bilanço kalemi eşleştirme toleransı
@@ -27,6 +29,8 @@ REASON_EQUITY = "özkaynak negatif veya sıfır; oran anlamlı değil"
 REASON_NET_INCOME = "net kâr sıfır veya negatif; oran anlamlı değil"
 # Gelir 0 ise genel kural ("payda sıfır") geçerlidir; negatif gelir için bu metin.
 REASON_REVENUE = "gelir negatif; marj oranı anlamlı değil"
+# TTM sütununda TTM'si hesaplanamayıp yıllık değere düşen girdiler (sözleşme v1.4).
+NOTE_MIXED_BASIS = "TTM yok, yıllık değer kullanıldı: "
 
 RATIO_DEFS: list[dict] = [
     {"key": "gross_margin", "label": "Brüt kâr marjı",
@@ -163,16 +167,82 @@ def _compute_one(key: str, end: date, idx: dict[str, dict[date, dict]]) -> dict:
     return _entry(end, value=numerator / denominator, note=note, inputs=inputs)
 
 
-def compute_ratios(facts: dict[str, list[dict]], periods: int = 3) -> dict:
+def _ttm_index(idx: dict[str, dict[date, dict]], dynamic: dict) -> dict[str, dict[date, dict]]:
+    """TTM sütunu için dizin: yıllık noktalar + önceki (E_Q − 1 yıl) + E_Q noktası.
+
+    E_Q noktası TTM'si olmayan kalemde yıllık değerdir (build_dynamic); E_Q anahtarına konur
+    ama kendi period_end'ini korur, böylece ortalama için önceki değer yıllık seriden bulunur.
+    """
+    e_q = dynamic["as_of_period"]
+    out = {m: dict(by_end) for m, by_end in idx.items()}
+    for metric, item in (dynamic.get("prior") or {}).items():
+        if item is not None and item.get("basis") == BASIS_TTM:
+            out.setdefault(metric, {})[item["period_end"]] = item
+    for metric, item in (dynamic.get("latest") or {}).items():
+        if item is not None:
+            out.setdefault(metric, {})[e_q] = item
+    return out
+
+
+def _mixed_basis_note(entry: dict, key: str, dynamic: dict) -> None:
+    """TTM sütununda yıllık değere düşen girdi varsa note'a yazılır (karışık dayanak)."""
+    num_metrics, den_metric, _, _ = _SPECS[key]
+    latest = dynamic.get("latest") or {}
+    annual = [m for m in [*num_metrics, den_metric]
+              if latest.get(m) is not None and latest[m].get("basis") != BASIS_TTM]
+    if annual:
+        extra = NOTE_MIXED_BASIS + ", ".join(annual)
+        entry["note"] = f"{entry['note']}; {extra}" if entry["note"] else extra
+
+
+def period_label(end: date, basis: str) -> str:
+    """Dönem etiketi: yıllık "2026-06-30", TTM "TTM 2026-09-30" (sözleşme v1.4)."""
+    return f"TTM {end.isoformat()}" if basis == BASIS_TTM else end.isoformat()
+
+
+def compute_ratios(facts: dict[str, list[dict]], periods: int = 3,
+                   dynamic: dict | None = None) -> dict:
     """RATIO_DEFS'teki 10 oranı son `periods` mali yıl için hesaplar.
 
     Çıktı: {"periods": [date], "ratios": [{key, label, formula, unit, higher_is_better,
     "values": [{period_end, value, status, reason, note, inputs}]}]} — API /ratios şeklinin
     company/disclaimer hariç hali. `values` her dönem için bir öğe, `periods` sırasıyla.
+
+    dynamic (xbrl.build_dynamic çıktısı, v1.4) verilirse: değerlere ``basis`` eklenir, çıktıya
+    ``period_info`` ([{period_end, basis, label}]) ve her orana en son noktanın ``basis``'i
+    eklenir. ``basis == "ttm"`` ise dönem listesinin sonuna E_Q (TTM) dönemi eklenir; o
+    sütunda süreli kalemler TTM, anlık kalemler E_Q bilançosu, ortalamalarda önceki değer
+    E_Q − 1 yıl bilançosudur (docs/asama4-sozlesme.md §2).
     """
     idx = _index(facts)
     ends = select_periods(facts, periods)
+    ttm_end = None
+    if dynamic is not None and dynamic.get("basis") == BASIS_TTM \
+            and dynamic.get("as_of_period") is not None \
+            and (not ends or dynamic["as_of_period"] > ends[-1]):
+        ttm_end = dynamic["as_of_period"]
+    ttm_idx = _ttm_index(idx, dynamic) if (ttm_end is not None and dynamic) else None
+
     ratios = []
     for d in RATIO_DEFS:
-        ratios.append({**d, "values": [_compute_one(d["key"], end, idx) for end in ends]})
-    return {"periods": ends, "ratios": ratios}
+        values = [_compute_one(d["key"], end, idx) for end in ends]
+        if dynamic is not None:
+            for v in values:
+                v["basis"] = BASIS_ANNUAL
+        if ttm_idx is not None and ttm_end is not None and dynamic is not None:
+            entry = _compute_one(d["key"], ttm_end, ttm_idx)
+            entry["basis"] = BASIS_TTM
+            _mixed_basis_note(entry, d["key"], dynamic)
+            values.append(entry)
+        out = {**d, "values": values}
+        if dynamic is not None:
+            out["basis"] = values[-1]["basis"] if values else BASIS_ANNUAL
+        ratios.append(out)
+    all_ends = ends + ([ttm_end] if ttm_end is not None else [])
+    result: dict = {"periods": all_ends, "ratios": ratios}
+    if dynamic is not None:
+        result["period_info"] = [
+            {"period_end": e, "basis": BASIS_TTM if e == ttm_end else BASIS_ANNUAL,
+             "label": period_label(e, BASIS_TTM if e == ttm_end else BASIS_ANNUAL)}
+            for e in all_ends]
+    return result

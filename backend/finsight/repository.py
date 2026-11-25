@@ -12,17 +12,19 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .edgar import document_url, pad_cik
 from .embeddings import from_bytes, to_bytes
 from .models import (ChunkEmbedding, Company, CompanyScore, Filing, FilingDocument,
-                     FilingSection, FinancialFact, IngestionJob, QALog, RiskChange,
+                     FilingSection, FinancialFact, IngestionJob, JobLock, QALog, RiskChange,
                      RiskComparison, SentimentResult, TextChunk, utcnow)
 from .scoring import WEIGHTS_VERSION
 from .sentiment import LABELS, normalize_sentence
 from .text_extract import SECTION_TITLES
 from .views import json_safe
+from .xbrl import BASIS_ANNUAL, BASIS_TTM, build_dynamic
 
 ACTIVE_JOB_STATUSES = ("queued", "running")
 # Bu süre boyunca ilerleme yazmayan "çalışıyor" işi ölü sayılır (süreç yeniden başlatıldı vb.).
@@ -234,8 +236,44 @@ def save_collected(session: Session, data: dict) -> Company:
                 setattr(row, key, item[key])
             derived = item.get("derived_from")
             row.derived_from = dumps(list(derived)) if derived else None
+            row.basis = BASIS_ANNUAL
+    if "ttm" in data:
+        company.ttm_reasons = dumps((data.get("ttm") or {}).get("reasons") or {})
+        annual_keys = {(m, i["period_end"]) for m, series in (data.get("facts") or {}).items()
+                       for i in series}
+        _save_ttm_points(session, company.id, (data.get("ttm") or {}).get("facts") or {},
+                         facts_by_key, annual_keys)
     session.commit()
     return company
+
+
+def _save_ttm_points(session: Session, company_id: int, ttm_facts: dict[str, list[dict]],
+                     facts_by_key: dict, annual_keys: set) -> None:
+    """TTM noktalarını (basis="ttm") yazar; artık üretilmeyen eski TTM kayıtlarını siler
+    (ör. yeni 10-K geldiğinde önceki 10-Q'ya dayanan TTM). Aynı (kalem, dönem sonu) için yıllık
+    kayıt varsa yıllık korunur, TTM noktası yazılmaz (uq_fact_period)."""
+    wanted = {(m, p["period_end"]) for m, points in ttm_facts.items() for p in points}
+    for key, row in list(facts_by_key.items()):
+        if row.basis == BASIS_TTM and key not in wanted:
+            session.delete(row)
+            del facts_by_key[key]
+    for metric, points in ttm_facts.items():
+        for item in points:
+            key = (metric, item["period_end"])
+            row = facts_by_key.get(key)
+            if key in annual_keys or (row is not None and row.basis != BASIS_TTM):
+                continue
+            if row is None:
+                row = FinancialFact(company_id=company_id, metric=metric,
+                                    period_end=item["period_end"])
+                session.add(row)
+                facts_by_key[key] = row
+            for field in ("tag", "unit", "value", "period_start", "fy", "fp", "form",
+                          "accession_no", "filed"):
+                setattr(row, field, item[field])
+            derived = item.get("derived_from")
+            row.derived_from = dumps(list(derived)) if derived else None
+            row.basis = BASIS_TTM
 
 
 # --------------------------------------------------------------------------- kalemler, başvurular
@@ -256,19 +294,56 @@ def fact_dict(row: FinancialFact) -> dict:
         "fy": row.fy,
         "fp": row.fp,
         "derived_from": loads(row.derived_from, None),
+        "basis": row.basis or BASIS_ANNUAL,
     }
+
+
+def _annual_filter():
+    return or_(FinancialFact.basis.is_(None), FinancialFact.basis == BASIS_ANNUAL)
 
 
 def load_facts(session: Session, company_id: int,
                metric: str | None = None) -> dict[str, list[dict]]:
-    """dict[metric, list[FactItem]] — her seri period_end'e göre eskiden yeniye."""
-    stmt = select(FinancialFact).where(FinancialFact.company_id == company_id)
+    """dict[metric, list[FactItem]] — yalnızca YILLIK noktalar (basis "annual" veya eski
+    kayıtlarda NULL); her seri period_end'e göre eskiden yeniye. TTM noktaları için
+    ``load_ttm_facts`` / ``load_dynamic``."""
+    stmt = select(FinancialFact).where(FinancialFact.company_id == company_id,
+                                       _annual_filter())
     if metric:
         stmt = stmt.where(FinancialFact.metric == metric)
     out: dict[str, list[dict]] = {}
     for row in session.scalars(stmt.order_by(FinancialFact.metric, FinancialFact.period_end)):
         out.setdefault(row.metric, []).append(fact_dict(row))
     return out
+
+
+def load_ttm_facts(session: Session, company_id: int) -> dict[str, list[dict]]:
+    """basis="ttm" noktaları (son TTM ve önceki TTM / bilanço), kalem başına eskiden yeniye."""
+    stmt = (select(FinancialFact)
+            .where(FinancialFact.company_id == company_id, FinancialFact.basis == BASIS_TTM)
+            .order_by(FinancialFact.metric, FinancialFact.period_end))
+    out: dict[str, list[dict]] = {}
+    for row in session.scalars(stmt):
+        out.setdefault(row.metric, []).append(fact_dict(row))
+    return out
+
+
+def load_dynamic(session: Session, company_id: int,
+                 facts: dict[str, list[dict]] | None = None) -> dict:
+    """xbrl.build_dynamic(yıllık, TTM): skor, /ratios ve /overview'ın son dönem görünümü."""
+    annual = facts if facts is not None else load_facts(session, company_id)
+    company = session.get(Company, company_id)
+    reasons = loads(company.ttm_reasons, {}) if company is not None else {}
+    return build_dynamic(annual, load_ttm_facts(session, company_id), reasons or {})
+
+
+def latest_periodic_filings(session: Session, company_id: int) -> list[dict]:
+    """Şirketin 10-K / 10-Q (ve /A) başvuruları, yeniden eskiye (tazelik kontrolü)."""
+    stmt = (select(Filing)
+            .where(Filing.company_id == company_id,
+                   Filing.form.in_(["10-K", "10-K/A", "10-Q", "10-Q/A"]))
+            .order_by(Filing.filing_date.desc(), Filing.accession_no.desc()))
+    return [filing_dict(r) for r in session.scalars(stmt)]
 
 
 def filing_dict(row: Filing) -> dict:
@@ -298,7 +373,16 @@ def load_filings(session: Session, company_id: int, form: str | None = None,
     stmt = stmt.order_by(Filing.filing_date.desc(), Filing.accession_no.desc())
     if limit:
         stmt = stmt.limit(limit)
-    return [filing_dict(r) for r in session.scalars(stmt)]
+    # in_ttm: başvurunun XBRL değerleri TTM noktalarında görünüyor mu (tazelik: xbrl_pending)
+    ttm_accessions = set(session.scalars(
+        select(FinancialFact.accession_no).where(FinancialFact.company_id == company_id,
+                                                 FinancialFact.basis == BASIS_TTM)).all())
+    out = []
+    for r in session.scalars(stmt):
+        d = filing_dict(r)
+        d["in_ttm"] = r.accession_no in ttm_accessions
+        out.append(d)
+    return out
 
 
 def get_filing(session: Session, filing_id: int | None) -> dict | None:
@@ -686,6 +770,8 @@ def update_job(session: Session, job_id: int, **fields) -> dict | None:
     if row.status == "running" and row.started_at is None:
         row.started_at = utcnow()
     row.updated_at = utcnow()  # canlılık işareti (bkz. find_running_job)
+    if row.status not in ACTIVE_JOB_STATUSES:
+        _release_job_lock(session, row.id)
     session.commit()
     return job_dict(row)
 
@@ -744,8 +830,90 @@ def find_running_job(session: Session, ticker: str, now: datetime | None = None,
             row.status = "error"
             row.error = STALE_JOB_ERROR
             row.finished_at = now
+            _release_job_lock(session, row.id)
             session.commit()
             continue
         if found is None:
             found = job_dict(row)
     return found
+
+
+# --------------------------------------------------------------------------- atomik iş açma
+
+
+class JobBusyError(ValueError):
+    """Aynı şirket için başka bir süreç iş açıyor (API 409; mesaj kullanıcıya gösterilebilir)."""
+
+
+def _release_job_lock(session: Session, job_id: int) -> None:
+    """İşe ait şirket kilidini siler (commit etmez)."""
+    session.execute(delete(JobLock).where(JobLock.job_id == job_id),
+                    execution_options={"synchronize_session": False})
+
+
+def job_lock_key(session: Session, ticker: str, aliases: Iterable[str] = (),
+                 cik: str | None = None) -> str:
+    """Şirket kilidi anahtarı: CIK biliniyorsa (parametre, ticker haritası veya kayıtlı şirket)
+    "cik:<10 hane>" (GOOG/GOOGL aynı kilit); değilse "t:<TICKER>"."""
+    if cik:
+        try:
+            return f"cik:{pad_cik(cik)}"
+        except ValueError:
+            pass
+    digits = ticker.strip().upper().removeprefix("CIK")
+    if digits.isdigit() and len(digits) <= 10:  # ticker yerine CIK verilmiş
+        return f"cik:{pad_cik(digits)}"
+    for t in job_tickers(session, ticker, aliases):
+        row = get_company_row(session, t)
+        if row is not None:
+            return f"cik:{row.cik}"
+    return f"t:{ticker.strip().upper()}"[:32]
+
+
+def create_job_if_idle(session: Session, ticker: str, analyze: bool = True, *,
+                       aliases: Iterable[str] = (), now: datetime | None = None,
+                       cik: str | None = None) -> tuple[dict, bool]:
+    """Aynı şirket için etkin iş yoksa yeni iş açar; varsa onu döndürür → (iş, yeni_mi).
+
+    Süreçler arası atomiktir (SEC-16 madde 3): ``job_lock`` birincil anahtarına INSERT yalnızca
+    bir süreçte başarılı olur. API, ``finsight.refresh`` CLI ve otomatik yenileyici bu yolu
+    kullanır. Ölü (STALE_JOB_AFTER) veya bitmiş işe ait artık kilit temizlenip bir kez yeniden
+    denenir.
+    """
+    key = job_lock_key(session, ticker, aliases, cik)
+    for _attempt in range(2):
+        running = find_running_job(session, ticker, now, aliases=aliases)
+        if running is not None:
+            return running, False
+        stamp = utcnow()
+        lock = JobLock(key=key, job_id=None, created_at=stamp)
+        session.add(lock)
+        try:
+            session.flush()
+        except IntegrityError:
+            session.rollback()
+            existing = session.get(JobLock, key)
+            job = session.get(IngestionJob, existing.job_id) \
+                if existing is not None and existing.job_id is not None else None
+            if job is not None and job.status in ACTIVE_JOB_STATUSES:
+                return job_dict(job), False
+            fresh_lock = existing is not None and existing.job_id is None and \
+                (now or utcnow()) - (existing.created_at or stamp) < timedelta(minutes=1)
+            if fresh_lock:
+                # Başka süreç kilidi aldı ve işi oluşturmak üzere: onun işini bekleme yok,
+                # "çalışan iş" olarak bulunamadıysa yeni iş açılmaz.
+                raise JobBusyError("Bu şirket için başka bir süreç iş başlatıyor; "
+                                   "biraz sonra tekrar deneyin.") from None
+            if existing is not None:  # artık kilit (iş bitmiş / süreç ölmüş)
+                session.delete(existing)
+                session.commit()
+            continue
+        job = IngestionJob(ticker=ticker.upper(), status="queued", step="Sırada",
+                           progress=0.0, request_count=0, analyze=analyze, created_at=stamp,
+                           updated_at=stamp)
+        session.add(job)
+        session.flush()
+        lock.job_id = job.id
+        session.commit()
+        return job_dict(job), True
+    raise JobBusyError("İş kilidi alınamadı; biraz sonra tekrar deneyin.")

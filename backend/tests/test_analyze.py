@@ -253,3 +253,31 @@ def test_score_company_uses_last_three_periods():
     # 2023 ROA ortalaması için 2022 bilanço değeri kullanılır (bir yıl fazla çekildi)
     roa = next(r for r in ratios["ratios"] if r["key"] == "roa")
     assert roa["values"][0]["note"] is None
+
+
+# --------------------------------------------------------------------------- Aşama 4 (§3)
+
+
+def test_latest_tone_summaries_mdna_from_latest_10q_risk_from_latest_10k():
+    from finsight.analyze import compute_text_signals, latest_tone_summaries
+
+    def sec(acc, form, filed, code, tone):
+        return {"filing": {"accession_no": acc, "form": form, "filing_date": filed},
+                "item_code": code, "summary": {"net_tone": tone}}
+
+    sections = [sec("K1", "10-K", "2025-07-30", "7", 0.1), sec("K1", "10-K", "2025-07-30", "1A", -0.5),
+                sec("K2", "10-K", "2026-07-30", "7", 0.2), sec("K2", "10-K", "2026-07-30", "1A", -0.4),
+                sec("Q1", "10-Q", "2026-10-28", "2", 0.05),
+                sec("Q1", "10-Q", "2026-10-28", "1A", -0.9)]  # 10-Q riski kullanılmaz
+    tone = latest_tone_summaries(sections)
+    assert tone["mdna_filing"]["accession_no"] == "Q1"
+    assert tone["risk_filing"]["accession_no"] == "K2"
+    signals = compute_text_signals(tone["by_code"], None)
+    assert signals["mdna_net_tone"] == 0.05 and signals["risk_net_tone"] == -0.4
+
+    # 10-Q'da MD&A yoksa en son 10-K'nın Item 7'si
+    no_q_mdna = [s for s in sections if not (s["filing"]["accession_no"] == "Q1"
+                                             and s["item_code"] == "2")]
+    tone2 = latest_tone_summaries(no_q_mdna)
+    assert tone2["mdna_filing"]["accession_no"] == "K2"
+    assert latest_tone_summaries([])["by_code"] == {}

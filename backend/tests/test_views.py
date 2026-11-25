@@ -236,12 +236,15 @@ def test_overview_view_key_metrics_order_latest_values_and_summaries(
     filings = [Q_NEW, K_NEW, K_OLD]
     body = overview_view(COMPANY, facts, score, filings, sentiment_sections, risk)
     strict_json(body)
+    # v1.4: latest_filing (en son analiz edilen başvuru) ve skor dayanağı alanları eklendi
     assert set(body) == {"company", "analyzed", "score", "key_metrics", "latest_filings",
-                         "sentiment_summary", "risk_summary", "analysis_updated_at",
-                         "disclaimer"}
+                         "latest_filing", "sentiment_summary", "risk_summary",
+                         "analysis_updated_at", "disclaimer"}
     assert body["analyzed"] is True
-    assert body["score"] == {"total": score["total"], "band": score["band"],
-                             "as_of_period": "2025-06-30"}
+    assert {k: body["score"][k] for k in ("total", "band", "as_of_period")} == {
+        "total": score["total"], "band": score["band"], "as_of_period": "2025-06-30"}
+    assert body["score"]["basis"] == "annual"
+    assert body["score"]["data_through"] == "2025-06-30"
     assert [m["metric"] for m in body["key_metrics"]] == list(KEY_METRICS) == [
         "revenue", "net_income", "operating_cash_flow", "total_assets", "total_liabilities",
         "stockholders_equity"]
@@ -388,7 +391,10 @@ def test_compare_view_shape(ratios, score):
     assert body["ratio_meta"][0] == {"key": "gross_margin", "label": "Brüt kâr marjı",
                                      "unit": "percent", "higher_is_better": True}
     first, second = body["companies"]
-    assert set(first) == {"ticker", "name", "period_end", "score", "ratios"}
+    # v1.4: basis ve as_of_period eklendi
+    assert set(first) == {"ticker", "name", "period_end", "score", "ratios", "basis",
+                          "as_of_period"}
+    assert first["basis"] == "annual" and first["as_of_period"] == first["period_end"]
     assert first["period_end"] == "2025-06-30"
     assert first["score"] == {"total": score["total"], "band": score["band"]}
     assert set(first["ratios"]) == {d["key"] for d in RATIO_DEFS}
@@ -450,3 +456,95 @@ def test_export_missing_values_are_blank_not_zero():
     parsed = list(csv.reader(io.StringIO(export_csv(rows)[1:])))
     ratio_line = next(p for p in parsed[1:] if p[2] == "ratio" and p[9] == "missing")
     assert ratio_line[7] == ""
+
+
+# --------------------------------------------------------------------------- v1.4 (Aşama 4)
+
+
+def _ttm_world():
+    from conftest import load as load_fixture
+
+    from finsight.analyze import score_company
+    from finsight.xbrl import dynamic_from_companyfacts, extract_all
+
+    cf = load_fixture("companyfacts_ttm_example.json")
+    facts = extract_all(cf, years=4)
+    dyn = dynamic_from_companyfacts(cf)
+    ratios, score = score_company(facts, None, dynamic=dyn)
+    return facts, dyn, ratios, score
+
+
+def test_v14_score_view_basis_fields():
+    from finsight.views import score_view
+
+    _, _, _, score = _ttm_world()
+    body = score_view(score)
+    strict_json(body)
+    assert body["basis"] == "ttm" and body["data_through"] == "2026-12-31"
+    assert body["method_version"] == "v2-2026-11-ttm"
+    assert body["as_of_filing"] == {"form": "10-Q/A", "accession_no": "0000000002-27-000007",
+                                    "filing_date": "2027-02-10"}
+    # Aşama 4 öncesi kayıtlı skor: yöntem v1, dayanak yıllık
+    old = score_view({"total": 70.0, "band": "Dengeli", "as_of_period": "2025-06-30",
+                      "weights_version": "v1-2026-11", "components": []})
+    assert old["basis"] == "annual" and old["method_version"] == "v1-2026-11"
+    assert old["data_through"] == "2025-06-30" and old["as_of_filing"] is None
+    assert score_view(None)["basis"] is None
+
+
+def test_v14_ratios_view_period_info():
+    from finsight.views import ratios_view
+
+    _, _, ratios, _ = _ttm_world()
+    body = ratios_view(COMPANY, ratios)
+    strict_json(body)
+    assert body["periods"][-1] == "2026-12-31"
+    assert body["period_info"][-1] == {"period_end": "2026-12-31", "basis": "ttm",
+                                       "label": "TTM 2026-12-31"}
+    assert len(body["periods"]) == len(body["period_info"]) == 4
+
+
+def test_v14_overview_key_metrics_ttm_and_sources():
+    from finsight.views import overview_view
+
+    facts, dyn, _, score = _ttm_world()
+    filings = [{"accession_no": "0000000002-27-000003", "form": "10-Q", "analyzed": True,
+                "filing_date": "2027-01-27", "report_date": "2026-12-31"}]
+    body = overview_view(COMPANY, facts, score, filings, [], None, dynamic=dyn)
+    strict_json(body)
+    rev = body["key_metrics"][0]
+    # Mevcut alanların anlamı değişmez: value = son yıllık değer
+    assert rev["value"] == 1200 and rev["period_end"] == "2026-06-30"
+    assert rev["basis"] == "ttm"
+    assert rev["ttm"]["value"] == 1290 and rev["ttm"]["period_end"] == "2026-12-31"
+    assert rev["ttm"]["yoy"] == pytest.approx(200 / 1090)
+    src = rev["ttm"]["source"]
+    assert src["basis"] == "ttm" and src["xbrl_tag"].startswith("us-gaap:")
+    assert {p["role"] for p in src["parts"]} == {"annual", "ytd_current", "ytd_prior"}
+    assert all(p["url"].startswith("https://www.sec.gov/Archives/") for p in src["parts"])
+    ocf = body["key_metrics"][2]
+    assert ocf["metric"] == "operating_cash_flow" and ocf["ttm"] is None
+    assert ocf["basis"] == "annual" and "yıllık değer kullanıldı" in ocf["ttm_reason"]
+    assert body["latest_filing"]["accession_no"] == "0000000002-27-000003"
+    assert body["score"]["basis"] == "ttm" and body["score"]["data_through"] == "2026-12-31"
+
+
+def test_v14_facts_latest_and_compare_basis():
+    from finsight.views import compare_view, facts_view
+
+    facts, dyn, ratios, score = _ttm_world()
+    body = facts_view(COMPANY, facts, dynamic=dyn)
+    strict_json(body)
+    by = {m["metric"]: m for m in body["metrics"]}
+    rev = by["revenue"]
+    assert rev["latest"]["value"] == 1290 and rev["latest"]["basis"] == "ttm"
+    assert rev["latest"]["period_end"] == "2026-12-31"
+    assert set(rev["latest"]) >= {"period_start", "period_end", "value", "yoy", "source"}
+    assert rev["values"][-1]["period_end"] == "2026-06-30"  # yıllık seri ayrı
+    assert by["total_assets"]["latest"]["value"] == 2100
+    assert by["operating_cash_flow"]["latest"] is None
+    assert "latest" not in facts_view(COMPANY, facts)["metrics"][0]  # dynamic yoksa eski şekil
+
+    cmp_body = compare_view([{"company": COMPANY, "ratios": ratios, "score": score}])
+    c = cmp_body["companies"][0]
+    assert c["basis"] == "ttm" and c["as_of_period"] == c["period_end"] == "2026-12-31"

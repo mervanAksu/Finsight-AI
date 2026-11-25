@@ -117,8 +117,12 @@ def test_full_data_score():
 
 def test_output_shape_and_explanations():
     r = full_result()
+    # v1.4 (docs/asama4-sozlesme.md §3): basis, as_of_filing, data_through, method_version
     assert set(r) == {"total", "band", "as_of_period", "weights_version", "components",
-                      "missing_components", "explanation"}
+                      "missing_components", "explanation", "basis", "as_of_filing",
+                      "data_through", "method_version", "basis_notes"}
+    assert r["basis"] == "annual" and r["method_version"] == "v2-2026-11-ttm"
+    assert r["data_through"] == r["as_of_period"]
     assert [c["key"] for c in r["components"]] == [c["key"] for c in COMPONENTS]
     for c in r["components"]:
         assert {"key", "label", "weight", "score", "available", "indicators",
