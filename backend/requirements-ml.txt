@@ -8,6 +8,17 @@
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 #   pip install -r requirements-ml.txt
 #
+# GPU (isteğe bağlı, docs/performans-asama4.md "CUDA kurulumu"): FINSIGHT_DEVICE=auto
+# (varsayılan) kurulu torch derlemesi GPU'yu destekliyorsa CUDA'yı kendisi seçer. Maxwell /
+# Pascal kartlar (ör. GeForce MX130 / MX330) için PyTorch 2.15+ CUDA wheel'i YOKTUR; son
+# seçenek torch 2.14 + CUDA 12.6 (kontrol edin):
+#   pip uninstall -y torch
+#   pip install "torch==2.14.*" --index-url https://download.pytorch.org/whl/cu126
+#   python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_arch_list())"
+#
+# ONNX Runtime (isteğe bağlı, CPU fp32, FINSIGHT_FINBERT_BACKEND=onnx; önce bench ile ölçün):
+#   pip install "optimum[onnxruntime]"   # paket adı/sürüm uyumunu kontrol edin
+#
 # İlk çalıştırmada modeller Hugging Face'ten indirilir (~440 MB ProsusAI/finbert,
 # ~470 MB paraphrase-multilingual-MiniLM-L12-v2). Çevrimdışı ortamda HF_HOME önbelleğini
 # önceden doldurun veya FINSIGHT_SENTIMENT_MODEL=lexicon / FINSIGHT_EMBEDDER=hashing kullanın.

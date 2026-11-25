@@ -1,19 +1,26 @@
-"""FinBERT CPU hız ve etiket uyumu ölçüm aracı (README "Performans").
+"""FinBERT hız ve etiket uyumu ölçüm aracı (CPU / GPU / ONNX) (README "Performans").
 
 Kullanım:
     python -m finsight.bench_sentiment MSFT                 # veritabanındaki MSFT cümleleri
     python -m finsight.bench_sentiment MSFT --limit 1000 --threads 4
     python -m finsight.bench_sentiment --file cumleler.txt  # satır başına bir cümle
+    python -m finsight.bench_sentiment MSFT --configs bef --reference b   # GPU fp32 / fp16
 
 Karşılaştırılan yapılandırmalar (aynı cümle örneği, aynı yüklenmiş ağırlıklar):
-    a  Eski yöntem: transformers pipeline, metin sırası, batch 16, max_length 512
+    a  Eski yöntem: transformers pipeline, metin sırası, batch 16, max_length 512 (CPU)
     b  Yeni varsayılan: AutoModel + inference_mode, uzunluğa göre sıralı dinamik dolgu, batch 32
-    c  b + int8 dinamik kuantizasyon (FINSIGHT_FINBERT_QUANTIZE=1)
+       (CPU)
+    c  b + int8 dinamik kuantizasyon (FINSIGHT_FINBERT_QUANTIZE=1) — REDDEDİLDİ, yalnızca kayıt
     d  b + max_length 256 (FINSIGHT_FINBERT_MAX_LENGTH=256)
+    e  b, CUDA fp32 (FINSIGHT_DEVICE=cuda) — CUDA yoksa "çalışmadı"
+    f  b, CUDA fp16 (FINSIGHT_DEVICE=cuda FINSIGHT_FP16=1)
+    g  b, ONNX Runtime fp32 CPU (FINSIGHT_FINBERT_BACKEND=onnx; optimum[onnxruntime] gerekir)
 
-Her yapılandırma için cümle/sn, toplam süre, (a)'ya göre hızlanma, (a)'ya göre etiket uyumu (%)
-ve sınıf bazında karışıklık tablosu; ayrıca token uzunluğu dağılımı yazılır. Önce kısa bir
-ısınma (warm-up) çağrısı yapılır, model yükleme süresi ölçüme katılmaz.
+Her yapılandırma için cümle/sn, toplam süre, referansa göre hızlanma ve etiket uyumu (%),
+sınıf bazında karışıklık tablosu; ayrıca token uzunluğu dağılımı yazılır. Referans
+varsayılan olarak (a)'dır (``--reference``); (a) çalıştırılmazsa ilk çalışan yapılandırma.
+Önce kısa bir ısınma (warm-up) çağrısı yapılır, model yükleme / taşıma süresi ölçüme katılmaz.
+GPU yapılandırmaları ağırlıkların ayrı bir kopyasını kullanır (CPU yapılandırmaları etkilenmez).
 
 torch / transformers kurulu değilse anlaşılır bir mesajla 2 koduyla çıkar. Ağ erişimi yalnızca
 modelin ilk indirilmesi içindir (Hugging Face önbelleği); SEC'e istek atılmaz.
@@ -29,13 +36,25 @@ import time
 from collections.abc import Sequence
 
 from . import DISCLAIMER
-from .sentiment import FINBERT_NAME, LABELS, FinBertModel, _FINBERT_LABEL_MAP, normalize_sentence
+from .sentiment import (FINBERT_NAME, LABELS, FinBertModel, _cuda_usable, _FINBERT_LABEL_MAP,
+                        normalize_sentence, resolve_device)
 
 CONFIG_DESCRIPTIONS: dict[str, str] = {
     "a": "Eski yöntem (pipeline, sırasız, batch 16)",
     "b": "Yeni varsayılan (sıralı dinamik dolgu, batch 32)",
     "c": "Yeni + int8 kuantizasyon",
     "d": "Yeni + max_length 256",
+    "e": "Yeni, CUDA fp32",
+    "f": "Yeni, CUDA fp16",
+    "g": "Yeni, ONNX Runtime fp32 (CPU)",
+}
+# Doğruluğu etkileyebilecek / ölçülmesi gereken ayarlar ve ortam değişkenleri (öneri satırı).
+SETTING_ENV: dict[str, str] = {
+    "c": "FINSIGHT_FINBERT_QUANTIZE=1",
+    "d": "FINSIGHT_FINBERT_MAX_LENGTH=256",
+    "e": "FINSIGHT_DEVICE=cuda (auto zaten seçer)",
+    "f": "FINSIGHT_FP16=1",
+    "g": "FINSIGHT_FINBERT_BACKEND=onnx",
 }
 REFERENCE = "a"
 LENGTH_THRESHOLDS = (64, 128, 256, 512)
@@ -104,11 +123,11 @@ def _pct(value: float | None) -> str:
     return "-" if value is None else f"%{100 * value:.1f}"
 
 
-def format_results_table(rows: Sequence[dict]) -> str:
+def format_results_table(rows: Sequence[dict], reference: str = REFERENCE) -> str:
     """rows: {key, description, seconds, n, agreement (0–1 | None), note}."""
-    ref = next((r for r in rows if r["key"] == REFERENCE and r.get("seconds")), None)
+    ref = next((r for r in rows if r["key"] == reference and r.get("seconds")), None)
     head = (f"{'':<3}{'Yapılandırma':<50}{'Süre (sn)':>10}{'Cümle/sn':>10}{'Hızlanma':>10}"
-            f"{'Uyum (a)':>10}")
+            f"{f'Uyum ({reference})':>10}")
     lines = [head, "-" * len(head)]
     for r in rows:
         if r.get("seconds") is None:
@@ -124,10 +143,10 @@ def format_results_table(rows: Sequence[dict]) -> str:
     return "\n".join(lines)
 
 
-def format_confusion(key: str, result: dict) -> str:
-    """Satır: (a) etiketi; sütun: yapılandırmanın etiketi; son sütun sınıf bazında uyum."""
+def format_confusion(key: str, result: dict, reference: str = REFERENCE) -> str:
+    """Satır: referans etiketi; sütun: yapılandırmanın etiketi; son sütun sınıf bazında uyum."""
     names = {"positive": "olumlu", "negative": "olumsuz", "neutral": "nötr"}
-    lines = [f"({key}) karışıklık — satır: (a) etiketi, sütun: ({key}) etiketi",
+    lines = [f"({key}) karışıklık — satır: ({reference}) etiketi, sütun: ({key}) etiketi",
              f"    {'':<10}" + "".join(f"{names[c]:>10}" for c in LABELS) + f"{'uyum':>10}"]
     for r in LABELS:
         row = result["confusion"][r]
@@ -148,13 +167,12 @@ def format_length_distribution(dist: dict) -> str:
     return "\n".join(lines)
 
 
-def recommendations(rows: Sequence[dict]) -> list[str]:
-    """Ölçüte göre öneri: uyum ≥ %97 ve hızlanma ≥ 1,2x ise ayar açılabilir."""
+def recommendations(rows: Sequence[dict], reference: str = REFERENCE) -> list[str]:
+    """Ölçüte göre öneri: uyum ≥ %97 ve (b)'ye göre hızlanma ≥ 1,2x ise ayar açılabilir."""
     by_key = {r["key"]: r for r in rows}
     base = by_key.get("b")
     out: list[str] = []
-    settings = {"c": "FINSIGHT_FINBERT_QUANTIZE=1", "d": "FINSIGHT_FINBERT_MAX_LENGTH=256"}
-    for key, env in settings.items():
+    for key, env in SETTING_ENV.items():
         r = by_key.get(key)
         if not r or r.get("seconds") is None or r.get("agreement") is None:
             continue
@@ -163,7 +181,8 @@ def recommendations(rows: Sequence[dict]) -> list[str]:
         speedup = base["seconds"] / r["seconds"] if r["seconds"] > 0 else 0.0
         ok = (r["agreement"] >= RECOMMEND_MIN_AGREEMENT and speedup >= RECOMMEND_MIN_SPEEDUP)
         verdict = "açılması önerilir" if ok else "açılması önerilmez (varsayılan kapalı kalsın)"
-        out.append(f"{env}: (b)'ye göre {speedup:.2f}x, (a) ile uyum {_pct(r['agreement'])} → "
+        out.append(f"{env}: (b)'ye göre {speedup:.2f}x, ({reference}) ile uyum "
+                   f"{_pct(r['agreement'])} → "
                    f"{verdict} [ölçüt: uyum ≥ %{100 * RECOMMEND_MIN_AGREEMENT:.0f} ve "
                    f"hızlanma ≥ {RECOMMEND_MIN_SPEEDUP:.1f}x]")
     return out
@@ -193,6 +212,37 @@ class LegacyPipelineModel:
         return out
 
 
+class CudaUnavailable(RuntimeError):
+    """GPU yapılandırması istendi ama CUDA kullanılamıyor (satır "çalışmadı" olur)."""
+
+
+def build_config_model(key: str, model_name: str, batch: int, tokenizer, base_model):
+    """Yapılandırma anahtarına göre ölçülecek model nesnesi.
+
+    GPU yapılandırmaları (e, f) ``base_model``'in derin kopyasını taşır: ``Module.to`` yerinde
+    çalıştığı için aksi halde sonraki CPU yapılandırmaları GPU ağırlıklarıyla çalışırdı.
+    """
+    if key == "a":
+        return LegacyPipelineModel(tokenizer, base_model)
+    if key in ("e", "f"):
+        import copy
+
+        import torch
+
+        ok, info = _cuda_usable(torch)
+        if not ok:
+            raise CudaUnavailable(info)
+        return FinBertModel(model_name, batch, tokenizer=tokenizer,
+                            model=copy.deepcopy(base_model), quantize=False, threads=0,
+                            device="cuda", fp16="1" if key == "f" else "0", backend="torch")
+    if key == "g":
+        return FinBertModel(model_name, batch, tokenizer=tokenizer, model=None, quantize=False,
+                            threads=0, backend="onnx")
+    return FinBertModel(model_name, batch, tokenizer=tokenizer, model=base_model,
+                        quantize=(key == "c"), max_length=256 if key == "d" else 512,
+                        threads=0, device="cpu", fp16="0", backend="torch")
+
+
 def _deps_missing() -> list[str]:
     return [m for m in ("torch", "transformers") if importlib.util.find_spec(m) is None]
 
@@ -218,12 +268,15 @@ def _time_predict(model, sentences: Sequence[str]) -> tuple[float, list[dict]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="FinBERT CPU hız ve uyum ölçümü.")
+    parser = argparse.ArgumentParser(description="FinBERT hız ve uyum ölçümü (CPU / GPU / ONNX).")
     parser.add_argument("ticker", nargs="?", help="Veritabanında analiz edilmiş şirket (ör. MSFT)")
     parser.add_argument("--file", help="Cümle dosyası (UTF-8, satır başına bir cümle)")
     parser.add_argument("--limit", type=int, default=500, help="Örnek cümle sayısı (0 = tümü)")
     parser.add_argument("--seed", type=int, default=0, help="Örnekleme tohumu")
-    parser.add_argument("--configs", default="abcd", help="Çalıştırılacak yapılandırmalar")
+    parser.add_argument("--configs", default="abde",
+                        help="Çalıştırılacak yapılandırmalar (a–g; c reddedildi, istenirse ekleyin)")
+    parser.add_argument("--reference", default=REFERENCE,
+                        help="Uyum ve hızlanma referansı (varsayılan a)")
     parser.add_argument("--batch", type=int, default=32, help="(b)/(c)/(d) grup boyutu")
     parser.add_argument("--threads", type=int, default=None,
                         help="torch iş parçacığı sayısı (verilmezse torch varsayılanı)")
@@ -232,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
 
     configs = [c for c in args.configs.lower() if c in CONFIG_DESCRIPTIONS]
     if not configs:
-        print("Geçerli yapılandırma yok (a, b, c, d).", file=sys.stderr)
+        print("Geçerli yapılandırma yok (a–g).", file=sys.stderr)
         return 2
     if not args.ticker and not args.file:
         print("Bir ticker (ör. MSFT) veya --file verin.", file=sys.stderr)
@@ -275,7 +328,8 @@ def main(argv: list[str] | None = None) -> int:
     load_seconds = time.perf_counter() - t
     print(f"Yüklendi ({load_seconds:.1f} sn). torch {torch.__version__}, iş parçacığı: "
           f"{torch.get_num_threads()}, örnek: {len(sentences)} cümle "
-          f"(havuz: {len(pool)})\n")
+          f"(havuz: {len(pool)})")
+    print(f"GPU: {resolve_device(torch, 'cuda', '0')[2]}\n")
 
     lengths = [len(ids) for ids in tokenizer(sentences, truncation=False)["input_ids"]]
     print(format_length_distribution(length_distribution(lengths)) + "\n")
@@ -287,14 +341,11 @@ def main(argv: list[str] | None = None) -> int:
                "seconds": None, "agreement": None, "note": ""}
         print(f"({key}) {CONFIG_DESCRIPTIONS[key]} çalışıyor …", flush=True)
         try:
-            if key == "a":
-                model = LegacyPipelineModel(tokenizer, base_model)
-            else:
-                model = FinBertModel(args.model, args.batch, tokenizer=tokenizer,
-                                     model=base_model, quantize=(key == "c"),
-                                     max_length=256 if key == "d" else 512, threads=0)
-                if key == "c" and not model.quantized:
-                    row["note"] = "kuantizasyon yapılamadı, normal model ölçüldü"
+            model = build_config_model(key, args.model, args.batch, tokenizer, base_model)
+            if key == "c" and not model.quantized:
+                row["note"] = "kuantizasyon yapılamadı, normal model ölçüldü"
+            if key in ("e", "f"):
+                row["note"] = getattr(model, "device_info", "")
             seconds, preds = _time_predict(model, sentences)
             row["seconds"] = seconds
             preds_by_key[key] = preds
@@ -302,22 +353,24 @@ def main(argv: list[str] | None = None) -> int:
             row["note"] = f"{type(exc).__name__}: {exc}"[:120]
         rows.append(row)
 
-    reference = preds_by_key.get(REFERENCE)
+    ref_key = args.reference if args.reference in preds_by_key else \
+        next((r["key"] for r in rows if r["key"] in preds_by_key), args.reference)
+    reference = preds_by_key.get(ref_key)
     details = []
     for row in rows:
         preds = preds_by_key.get(row["key"])
         if reference is not None and preds is not None:
             result = agreement(reference, preds)
             row["agreement"] = result["rate"]
-            if row["key"] != REFERENCE:
-                details.append(format_confusion(row["key"], result))
+            if row["key"] != ref_key:
+                details.append(format_confusion(row["key"], result, ref_key))
 
-    print("\n" + format_results_table(rows))
+    print("\n" + format_results_table(rows, ref_key))
     if reference is None:
-        print("\n(a) çalışmadığı için uyum hesaplanamadı.")
+        print(f"\n({ref_key}) çalışmadığı için uyum hesaplanamadı.")
     for block in details:
         print("\n" + block)
-    recs = recommendations(rows)
+    recs = recommendations(rows, ref_key)
     if recs:
         print("\nÖneri")
         for line in recs:

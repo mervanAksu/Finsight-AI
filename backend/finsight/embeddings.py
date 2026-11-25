@@ -52,6 +52,8 @@ HASHING_DIM = 4096
 # Kısa anahtar kelime sorgularında bigram'lar nadiren eşleşir ama parça vektörünün normunu
 # büyütür; düşük ağırlık (0.25) ifade eşleşmesine küçük bir bonus verip sinyali korur.
 BIGRAM_WEIGHT = 0.25
+# Hashing özellik önbelleğinin üst sınırı (~200 bin özellik ≈ birkaç on MB).
+BUCKET_CACHE_MAX = 200_000
 
 
 class Embedder(Protocol):
@@ -71,25 +73,71 @@ def _l2_normalize(mat: np.ndarray) -> np.ndarray:
     return (mat / norms).astype(np.float32)
 
 
+def unique_texts(texts: Sequence[str]) -> tuple[list[str], list[int]]:
+    """(benzersiz metinler ilk görülme sırasıyla, her girdinin benzersiz listedeki indeksi).
+
+    Gömme deterministik olduğu için aynı metni bir kez gömüp sonucu çoğaltmak çıktıyı
+    değiştirmez (bölüm içinde tekrar eden parçalar, örtüşmeden doğan aynı kuyruklar).
+    """
+    first: dict[str, int] = {}
+    order: list[str] = []
+    index: list[int] = []
+    for t in texts:
+        k = first.get(t)
+        if k is None:
+            k = first[t] = len(order)
+            order.append(t)
+        index.append(k)
+    return order, index
+
+
 class SentenceTransformerEmbedder:
+    """sentence-transformers gömücüsü.
+
+    Cihaz ``FINSIGHT_DEVICE`` ile FinBERT'le aynı kuralla seçilir (auto: kullanılabilir CUDA
+    varsa GPU, yoksa CPU; bkz. ``sentiment.resolve_device``). Gömmede fp16 KULLANILMAZ:
+    veritabanındaki vektörlerle aynı sayısal uzayda kalmak için her zaman fp32. ``encode``
+    cümleleri kendi içinde uzunluğa göre sıralayıp gruplar; burada ayrıca yinelenen metinler
+    bir kez gömülür.
+    """
+
     default_min_similarity = ST_MIN_SIMILARITY
 
-    def __init__(self, model_name: str | None = None, batch_size: int = 32) -> None:
+    def __init__(self, model_name: str | None = None, batch_size: int = 32,
+                 device: str | None = None) -> None:
         from sentence_transformers import SentenceTransformer  # ağır bağımlılık: lazy import
 
         self.name = model_name or os.getenv("FINSIGHT_EMBEDDING_MODEL") or DEFAULT_ST_MODEL
         self.batch_size = batch_size
-        self._model = SentenceTransformer(self.name, device="cpu")
+        self.device = device or _resolve_embed_device()
+        self._model = SentenceTransformer(self.name, device=self.device)
         self.dim = int(self._model.get_sentence_embedding_dimension())
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
+        unique, index = unique_texts(texts)
         vecs = self._model.encode(
-            list(texts), batch_size=self.batch_size, normalize_embeddings=True,
+            unique, batch_size=self.batch_size, normalize_embeddings=True,
             convert_to_numpy=True, show_progress_bar=False,
         )
-        return _l2_normalize(vecs)
+        vecs = _l2_normalize(vecs)
+        return vecs if len(unique) == len(texts) else vecs[np.asarray(index, dtype=np.intp)]
+
+
+def _resolve_embed_device() -> str:
+    """FINSIGHT_DEVICE → "cpu" | "cuda" (fp32). torch yüklenemezse "cpu"."""
+    from .sentiment import device_from_env, resolve_device
+
+    if device_from_env() == "cpu":
+        return "cpu"
+    try:
+        import torch
+    except ImportError:
+        return "cpu"
+    device, _fp16, info = resolve_device(torch, fp16="0")
+    log.info("Gömme cihazı: %s", info)
+    return device
 
 
 # Hashing için küçük İngilizce + Türkçe durak kelime listesi. Soru kalıplarındaki dolgu
@@ -129,12 +177,22 @@ class HashingEmbedder:
         if dim <= 0:
             raise ValueError("dim pozitif olmalı")
         self.dim = dim
+        # Özellik → (kova, işaret) önbelleği: blake2b deterministik olduğu için sonuç aynıdır;
+        # finans metninde kelime dağarcığı tekrarlandığından özet hesabının çoğu atlanır.
+        self._buckets: dict[str, tuple[int, float]] = {}
 
     def _bucket(self, feature: str) -> tuple[int, float]:
+        hit = self._buckets.get(feature)
+        if hit is not None:
+            return hit
         digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
         h = int.from_bytes(digest, "little")
         sign = 1.0 if (h >> 63) & 1 else -1.0
-        return h % self.dim, sign
+        result = (h % self.dim, sign)
+        if len(self._buckets) >= BUCKET_CACHE_MAX:
+            self._buckets.clear()  # bellek sınırı: basit sıfırlama yeterli
+        self._buckets[feature] = result
+        return result
 
     def _vector(self, text: str) -> np.ndarray:
         toks = hashing_tokens(text)
@@ -150,7 +208,9 @@ class HashingEmbedder:
     def embed(self, texts: Sequence[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
-        return _l2_normalize(np.vstack([self._vector(t) for t in texts]))
+        unique, index = unique_texts(texts)
+        mat = _l2_normalize(np.vstack([self._vector(t) for t in unique]))
+        return mat if len(unique) == len(texts) else mat[np.asarray(index, dtype=np.intp)]
 
 
 def get_embedder() -> Embedder:

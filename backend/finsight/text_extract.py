@@ -94,26 +94,31 @@ def _is_hidden(tag: Tag) -> bool:
     return bool(style and _DISPLAY_NONE.search(str(style)))
 
 
-def html_to_text(html: str | bytes) -> str:
-    """EDGAR HTML/iXBRL belgesini okunabilir düz metne çevirir.
+def _separators(name: str, in_cell: bool) -> tuple[str, str, bool]:
+    """Öğe adına göre (önce, sonra, çocuklar_hücre_içi) ayraçları."""
+    if name in ("td", "th"):
+        return "", " ", True
+    if name == "tr":
+        sep = " " if in_cell else "\n"
+        return sep, sep, in_cell
+    if name in _BLOCK_TAGS:
+        sep = " " if in_cell else "\n\n"
+        return sep, sep, in_cell
+    return "", "", in_cell
 
-    - script/style/head ve gizli inline XBRL blokları (`ix:header`) ile `display:none`
-      öğeleri atılır; görünür `ix:nonFraction` gibi değerler korunur.
-    - Blok öğeler boş satırla ayrılır (paragraf sınırı), tablo satırları tek satır sonu,
-      tablo hücreleri boşlukla ayrılır.
-    - `&nbsp;` ve fazla boşluklar normalize edilir; yalnızca sayfa numarası veya
-      "Table of Contents" içeren satırlar atılır.
+
+def _walk_bs4(html: str | bytes) -> list[str]:
+    """BeautifulSoup ağacında metin parçaları (lxml kurulu değilse yedek yol).
+
+    Atılacak öğeler (script/style/ix:header/gizli) ``decompose`` edilmeden yürüyüşte
+    atlanır: aynı çıktı, ama bs4 4.13+ ``Tag.decomposed`` özelliği eksik ``_decomposed``
+    özniteliğinde ``Tag.__getattr__`` → ``find()`` ile alt ağacı taradığı için eski döngü
+    büyük belgelerde süreyi ~%35 uzatıyordu (docs/performans-asama4.md).
     """
     with warnings.catch_warnings():
         # iXBRL belgeleri XHTML'dir; HTML ayrıştırıcıyla okumak bilinçli bir tercihtir.
         warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
         soup = BeautifulSoup(_decode(html), _parser_name())
-
-    for tag in soup.find_all(True):
-        if tag.decomposed:
-            continue
-        if tag.name.lower() in _REMOVE_TAGS or _is_hidden(tag):
-            tag.decompose()
 
     # Derin iç içe (kapanmamış <font>) belgelerde özyineleme sınırına takılmamak için
     # açık yığınla dolaşılır. Öğeler: ("s", metin) çıktı işareti, ("n", düğüm, hücre_içi).
@@ -132,33 +137,132 @@ def html_to_text(html: str | bytes) -> str:
         if not isinstance(node, Tag):
             continue
         name = (node.name or "").lower()
+        if node is not soup and (name in _REMOVE_TAGS or _is_hidden(node)):
+            continue
         if name == "br":
             out.append(" " if in_cell else "\n")
             continue
-        child_in_cell = in_cell
-        if name in ("td", "th"):
-            before, after, child_in_cell = "", " ", True
-        elif name == "tr":
-            before = after = " " if in_cell else "\n"
-        elif name in _BLOCK_TAGS:
-            before = after = " " if in_cell else "\n\n"
-        else:
-            before = after = ""
+        before, after, child_in_cell = _separators(name, in_cell)
         out.append(before)
         stack.append(("s", after))
-        for child in reversed(list(node.children)):
+        for child in reversed(node.contents):
             stack.append(("n", child, child_in_cell))
+    return out
 
-    raw = "".join(out).translate(_SPACE_TABLE)
+
+# libxml2 ağaç ayrıştırıcısının sessizce kestiği derinliğin (256) güvenli altı.
+LXML_MAX_SAFE_DEPTH = 240
+
+
+class _TreeTooDeep(Exception):
+    """lxml ağacı kesilmiş olabilir; BeautifulSoup yoluna düşülür."""
+
+
+def _walk_lxml(html: str | bytes) -> list[str]:
+    """Doğrudan lxml ağacında metin parçaları (hızlı yol).
+
+    BeautifulSoup'un lxml oluşturucusu da aynı libxml2 HTML ayrıştırıcısını kullanır; burada
+    ayrıştırıcı aynı girdiyle (``_decode`` sonrası str) beslenir, bs4 nesne ağacı kurulmaz
+    (BeautifulSoup belgelerinin "Improving performance" önerisi). Metin kuralları
+    ``_walk_bs4`` ile birebir aynıdır; eşitlik testlerde doğrulanır.
+    lxml'de bir öğeden sonra gelen metin o öğenin ``tail`` alanındadır: atılan / gizli öğe,
+    yorum ve işlem talimatı kendisi yazılmasa da ``tail`` metni yazılır.
+
+    libxml2'nin ağaç kuran HTML ayrıştırıcısı ~256 (``huge_tree`` ile ~2048) iç içe düzeyden
+    sonrasını HATA VERMEDEN atar (kapanmamış ``<font>`` dizileri, eski başvurular). Bu yüzden
+    yürüyüşte ``LXML_MAX_SAFE_DEPTH`` düzeyine ulaşılırsa ``_TreeTooDeep`` yükseltilir ve
+    çağıran BeautifulSoup yoluna düşer (olay tabanlı oluşturucu bu sınırdan etkilenmez).
+    """
+    from lxml import etree
+
+    parser = etree.HTMLParser(recover=True)
+    parser.feed(_decode(html))
+    root = parser.close()
+    out: list[str] = []
+    if root is None:
+        return out
+    # Kök öncesi/sonrası kardeşler (ör. XML bildirimi yorum olarak) yalnızca tail taşır.
+    stack: list = []
+    for sib in reversed(list(root.itersiblings())):
+        stack.append(("n", sib, False, 0))
+    stack.append(("n", root, False, 0))
+    for sib in root.itersiblings(preceding=True):
+        stack.append(("n", sib, False, 0))
+    while stack:
+        item = stack.pop()
+        if item[0] == "s":
+            out.append(item[1])
+            continue
+        _, node, in_cell, depth = item
+        if depth >= LXML_MAX_SAFE_DEPTH:
+            raise _TreeTooDeep(depth)
+        tag = node.tag
+        if not isinstance(tag, str):  # yorum, işlem talimatı, varlık
+            if node.tail:
+                out.append(node.tail)
+            continue
+        name = tag.lower()
+        if name in _REMOVE_TAGS or "hidden" in node.attrib or \
+                _DISPLAY_NONE.search(node.get("style") or ""):
+            if node.tail:
+                out.append(node.tail)
+            continue
+        if name == "br":
+            out.append(" " if in_cell else "\n")
+            if node.tail:
+                out.append(node.tail)
+            continue
+        before, after, child_in_cell = _separators(name, in_cell)
+        out.append(before)
+        if node.tail:
+            stack.append(("s", node.tail))
+        stack.append(("s", after))
+        for child in reversed(node):
+            stack.append(("n", child, child_in_cell, depth + 1))
+        if node.text:
+            stack.append(("s", node.text))
+    return out
+
+
+def _postprocess(parts: list[str]) -> str:
+    raw = "".join(parts).translate(_SPACE_TABLE)
     lines: list[str] = []
     for line in raw.split("\n"):
-        line = re.sub(r" {2,}", " ", line).strip()
+        line = _MULTI_SPACE.sub(" ", line).strip()
         if line and _PAGE_NOISE_LINE.match(line):
             continue
         lines.append(line)
     text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+_MULTI_SPACE = re.compile(r" {2,}")
+
+
+def html_to_text(html: str | bytes, backend: str | None = None) -> str:
+    """EDGAR HTML/iXBRL belgesini okunabilir düz metne çevirir.
+
+    - script/style/head ve gizli inline XBRL blokları (`ix:header`) ile `display:none`
+      öğeleri atılır; görünür `ix:nonFraction` gibi değerler korunur.
+    - Blok öğeler boş satırla ayrılır (paragraf sınırı), tablo satırları tek satır sonu,
+      tablo hücreleri boşlukla ayrılır.
+    - `&nbsp;` ve fazla boşluklar normalize edilir; yalnızca sayfa numarası veya
+      "Table of Contents" içeren satırlar atılır.
+
+    ``backend``: None → lxml kuruluysa doğrudan lxml (hızlı), değilse BeautifulSoup;
+    "lxml" / "bs4" zorlar (ölçüm ve eşitlik testleri için). Çıktı iki yolda aynıdır.
+    """
+    if backend is None:
+        backend = "lxml" if _parser_name() == "lxml" else "bs4"
+    if backend == "lxml":
+        try:
+            return _postprocess(_walk_lxml(html))
+        except _TreeTooDeep:
+            return _postprocess(_walk_bs4(html))
+    if backend == "bs4":
+        return _postprocess(_walk_bs4(html))
+    raise ValueError(f"Bilinmeyen backend: {backend!r}")
 
 
 # --------------------------------------------------------------------------- bölüm ayıklama
@@ -398,6 +502,11 @@ _ABBREV_CI = re.compile(r"\b(?:e\.g|i\.e|vs|approx|cf|viz)\.", re.I)
 _ACRONYM = re.compile(r"\b(?:[A-Za-z]\.){2,}")  # U.S., U.K., N.A., L.P.
 _INITIAL = re.compile(r"\b([A-Z])\.(?=\s+[A-Z])")  # "John D. Smith"
 _SENT_END = re.compile(r"([.!?]+[\"'”’)\]]*)\s+(?=[\"“‘'(\[]?[A-Z0-9$•])")
+# SEC-08 (ReDoS, CWE-1333): uzun noktalama dizilerinde ``[.!?]+`` her başlangıç noktasından
+# geri izler (O(n²); 100 000 nokta dakikalar sürer). Bölmeden önce 4+ uzunluktaki diziler ilk 3
+# karakterine kısaltılır ("....." → "...", "?!.?!." → "?!."): bu doğrusal zamanlıdır ve cümle
+# sınırı kararını değiştirmez (dizinin sonu yine cümle sonu sayılır).
+_PUNCT_RUN = re.compile(r"[.!?]{4,}")
 
 
 def _protect(text: str) -> str:
@@ -445,6 +554,7 @@ def split_sentences(text: str) -> list[str]:
         line = line.strip()
         if not line:
             continue
+        line = _PUNCT_RUN.sub(lambda m: m.group(0)[:3], line)
         protected = _SENT_END.sub(lambda m: m.group(1) + "\n", _protect(line))
         for raw in protected.split("\n"):
             s = re.sub(r"\s+", " ", raw.replace(_DOT, ".")).strip()

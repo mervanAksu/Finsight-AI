@@ -104,7 +104,57 @@ def tfidf_matrix(texts: list[str]) -> np.ndarray:
 def sparse_similarities(left: list[dict[int, float]], right: list[dict[int, float]],
                         min_similarity: float) -> dict[tuple[int, int], float]:
     """Seyrek kosinüs benzerlikleri (vektörler L2 normalize): yalnızca ≥ `min_similarity`
-    çiftler, [0, 1] aralığına kırpılmış olarak döner."""
+    çiftler, [0, 1] aralığına kırpılmış olarak döner.
+
+    numpy ile vektörleştirilmiş: sol vektörler terime göre sıralı (CSC benzeri) dizilere
+    konur; her sağ paragraf için ortak terimlerin sol girdileri tek seferde toplanır ve
+    ``np.bincount`` ile paragraf başına iç çarpım hesaplanır. Aynı çarpımlar, yalnızca
+    toplama sırası farklı (float64; fark ~1e-16). Saf Python sürümüne göre büyük risk
+    bölümlerinde ~10x+ hızlı (docs/performans-asama4.md); yoğun n × |V| matris kurulmaz.
+    """
+    n_left = len(left)
+    out: dict[tuple[int, int], float] = {}
+    if not n_left or not right:
+        return out
+    terms_l = np.fromiter((t for vec in left for t in vec), dtype=np.int64)
+    rows_l = np.repeat(np.arange(n_left, dtype=np.int64),
+                       np.fromiter((len(vec) for vec in left), dtype=np.int64, count=n_left))
+    weights_l = np.fromiter((w for vec in left for w in vec.values()), dtype=np.float64)
+    if terms_l.size == 0:
+        return out
+    order = np.argsort(terms_l, kind="stable")
+    terms_l, rows_l, weights_l = terms_l[order], rows_l[order], weights_l[order]
+    width = int(terms_l[-1]) + 1
+    starts = np.searchsorted(terms_l, np.arange(width), side="left")
+    counts = np.searchsorted(terms_l, np.arange(width), side="right") - starts
+    for j, vec in enumerate(right):
+        if not vec:
+            continue
+        t = np.fromiter(vec.keys(), dtype=np.int64, count=len(vec))
+        w = np.fromiter(vec.values(), dtype=np.float64, count=len(vec))
+        keep = t < width
+        t, w = t[keep], w[keep]
+        lens = counts[t]
+        nz = lens > 0
+        t, w, lens = t[nz], w[nz], lens[nz]
+        total = int(lens.sum())
+        if total == 0:
+            continue
+        # Ortak terimlerin soldaki girdi konumları (ardışık aralıkların birleşimi).
+        offsets = np.repeat(starts[t] - (np.cumsum(lens) - lens), lens) + np.arange(total)
+        rows = rows_l[offsets]
+        dots = np.bincount(rows, weights=weights_l[offsets] * np.repeat(w, lens),
+                           minlength=n_left)
+        touched = np.bincount(rows, minlength=n_left) > 0  # ortak terimi olan paragraflar
+        for i in np.flatnonzero(touched & (dots >= min_similarity)):
+            out[(int(i), j)] = min(1.0, max(0.0, float(dots[i])))
+    return out
+
+
+def sparse_similarities_reference(left: list[dict[int, float]], right: list[dict[int, float]],
+                                  min_similarity: float) -> dict[tuple[int, int], float]:
+    """Saf Python başvuru uygulaması (ters indeks + sözlük toplama). Testlerde numpy
+    sürümünün doğruluğunu karşılaştırmak için tutulur."""
     index: dict[int, list[tuple[int, float]]] = {}
     for i, vec in enumerate(left):
         for term, w in vec.items():

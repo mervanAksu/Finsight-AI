@@ -9,6 +9,7 @@
 
 import logging
 import pathlib
+import re
 import sys
 from datetime import date
 
@@ -415,11 +416,14 @@ def test_bench_main_end_to_end_with_fake_models(monkeypatch, tmp_path, capsys):
 
     path = tmp_path / "cumleler.txt"
     path.write_text("\n".join(SENTENCES * 3), encoding="utf-8")
-    assert bench.main(["--file", str(path), "--limit", "0", "--threads", "2"]) == 0
+    assert bench.main(["--file", str(path), "--limit", "0", "--threads", "2",
+                       "--configs", "abcde"]) == 0
     out = capsys.readouterr().out
     assert torch_mod.threads == [2]
     assert "Token uzunluğu" in out and "Cümle/sn" in out
-    for key in "abcd":
+    for key in "abcde":
         assert f"\n{key}  " in out
+    # Sahte torch'ta CUDA yok: GPU yapılandırması çalışmaz ama diğerlerini durdurmaz.
+    assert re.search(r"\ne  .*çalışmadı.*CudaUnavailable", out)
     assert out.count("%100.0") >= 3  # b, c, d sahte modelde (a) ile birebir uyumlu
     assert "(c) karışıklık" in out and "Öneri" in out
