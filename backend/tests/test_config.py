@@ -74,3 +74,32 @@ def test_empty_values_fall_back_to_defaults(monkeypatch):
     monkeypatch.setenv("SEC_MAX_RPS", "12")
     with pytest.raises(config.ConfigError):
         config.get_max_rps()
+
+
+# --------------------------------------------------------------------------- Aşama 4 (SEC-16/5)
+
+
+def test_sec_json_ttl_default_valid_and_lower_bound(monkeypatch):
+    monkeypatch.delenv("FINSIGHT_SEC_JSON_TTL", raising=False)
+    assert config.get_sec_json_ttl() == 3600
+    monkeypatch.setenv("FINSIGHT_SEC_JSON_TTL", "")
+    assert config.get_sec_json_ttl() == 3600
+    monkeypatch.setenv("FINSIGHT_SEC_JSON_TTL", "300")
+    assert config.get_sec_json_ttl() == 300
+    for bad in ("0", "299", "-1", "abc", "nan", "inf"):
+        monkeypatch.setenv("FINSIGHT_SEC_JSON_TTL", bad)
+        with pytest.raises(config.ConfigError):
+            config.get_sec_json_ttl()
+
+
+def test_auto_refresh_minutes_off_or_at_least_30(monkeypatch):
+    monkeypatch.delenv("FINSIGHT_AUTO_REFRESH_MINUTES", raising=False)
+    assert config.get_auto_refresh_minutes() == 0
+    monkeypatch.setenv("FINSIGHT_AUTO_REFRESH_MINUTES", "0")
+    assert config.get_auto_refresh_minutes() == 0
+    monkeypatch.setenv("FINSIGHT_AUTO_REFRESH_MINUTES", "60")
+    assert config.get_auto_refresh_minutes() == 60
+    for bad in ("1", "29", "-5", "x", "nan"):
+        monkeypatch.setenv("FINSIGHT_AUTO_REFRESH_MINUTES", bad)
+        with pytest.raises(config.ConfigError):
+            config.get_auto_refresh_minutes()

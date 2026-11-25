@@ -1,9 +1,18 @@
 .env
+# SEC-13: .env kopyaları (anahtar içerebilir); örnek dosya depoda kalır
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .venv/
 .sec_cache/
 *.db
+# SEC-13: SQLite WAL/SHM/günlük dosyaları (henüz ana dosyaya yazılmamış soruları içerebilir)
+*.db-wal
+*.db-shm
+*.db-journal
+.ratelimit
+.ratelimit.lock
 .pytest_cache/
 .coverage
 htmlcov/

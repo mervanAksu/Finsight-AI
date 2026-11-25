@@ -98,3 +98,87 @@ def test_file_cache_set_is_atomic(tmp_path, monkeypatch):
         cache.set(SUB_URL, b"yarim")
     assert cache.get(SUB_URL) == b"yeni"  # eski içerik sağlam
     assert sorted(os.listdir(tmp_path)) == [os.path.basename(cache._path(SUB_URL))]
+
+
+# --------------------------------------------------------------------------- Aşama 4 (§5)
+
+FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK0000000001.json"
+TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+DOC_URL = "https://www.sec.gov/Archives/edgar/data/1/000000000126000010/doc.htm"
+
+
+def test_cache_ttl_policy_by_url_class():
+    from finsight.sec_client import cache_ttl_for
+
+    assert cache_ttl_for(DOC_URL) is None  # yayımlanmış belge süresiz
+    assert cache_ttl_for(SUB_URL) == 3600
+    assert cache_ttl_for(FACTS_URL, json_ttl=900) == 900
+    assert cache_ttl_for(TICKERS_URL) == 24 * 3600
+
+
+def test_file_cache_expiry_per_url_class(tmp_path):
+    import os
+
+    now = [10_000_000.0]
+    cache = FileCache(str(tmp_path), clock=lambda: now[0], json_ttl_seconds=3600)
+    for url in (SUB_URL, DOC_URL, TICKERS_URL):
+        cache.set(url, b"x")
+        os.utime(cache._path(url), (now[0], now[0]))
+    now[0] += 3601  # JSON süresi doldu; belge ve ticker listesi hâlâ geçerli
+    assert cache.get(SUB_URL) is None
+    assert cache.get(DOC_URL) == b"x" and cache.get(TICKERS_URL) == b"x"
+    now[0] += 24 * 3600
+    assert cache.get(TICKERS_URL) is None
+    assert cache.get(DOC_URL) == b"x"  # süresiz
+
+
+def test_legacy_ttl_argument_applies_to_all_urls(tmp_path):
+    cache = FileCache(str(tmp_path), ttl_seconds=0, clock=lambda: 1e12)
+    cache.set(DOC_URL, b"x")
+    assert cache.get(DOC_URL) is None
+
+
+def test_fresh_skips_cache_read_but_writes(tmp_path, fake_clock):
+    fetcher = FakeFetcher({SUB_URL: [(200, b'{"v": 1}'), (200, b'{"v": 2}')]})
+    client = make_client(fetcher, fake_clock, cache=FileCache(str(tmp_path)))
+    assert client.submissions(1) == {"v": 1}
+    assert client.submissions(1) == {"v": 1}  # önbellekten
+    assert client.submissions(1, fresh=True) == {"v": 2}  # önbellek okunmadı
+    assert len(fetcher.calls) == 2
+    assert client.submissions(1) == {"v": 2}  # taze yanıt önbelleğe yazıldı
+
+
+def test_sec_error_carries_status(fake_clock):
+    client = make_client(FakeFetcher({SUB_URL: (403, b"")}), fake_clock)
+    with pytest.raises(SecError) as exc:
+        client.get_bytes(SUB_URL)
+    assert exc.value.status == 403
+
+
+def test_redirects_followed_only_within_sec_gov():
+    """SEC-17: sec.gov dışına yönlendirme izlenmez (User-Agent'taki e-posta sızmasın)."""
+    from finsight.sec_client import follow_sec_redirects, is_allowed_sec_url
+
+    assert is_allowed_sec_url(SUB_URL) and is_allowed_sec_url(DOC_URL)
+    for bad in ("http://www.sec.gov/x", "https://sec.gov.kotu.example/x",
+                "https://kotu.example/sec.gov", "https://evilsec.gov/x"):
+        assert not is_allowed_sec_url(bad), bad
+
+    visited = []
+
+    def get(url):
+        visited.append(url)
+        if url == SUB_URL:
+            return 301, b"", "https://www.sec.gov/moved.json"
+        return 200, b"ok", None
+
+    assert follow_sec_redirects(get, SUB_URL) == (200, b"ok")
+    assert visited == [SUB_URL, "https://www.sec.gov/moved.json"]
+
+    visited.clear()
+    with pytest.raises(SecError):
+        follow_sec_redirects(lambda u: (visited.append(u) or (302, b"", "https://kotu.example/")),
+                             SUB_URL)
+    assert visited == [SUB_URL]  # kötü adrese istek gitmedi
+    with pytest.raises(SecError):
+        follow_sec_redirects(lambda u: (302, b"", u), SUB_URL)  # döngü

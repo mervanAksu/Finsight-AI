@@ -1,5 +1,7 @@
 # Çekirdek bağımlılıklar
 fastapi>=0.110
+# SEC-15: CVE-2025-62727 (Range başlığı O(n²) DoS, StaticFiles) 0.49.1'de düzeltildi
+starlette>=0.49.1
 uvicorn[standard]>=0.29
 httpx>=0.27
 sqlalchemy>=2.0

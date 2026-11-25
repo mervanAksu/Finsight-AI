@@ -218,6 +218,35 @@ class OpenAICompatibleClient(_HttpLLMClient):
         raise LLMError("openai yanıtı beklenmeyen biçimde (content)")
 
 
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def base_url_is_safe(base_url: str, *, has_key: bool) -> bool:
+    """SEC-17 (CWE-319): ``OPENAI_BASE_URL`` https olmalı; şifresiz ``http://`` yalnızca bu
+    bilgisayardaki (127.0.0.1 / localhost) sunucular için kabul edilir. Anahtarsız uzak http
+    sunucusu uyarıyla kabul edilir (gönderilecek gizli bilgi yok). Başka şema reddedilir."""
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(base_url)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        parts, host = None, ""
+    if parts is None or parts.scheme not in ("http", "https") or not host:
+        log.warning("OPENAI_BASE_URL geçersiz (http(s)://ana-makine/... olmalı); LLM kapalı.")
+        return False
+    if parts.scheme == "https" or host in _LOOPBACK_HOSTS:
+        return True
+    if has_key:
+        log.warning("OPENAI_BASE_URL şifresiz http:// ile uzak bir adres; API anahtarı ağda açık "
+                    "metin gider. LLM kapalı. https:// kullanın (http yalnızca 127.0.0.1 / "
+                    "localhost için).")
+        return False
+    log.warning("OPENAI_BASE_URL şifresiz http:// ile uzak bir adres (anahtarsız); sorular ağda "
+                "açık metin gider.")
+    return True
+
+
 def get_llm_client(transport: httpx.BaseTransport | None = None) -> LLMClient | None:
     """Ortam değişkenlerinden LLM istemcisi kurar; yapılandırma yoksa None.
 
@@ -248,6 +277,8 @@ def get_llm_client(transport: httpx.BaseTransport | None = None) -> LLMClient | 
         return AnthropicClient(anthropic_key, model or DEFAULT_ANTHROPIC_MODEL,
                                transport=transport)
     if provider == "openai":
+        if not base_url_is_safe(base_url, has_key=bool(openai_key)):
+            return None
         if not openai_key and base_url == DEFAULT_OPENAI_BASE_URL:
             log.warning("FINSIGHT_LLM_PROVIDER=openai ama OPENAI_API_KEY yok; LLM kapalı.")
             return None

@@ -29,6 +29,9 @@ from finsight.models import Filing, FilingSection, FinancialFact, QALog  # noqa:
 from finsight.rag import EMBEDDING_MISMATCH_WARNING  # noqa: E402
 from finsight.xbrl import METRICS, extract_all  # noqa: E402
 
+# SEC-03: TrustedHost/Host denetimi yalnızca yerel adları kabul eder ("testserver" değil).
+LOCAL_BASE = "http://127.0.0.1:8000"
+
 DISCLAIMER_PART = "yatırım tavsiyesi değildir"
 COMPANY_KEYS = {"ticker", "cik", "name", "sic", "sic_description", "fiscal_year_end",
                 "exchanges"}
@@ -56,7 +59,7 @@ def sec():
 @pytest.fixture
 def client(factory, sec):
     app = api.create_app(session_factory=factory, client_factory=sec, serve_frontend=False)
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         yield c
 
 
@@ -264,7 +267,7 @@ def test_ingest_returns_running_job_and_validates(client, factory):
 def test_ingest_without_user_agent_is_503(factory, monkeypatch):
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
     app = api.create_app(session_factory=factory, serve_frontend=False)
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         res = c.post("/api/companies/EXMP/ingest")
     assert res.status_code == 503 and "SEC_USER_AGENT" in res.json()["detail"]
 
@@ -353,7 +356,7 @@ def test_search_falls_back_to_local_companies(factory):
         raise RuntimeError("SEC'e erişilemiyor")
 
     app = api.create_app(session_factory=factory, client_factory=broken, serve_frontend=False)
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         res = c.get("/api/companies/search", params={"q": "exmp"})
     assert res.status_code == 200
     assert res.json() == [{"ticker": "EXMP", "cik": "0000000001", "name": "EXMP Example Corp",
@@ -382,7 +385,7 @@ def test_search_reports_missing_user_agent(factory, monkeypatch):
 
     app = api.create_app(session_factory=factory, client_factory=no_user_agent,
                          serve_frontend=False)
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         res = c.get("/api/companies/search", params={"q": "exmp"})
         health = c.get("/api/health").json()
         pre = c.get("/api/companies/search", params={"q": "exmp"},
@@ -390,7 +393,10 @@ def test_search_reports_missing_user_agent(factory, monkeypatch):
     assert res.status_code == 200 and res.json()[0]["ticker"] == "EXMP"
     assert res.headers[api.SEARCH_SCOPE_HEADER] == "local"
     assert res.headers[api.SEARCH_REASON_HEADER] == "sec_user_agent_missing"
-    assert health["sec"] == {"user_agent_configured": False}
+    assert health["sec"]["user_agent_configured"] is False
+    # v1.4: önbellek süresi ve otomatik yenileme aralığı
+    assert health["sec"]["json_ttl_seconds"] == 3600
+    assert health["auto_refresh_minutes"] == 0
     exposed = pre.headers.get("access-control-expose-headers", "")
     assert api.SEARCH_SCOPE_HEADER in exposed and api.SEARCH_REASON_HEADER in exposed
 
@@ -398,7 +404,7 @@ def test_search_reports_missing_user_agent(factory, monkeypatch):
 def test_root_info_frontend_and_cors(factory, tmp_path):
     app = api.create_app(session_factory=factory, client_factory=FakeSec(),
                          serve_frontend=False)
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         assert c.get("/").json()["api"] == "/api/health"
         pre = c.options("/api/health", headers={"Origin": "http://localhost:5173",
                                                 "Access-Control-Request-Method": "GET"})
@@ -410,7 +416,7 @@ def test_root_info_frontend_and_cors(factory, tmp_path):
     (dist / "index.html").write_text("<!doctype html><title>FinSight</title>", "utf-8")
     app = api.create_app(session_factory=factory, client_factory=FakeSec(),
                          frontend_dist=str(dist))
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         assert "FinSight" in c.get("/").text
         assert c.get("/api/health").json()["status"] == "ok"  # API önce eşleşir
         assert c.get("/docs").status_code == 200
@@ -470,5 +476,5 @@ def test_lazy_module_app(monkeypatch):
     monkeypatch.setattr(api, "_app", None)
     app = api.app
     assert isinstance(app, fastapi.FastAPI) and api.app is app
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL_BASE) as c:
         assert c.get("/api/health").status_code == 200

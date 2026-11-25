@@ -14,8 +14,10 @@ import hashlib
 import importlib.util
 import logging
 import os
+import re
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from collections.abc import Callable
 from datetime import date
 
@@ -23,17 +25,18 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from . import repository as repo
 from .analyze import (TIMING_STEPS, analyze_sections, compare_risk, compute_text_signals,
-                      default_chunk_words, embed_sections, latest_annual_summaries,
+                      default_chunk_words, embed_sections, latest_tone_summaries,
                       latest_two_annual, score_company, select_filings_for_analysis,
                       sentiment_stats)
 from .config import (ConfigError, analyze_quarterly_enabled, get_cache_dir,
-                     get_documents_dir, get_max_rps, get_user_agent)
+                     get_documents_dir, get_max_concurrent_jobs, get_max_queued_jobs,
+                     get_max_rps, get_sec_json_ttl, get_user_agent)
 from .edgar import build_ticker_map
 from .embeddings import DEFAULT_ST_MODEL, HASHING_NAME, Embedder, get_embedder
 from .llm import LLMClient, LLMError, get_llm_client
 from .models import utcnow
 from .pipeline import collect
-from .rate_limiter import RateLimiter
+from .rate_limiter import FileRateLimiter, shared_file_limiter
 from .sec_client import FileCache, SecClient, SecError
 from .sentiment import (LEXICON_NAME, LM_LEXICON_NAME, SentimentModel,
                         configured_finbert_name, get_sentiment_model)
@@ -157,22 +160,27 @@ def model_status() -> dict:
 
 # --------------------------------------------------------------------------- SEC istemcisi
 
-_limiter: RateLimiter | None = None
+_limiter: FileRateLimiter | None = None
 
 
-def shared_limiter() -> RateLimiter:
-    """Süreçteki tüm SEC istekleri tek hız sınırlayıcıyı paylaşır (eşzamanlı işler dahil,
-    NFR-02)."""
+def shared_limiter() -> FileRateLimiter:
+    """Tüm SEC istekleri tek hız bütçesini paylaşır (NFR-02): süreç içindeki eşzamanlı işler
+    VE aynı önbellek klasörünü kullanan diğer süreçler (``finsight.refresh``, ikinci bir
+    uvicorn) dahil (SEC-07; durum ``<SEC_CACHE_DIR>/.ratelimit``)."""
     global _limiter
     with _limiter_lock:
         if _limiter is None:
-            _limiter = RateLimiter(get_max_rps())
+            _limiter = shared_file_limiter(get_cache_dir(), get_max_rps())
         return _limiter
 
 
 def make_sec_client() -> SecClient:
-    """Yapılandırmadan SecClient (User-Agent zorunlu, önbellekli, paylaşılan hız sınırı)."""
-    return SecClient(get_user_agent(), limiter=shared_limiter(), cache=FileCache(get_cache_dir()))
+    """Yapılandırmadan SecClient (User-Agent zorunlu, önbellekli, paylaşılan hız sınırı).
+
+    Önbellek süresi URL sınıfına göredir (Archives süresiz, submissions/companyfacts
+    FINSIGHT_SEC_JSON_TTL, company_tickers 24 saat; docs/asama4-sozlesme.md §5)."""
+    return SecClient(get_user_agent(), limiter=shared_limiter(),
+                     cache=FileCache(get_cache_dir(), json_ttl_seconds=get_sec_json_ttl()))
 
 
 # --------------------------------------------------------------------------- yardımcılar
@@ -203,6 +211,10 @@ def _filing_label(filing: dict) -> str:
     return f"{filing.get('form')} {filed_text}".strip()
 
 
+_CIK_RE = re.compile(r"\d{1,10}")
+_ACCESSION_RE = re.compile(r"\d{18}")  # 0000320193-25-000001 → tiresiz 18 rakam
+
+
 def store_document(body: bytes, cik: str, accession_no: str, primary_document: str,
                    documents_dir: str | None = None) -> dict:
     """Belgeyi diske yazar; ``{"local_path", "sha256", "size_bytes"}``. Yazılamazsa
@@ -210,8 +222,18 @@ def store_document(body: bytes, cik: str, accession_no: str, primary_document: s
     meta: dict = {"local_path": None, "sha256": hashlib.sha256(body).hexdigest(),
                   "size_bytes": len(body)}
     base = documents_dir or get_documents_dir()
-    name = os.path.basename(primary_document or "") or "document.htm"
-    path = os.path.join(base, str(cik), accession_no.replace("-", ""), name)
+    name = os.path.basename(str(primary_document or "").replace("\\", "/")) or "document.htm"
+    # RT-02: CIK ve accession SEC JSON'undan gelir ama yola eklenmeden önce biçimleri
+    # doğrulanır; ayrıca nihai yolun belge klasörünün içinde kaldığı denetlenir.
+    cik_part = str(cik or "").strip()
+    acc_part = str(accession_no or "").strip().replace("-", "")
+    path = os.path.join(base, cik_part, acc_part, name)
+    root = os.path.realpath(base)
+    if not (_CIK_RE.fullmatch(cik_part) and _ACCESSION_RE.fullmatch(acc_part)
+            and name not in (".", "..")
+            and os.path.commonpath([root, os.path.realpath(path)]) == root):
+        log.warning("Belge diske yazılmadı: geçersiz CIK / accession / dosya adı.")
+        return meta
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as fh:
@@ -225,15 +247,25 @@ def store_document(body: bytes, cik: str, accession_no: str, primary_document: s
 # --------------------------------------------------------------------------- skor
 
 
-def compute_and_save_score(session: Session, company_id: int) -> dict:
-    """Kayıtlı kalemler + son 10-K tonları + son risk farkından skoru hesaplar ve yazar."""
-    facts = repo.load_facts(session, company_id)
-    sections = repo.load_sentiment_sections(session, company_id)
+def text_signals_for(sections: list[dict], risk: dict | None) -> dict:
+    """Skorun metin sinyalleri (saf): MD&A tonu en son analiz edilmiş başvurudan (10-K Item 7
+    veya daha yeni 10-Q Item 2), risk tonu en son 10-K'dan; risk farkı iki son 10-K arasında
+    (docs/asama4-sozlesme.md §3). Kaynak başvurular ``mdna_filing`` / ``risk_filing``."""
     model = current_sentiment_model(sections)
-    _, by_code = latest_annual_summaries(sentiment_sections(sections, model))
-    risk = repo.load_risk(session, company_id)
-    signals = compute_text_signals(by_code, risk)
-    _, score = score_company(facts, signals)
+    tone = latest_tone_summaries(sentiment_sections(sections, model))
+    signals = compute_text_signals(tone["by_code"], risk)
+    signals["mdna_filing"] = tone["mdna_filing"]
+    signals["risk_filing"] = tone["risk_filing"]
+    return signals
+
+
+def compute_and_save_score(session: Session, company_id: int) -> dict:
+    """Dinamik seri (TTM varsa) + metin sinyalleri + son risk farkından skoru hesaplar, yazar."""
+    facts = repo.load_facts(session, company_id)
+    dynamic = repo.load_dynamic(session, company_id, facts)
+    signals = text_signals_for(repo.load_sentiment_sections(session, company_id),
+                               repo.load_risk(session, company_id))
+    _, score = score_company(facts, signals, dynamic=dynamic)
     repo.save_score(session, company_id, score)
     return score
 
@@ -407,7 +439,8 @@ def run_analysis_for_company(session: Session, client: SecClient, company_id: in
     repo.touch_analysis(session, company_id)
     timed("score", t)
     summary["score"] = {"total": score.get("total"), "band": score.get("band"),
-                        "as_of_period": score.get("as_of_period")}
+                        "as_of_period": score.get("as_of_period"),
+                        "basis": score.get("basis"), "as_of_filing": score.get("as_of_filing")}
     return finish()
 
 
@@ -433,9 +466,14 @@ def default_session_factory() -> sessionmaker[Session]:
 def run_ingest_job(job_id: int, ticker: str, analyze: bool = True, *,
                    session_factory: sessionmaker[Session] | None = None,
                    client_factory: Callable[[], SecClient] | None = None,
-                   today: date | None = None, documents_dir: str | None = None) -> None:
+                   today: date | None = None, documents_dir: str | None = None,
+                   fresh: bool = False) -> None:
     """POST /ingest arka plan işi. Kendi oturumunu açar; FastAPI senkron görevi iş
-    parçacığı havuzunda çalıştırır. Hata yükseltmez, sonucu işe yazar."""
+    parçacığı havuzunda çalıştırır. Hata yükseltmez, sonucu işe yazar.
+
+    fresh=True: submissions / companyfacts önbellek okunmadan SEC'ten alınır (yenileme ve
+    "Güncelle" akışı; yeni 10-Q önbellekteki eski JSON yüzünden kaçmasın). Artımlıdır: önceden
+    aynı modellerle analiz edilmiş başvurular yeniden analiz edilmez."""
     factory = session_factory or default_session_factory()
     with factory() as session:
         client: SecClient | None = None
@@ -450,7 +488,8 @@ def run_ingest_job(job_id: int, ticker: str, analyze: bool = True, *,
                    progress=0.02)
             client = (client_factory or make_sec_client)()
             ticker_map = build_ticker_map(client.company_tickers())
-            data = collect(client, ticker, ticker_map, years=DEFAULT_YEARS, today=today)
+            data = collect(client, ticker, ticker_map, years=DEFAULT_YEARS, today=today,
+                           fresh=fresh)
             update(step="Finansal veriler kaydediliyor", progress=0.15)
             company = repo.save_collected(session, data)
             company_id = company.id
@@ -478,3 +517,61 @@ def run_ingest_job(job_id: int, ticker: str, analyze: bool = True, *,
                 update(status="error", error=safe_error(exc), finished_at=utcnow())
             except Exception:  # pragma: no cover - veritabanı tamamen erişilemezse
                 log.exception("İş durumu yazılamadı: %s", job_id)
+
+
+# --------------------------------------------------------------------------- iş kuyruğu (SEC-02)
+
+
+class JobRunner:
+    """Ingest işleri için ayrı, sınırlı iş parçacığı havuzu (SEC-02, CWE-770).
+
+    - Aynı anda en fazla ``max_running`` iş ÇALIŞIR (varsayılan 2); ``max_queued`` kadarı
+      kuyrukta (``status=queued``) bekler. Kapasite doluysa ``try_reserve`` False döner ve API
+      429 verir.
+    - İşler FastAPI/AnyIO'nun istek iş parçacığı havuzunu KULLANMAZ: uzun süren ingest işleri
+      ``/api/health`` gibi uç noktaları bekletemez.
+    """
+
+    def __init__(self, max_running: int | None = None, max_queued: int | None = None) -> None:
+        self.max_running = max_running if max_running is not None else get_max_concurrent_jobs()
+        queued = max_queued if max_queued is not None else get_max_queued_jobs()
+        self.capacity = self.max_running + queued
+        self._executor = ThreadPoolExecutor(max_workers=self.max_running,
+                                            thread_name_prefix="finsight-job")
+        self._lock = threading.Lock()
+        self._active = 0
+
+    @property
+    def active(self) -> int:
+        with self._lock:
+            return self._active
+
+    def try_reserve(self) -> bool:
+        """Kapasite varsa bir yer ayırır (True). Ayrılan yer ``submit`` ile kullanılmalı veya
+        ``release`` ile bırakılmalı."""
+        with self._lock:
+            if self._active >= self.capacity:
+                return False
+            self._active += 1
+            return True
+
+    def release(self) -> None:
+        with self._lock:
+            self._active = max(self._active - 1, 0)
+
+    def submit(self, fn: Callable, *args, **kwargs) -> Future:
+        """Önceden ayrılmış yerle işi kuyruğa koyar; iş bitince yer bırakılır."""
+        def run() -> None:
+            try:
+                fn(*args, **kwargs)
+            finally:
+                self.release()
+
+        try:
+            return self._executor.submit(run)
+        except BaseException:
+            self.release()
+            raise
+
+    def shutdown(self) -> None:
+        self._executor.shutdown(wait=False, cancel_futures=True)
