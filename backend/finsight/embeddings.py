@@ -223,8 +223,8 @@ def get_embedder() -> Embedder:
     try:
         return SentenceTransformerEmbedder()
     except Exception as exc:  # ImportError, model indirme/yükleme hataları
-        log.warning("sentence-transformers yüklenemedi (%s); hashing gömücüsü kullanılıyor.",
-                    type(exc).__name__)
+        log.warning("sentence-transformers yüklenemedi (%s: %s); hashing gömücüsü kullanılıyor.",
+                    type(exc).__name__, str(exc)[:300])
         return HashingEmbedder()
 
 

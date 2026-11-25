@@ -609,7 +609,8 @@ def get_sentiment_model(prefer: str = "finbert") -> SentimentModel:
     try:
         return FinBertModel()
     except Exception as exc:  # ImportError, model indirme/yükleme hataları
-        log.warning("FinBERT yüklenemedi (%s); sözlük modeline düşülüyor.", type(exc).__name__)
+        log.warning("FinBERT yüklenemedi (%s: %s); sözlük modeline düşülüyor.",
+                    type(exc).__name__, str(exc)[:300])
         return LexiconModel()
 
 
