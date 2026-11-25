@@ -1,5 +1,6 @@
 // Uygulama kabuğu: dil ve tema durumu, yönlendirme, başlık ve alt bilgi.
 import { useEffect, useMemo, useState } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Footer, Header } from "./components/Layout";
 import type { Theme } from "./components/Layout";
 import { setFormatLang } from "./format";
@@ -89,10 +90,12 @@ export function App() {
       </a>
       <Header route={route} theme={theme} onToggleTheme={() => setTheme((th) => (th === "dark" ? "light" : "dark"))} />
       <main id="main" className="main" tabIndex={-1}>
-        {route.name === "home" && <HomePage />}
-        {route.name === "company" && <CompanyPage key={route.ticker} ticker={route.ticker} tab={route.tab} />}
-        {route.name === "compare" && <ComparePage tickers={route.tickers} />}
-        {route.name === "notFound" && <NotFoundPage />}
+        <ErrorBoundary key={hash}>
+          {route.name === "home" && <HomePage />}
+          {route.name === "company" && <CompanyPage key={route.ticker} ticker={route.ticker} tab={route.tab} />}
+          {route.name === "compare" && <ComparePage tickers={route.tickers} />}
+          {route.name === "notFound" && <NotFoundPage />}
+        </ErrorBoundary>
       </main>
       <Footer />
     </I18nContext.Provider>

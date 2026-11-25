@@ -5,7 +5,7 @@ import { api } from "../api";
 import { ScoreMini } from "../charts/ScoreGauge";
 import { HBars } from "../charts/small";
 import { CompanySearch } from "../components/CompanySearch";
-import { Disclaimer, EmptyState, ErrorCard, Panel, SkeletonBlock, cx } from "../components/ui";
+import { BasisTag, Disclaimer, EmptyState, ErrorCard, Panel, SkeletonBlock, cx } from "../components/ui";
 import { fmtDate, fmtRatio } from "../format";
 import { ratioLabel, useI18n } from "../i18n";
 import { useAsync } from "../lib/useAsync";
@@ -114,7 +114,7 @@ function CompareView({ data }: { data: CompareResponse }) {
             <span className="score-card-name">{c.name}</span>
             <ScoreMini total={c.score?.total ?? null} band={c.score?.band ?? null} width={96} />
             <span className="score-card-meta">
-              {t("compare.period")} {fmtDate(c.period_end)}
+              <BasisTag basis={c.basis} /> {t("compare.period")} {fmtDate(c.as_of_period ?? c.period_end)}
             </span>
           </a>
         ))}
@@ -129,6 +129,10 @@ function CompareView({ data }: { data: CompareResponse }) {
                 {data.companies.map((c) => (
                   <th key={c.ticker} scope="col" className="num">
                     {c.ticker}
+                    <span className="th-sub">
+                      {c.basis === "ttm" ? "TTM " : ""}
+                      {fmtDate(c.as_of_period ?? c.period_end)}
+                    </span>
                   </th>
                 ))}
               </tr>

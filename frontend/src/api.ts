@@ -25,13 +25,25 @@ export const API_BASE: string = (typeof __API_BASE__ === "string" ? __API_BASE__
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
+  /** v1.5: 429 / 503 yanıtlarındaki Retry-After (saniye); yoksa null. */
+  readonly retryAfter: number | null;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, retryAfter: number | null = null) {
     super(detail);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.retryAfter = retryAfter;
   }
+}
+
+/** Retry-After başlığı: saniye veya HTTP tarihi. */
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const sec = Number(value);
+  if (Number.isFinite(sec) && sec >= 0) return Math.ceil(sec);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : Math.max(0, Math.ceil((at - Date.now()) / 1000));
 }
 
 function isDetailBody(value: unknown): value is { detail: unknown } {
@@ -77,7 +89,7 @@ async function requestWithHeaders<T>(path: string, init?: RequestInit): Promise<
     } catch {
       detail = "";
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, parseRetryAfter(res.headers.get("Retry-After")));
   }
   return { body: (await res.json()) as T, headers: res.headers };
 }

@@ -50,6 +50,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 4143750000,
@@ -98,9 +99,7 @@
         "value": 2925000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      }
     }
    },
@@ -118,6 +117,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 393750000,
@@ -166,9 +166,7 @@
         "value": 262500000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      }
     }
    },
@@ -186,6 +184,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 473000000,
@@ -234,9 +233,7 @@
         "value": 330000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      }
     }
    },
@@ -254,6 +251,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 4044285714,
@@ -268,9 +266,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      }
     }
    },
@@ -288,6 +284,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 1779687500,
@@ -302,9 +299,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      }
     }
    },
@@ -322,6 +317,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 2265789474,
@@ -336,9 +332,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      }
     }
    }
@@ -448,6 +442,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 4143750000,
@@ -496,9 +491,7 @@
         "value": 2925000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      }
     }
    },
@@ -516,6 +509,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 393750000,
@@ -564,9 +558,7 @@
         "value": 262500000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      }
     }
    },
@@ -584,6 +576,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 473000000,
@@ -632,9 +625,7 @@
         "value": 330000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      }
     }
    },
@@ -652,6 +643,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 4044285714,
@@ -666,9 +658,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      }
     }
    },
@@ -686,6 +676,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 1779687500,
@@ -700,9 +691,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      }
     }
    },
@@ -720,6 +709,7 @@
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
     },
+    "reason": null,
     "basis": "ttm",
     "ttm": {
      "value": 2265789474,
@@ -734,9 +724,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      }
     }
    }
@@ -852,9 +840,9 @@
      }
     ],
     "latest": {
+     "value": 4143750000,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 4143750000,
      "yoy": 0.1024,
      "source": {
       "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
@@ -898,9 +886,7 @@
         "value": 2925000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      },
      "basis": "ttm"
     }
@@ -954,9 +940,9 @@
      }
     ],
     "latest": {
+     "value": 2320731707,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 2320731707,
      "yoy": 0.0901,
      "source": {
       "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
@@ -1000,9 +986,7 @@
         "value": 1650000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      },
      "basis": "ttm"
     }
@@ -1056,21 +1040,89 @@
      }
     ],
     "latest": {
+     "value": 1823018293,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 1823018293,
      "yoy": 0.1184,
      "source": {
-      "xbrl_tag": "us-gaap:GrossProfit",
+      "xbrl_tag": "derived",
       "form": "10-Q",
       "accession_no": "0009990009-26-000301",
       "filed": "2026-10-28",
-      "derived_from": null,
+      "derived_from": [
+       "CostOfGoodsAndServicesSold",
+       "RevenueFromContractWithCustomerExcludingAssessedTax"
+      ],
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      "parts": [
+       {
+        "role": "annual",
+        "metric": "revenue",
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession_no": "0009990009-26-000213",
+        "period_start": "2025-01-01",
+        "period_end": "2025-12-31",
+        "value": 3900000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": "revenue",
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990009-26-000301",
+        "period_start": "2026-01-01",
+        "period_end": "2026-09-30",
+        "value": 3168750000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": "revenue",
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990009-26-000301",
+        "period_start": "2025-01-01",
+        "period_end": "2025-09-30",
+        "value": 2925000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
+       },
+       {
+        "role": "annual",
+        "metric": "cost_of_revenue",
+        "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+        "form": "10-K",
+        "accession_no": "0009990009-26-000213",
+        "period_start": "2025-01-01",
+        "period_end": "2025-12-31",
+        "value": 2200000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": "cost_of_revenue",
+        "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+        "form": "10-Q",
+        "accession_no": "0009990009-26-000301",
+        "period_start": "2026-01-01",
+        "period_end": "2026-09-30",
+        "value": 1770731707,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": "cost_of_revenue",
+        "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+        "form": "10-Q",
+        "accession_no": "0009990009-26-000301",
+        "period_start": "2025-01-01",
+        "period_end": "2025-09-30",
+        "value": 1650000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
+       }
+      ]
      },
      "basis": "ttm"
     }
@@ -1124,9 +1176,9 @@
      }
     ],
     "latest": {
+     "value": 541279070,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 541279070,
      "yoy": 0.2144,
      "source": {
       "xbrl_tag": "us-gaap:OperatingIncomeLoss",
@@ -1170,9 +1222,7 @@
         "value": 367500000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      },
      "basis": "ttm"
     }
@@ -1226,9 +1276,9 @@
      }
     ],
     "latest": {
+     "value": 393750000,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 393750000,
      "yoy": 0.2794,
      "source": {
       "xbrl_tag": "us-gaap:NetIncomeLoss",
@@ -1272,9 +1322,7 @@
         "value": 262500000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      },
      "basis": "ttm"
     }
@@ -1328,9 +1376,9 @@
      }
     ],
     "latest": {
+     "value": 473000000,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 473000000,
      "yoy": 0.1147,
      "source": {
       "xbrl_tag": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
@@ -1374,9 +1422,7 @@
         "value": 330000000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      },
      "basis": "ttm"
     }
@@ -1430,9 +1476,9 @@
      }
     ],
     "latest": {
+     "value": 187000000,
      "period_start": "2026-01-01",
      "period_end": "2026-09-30",
-     "value": 187000000,
      "yoy": 0.1833,
      "source": {
       "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
@@ -1476,9 +1522,7 @@
         "value": 127500000,
         "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/"
        }
-      ],
-      "period_start": "2026-01-01",
-      "period_end": "2026-09-30"
+      ]
      },
      "basis": "ttm"
     }
@@ -1532,10 +1576,10 @@
      }
     ],
     "latest": {
+     "value": 4044285714,
      "period_start": null,
      "period_end": "2026-09-30",
-     "value": 4044285714,
-     "yoy": null,
+     "yoy": 0.0857,
      "source": {
       "xbrl_tag": "us-gaap:Assets",
       "form": "10-Q",
@@ -1544,9 +1588,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      },
      "basis": "ttm"
     }
@@ -1600,10 +1642,10 @@
      }
     ],
     "latest": {
+     "value": 2071875000,
      "period_start": null,
      "period_end": "2026-09-30",
-     "value": 2071875000,
-     "yoy": null,
+     "yoy": 0.0833,
      "source": {
       "xbrl_tag": "us-gaap:AssetsCurrent",
       "form": "10-Q",
@@ -1612,9 +1654,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      },
      "basis": "ttm"
     }
@@ -1668,10 +1708,10 @@
      }
     ],
     "latest": {
+     "value": 989583333,
      "period_start": null,
      "period_end": "2026-09-30",
-     "value": 989583333,
-     "yoy": null,
+     "yoy": 0.0556,
      "source": {
       "xbrl_tag": "us-gaap:LiabilitiesCurrent",
       "form": "10-Q",
@@ -1680,9 +1720,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      },
      "basis": "ttm"
     }
@@ -1736,10 +1774,10 @@
      }
     ],
     "latest": {
+     "value": 1779687500,
      "period_start": null,
      "period_end": "2026-09-30",
-     "value": 1779687500,
-     "yoy": null,
+     "yoy": 0.0625,
      "source": {
       "xbrl_tag": "us-gaap:Liabilities",
       "form": "10-Q",
@@ -1748,9 +1786,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      },
      "basis": "ttm"
     }
@@ -1804,10 +1840,10 @@
      }
     ],
     "latest": {
+     "value": 2265789474,
      "period_start": null,
      "period_end": "2026-09-30",
-     "value": 2265789474,
-     "yoy": null,
+     "yoy": 0.1053,
      "source": {
       "xbrl_tag": "us-gaap:StockholdersEquity",
       "form": "10-Q",
@@ -1816,9 +1852,7 @@
       "derived_from": null,
       "url": "https://www.sec.gov/Archives/edgar/data/9990009/000999000926000301/",
       "basis": "ttm",
-      "parts": [],
-      "period_start": null,
-      "period_end": "2026-09-30"
+      "parts": []
      },
      "basis": "ttm"
     }

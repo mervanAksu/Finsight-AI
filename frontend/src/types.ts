@@ -422,6 +422,9 @@ export interface CompareCompany {
   period_end: ISODate | null;
   score: ScoreBrief | null;
   ratios: Record<string, number | null>;
+  /** v1.4: son sütunun dayanağı ve dönemi (= period_end) */
+  basis?: Basis;
+  as_of_period?: ISODate | null;
 }
 export interface CompareResponse {
   ratio_meta: RatioMeta[];

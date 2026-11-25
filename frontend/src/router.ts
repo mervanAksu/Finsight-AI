@@ -14,11 +14,28 @@ function isTab(value: string): value is CompanyTab {
   return (COMPANY_TABS as readonly string[]).includes(value);
 }
 
+/** Bozuk yüzde kodlamasında (ör. "%E0", "%") URIError yerine null döner (SEC-11, CWE-248). */
+function safeDecode(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#/, "") || "/";
   const [pathPart, queryPart = ""] = raw.split("?", 2);
-  const segments = pathPart.split("/").filter(Boolean).map((s) => decodeURIComponent(s));
-  const query = new URLSearchParams(queryPart);
+  const decoded = pathPart.split("/").filter(Boolean).map(safeDecode);
+  // Çözülemeyen bir parça varsa sayfa çökmez; "bulunamadı" gösterilir.
+  if (decoded.some((x) => x === null)) return { name: "notFound", path: raw };
+  const segments = decoded as string[];
+  let query: URLSearchParams;
+  try {
+    query = new URLSearchParams(queryPart);
+  } catch {
+    return { name: "notFound", path: raw };
+  }
 
   if (segments.length === 0) return { name: "home" };
   if (segments[0] === "company" && segments[1]) {

@@ -719,6 +719,9 @@ def build(tk: str, spec: dict) -> dict:
             prev = raw[metric][i_a - 1]
             q_prior_bal[metric] = round(prev + (a - prev) * f_frac) if prev is not None else a
     ttm["gross_profit"] = ttm["revenue"] - ttm["cost_of_revenue"]
+    if "revenue" in ttm_parts and "cost_of_revenue" in ttm_parts:
+        ttm_parts["gross_profit"] = [{**p_, "metric": m_} for m_ in ("revenue", "cost_of_revenue")
+                                     for p_ in ttm_parts[m_]]
     ttm_prev["gross_profit"] = ttm_prev["revenue"] - ttm_prev["cost_of_revenue"]
 
     def ttm_yoy(metric: str) -> float | None:
@@ -728,11 +731,17 @@ def build(tk: str, spec: dict) -> dict:
         return round((cur - prev) / abs(prev), 4)
 
     def ttm_source(metric: str) -> dict:
+        # Backend views.source_view ile aynı: brüt kâr TTM'si gelir TTM − maliyet TTM olarak
+        # türetilir (xbrl_tag "derived", derived_from önek siz etiketler, parçalarda metric dolu).
+        if metric == "gross_profit" and metric in ttm_parts:
+            derived_tags = sorted({p_["xbrl_tag"].split(":", 1)[1] for p_ in ttm_parts[metric]})
+            return {"xbrl_tag": "derived", "form": "10-Q", "accession_no": q_acc, "filed": q_filing["filing_date"],
+                    "derived_from": derived_tags, "url": folder_url(cik, q_acc), "basis": "ttm",
+                    "parts": ttm_parts[metric]}
         derived = metric in spec["derived"]
         return {"xbrl_tag": "derived" if derived else TAGS[metric], "form": "10-Q", "accession_no": q_acc,
                 "filed": q_filing["filing_date"], "derived_from": DERIVED[metric] if derived else None,
-                "url": folder_url(cik, q_acc), "basis": "ttm", "parts": ttm_parts.get(metric, []),
-                "period_start": fy_start if metric in DURATION else None, "period_end": tt["q_end"]}
+                "url": folder_url(cik, q_acc), "basis": "ttm", "parts": ttm_parts.get(metric, [])}
 
     missing_ttm = set(tt.get("missing", []))
     ttm_reason_text = "TTM hesaplanamadı: geçen yılın aynı dönemi (YTD) 10-Q'da yok; yıllık değer kullanıldı."
@@ -799,9 +808,12 @@ def build(tk: str, spec: dict) -> dict:
     for fm in facts_metrics:
         mt = fm["metric"]
         if mt in ttm and mt not in missing_ttm:
-            fm["latest"] = {"period_start": fy_start if mt in DURATION else None, "period_end": tt["q_end"],
-                            "value": ttm[mt], "yoy": ttm_yoy(mt) if mt in DURATION else None,
+            inst_yoy = round(ttm[mt] / q_prior_bal[mt] - 1, 4) if q_prior_bal.get(mt) else None
+            fm["latest"] = {"value": ttm[mt], "period_start": fy_start if mt in DURATION else None,
+                            "period_end": tt["q_end"], "yoy": ttm_yoy(mt) if mt in DURATION else inst_yoy,
                             "source": ttm_source(mt), "basis": "ttm"}
+        else:
+            fm["latest"] = None
 
     ratio_rows = []
     latest_ratio: dict[str, float | None] = {}
@@ -955,7 +967,7 @@ def build(tk: str, spec: dict) -> dict:
 
     def km(k: str) -> dict:
         item = {"metric": k, "label": METRIC_LABELS[k], "value": raw[k][i_last], "period_end": pend(latest_year),
-                "yoy": yoy(k, i_last), "source": source(k, latest_year), "basis": "ttm"}
+                "yoy": yoy(k, i_last), "source": source(k, latest_year), "reason": None, "basis": "ttm"}
         if k in missing_ttm:
             item.update(ttm=None, ttm_reason=ttm_reason_text)
         else:

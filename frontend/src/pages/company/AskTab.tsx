@@ -13,7 +13,7 @@ import {
   LuTriangleAlert,
 } from "react-icons/lu";
 import { api } from "../../api";
-import { Disclaimer, Panel, cx, errorMessage } from "../../components/ui";
+import { Disclaimer, Panel, cx, errorHint, errorMessage, errorTitle } from "../../components/ui";
 import { fmtDate, fmtNumber, fmtPercent } from "../../format";
 import { sectionLabel, useI18n } from "../../i18n";
 import type { AskResponse, AskSource } from "../../types";
@@ -23,7 +23,7 @@ const MAX_LEN = 500;
 type Turn =
   | { id: number; kind: "pending"; question: string }
   | { id: number; kind: "answer"; question: string; response: AskResponse }
-  | { id: number; kind: "error"; question: string; message: string };
+  | { id: number; kind: "error"; question: string; message: string; title: string; hint: string | null };
 
 export function AskTab({ ticker, analyzed }: { ticker: string; analyzed: boolean }) {
   const { t } = useI18n();
@@ -48,7 +48,18 @@ export function AskTab({ ticker, analyzed }: { ticker: string; analyzed: boolean
         setTurns((prev) => prev.map((x) => (x.id === id ? { id, kind: "answer", question: q, response } : x))),
       (err: unknown) =>
         setTurns((prev) =>
-          prev.map((x) => (x.id === id ? { id, kind: "error", question: q, message: errorMessage(err, t) } : x)),
+          prev.map((x) =>
+            x.id === id
+              ? {
+                  id,
+                  kind: "error",
+                  question: q,
+                  message: errorMessage(err, t),
+                  title: errorTitle(err, t, t("ask.error")),
+                  hint: errorHint(err, t),
+                }
+              : x,
+          ),
         ),
     );
   };
@@ -127,9 +138,11 @@ export function AskTab({ ticker, analyzed }: { ticker: string; analyzed: boolean
               {turn.kind === "error" && (
                 <div className="msg msg-bot is-error" role="alert">
                   <span className="qa-label">{t("ask.answer")}</span>
-                  <p>
-                    <LuCircleAlert aria-hidden="true" /> {t("ask.error")}: {turn.message}
+                  <p className="err-title">
+                    <LuCircleAlert aria-hidden="true" /> {turn.title}
                   </p>
+                  <p className="err-detail">{turn.message}</p>
+                  {turn.hint && <p className="state-hint">{turn.hint}</p>}
                 </div>
               )}
               {turn.kind === "answer" && <Answer response={turn.response} turnId={turn.id} />}

@@ -25,6 +25,11 @@ bitene kadar başvuru listelerinde görünmez); NVLT'de SEC'e ulaşılamamış g
 sunucusunda güncelleme yalnızca tazelik durumunu ve başvuru listesini değiştirir; skor ve
 oranlar aynı kalır.
 
+v1.5 sınır ve güvenlik yanıtları (`--reject`, virgülle birden fazla): `ingest-429` (iş
+kapasitesi dolu, Retry-After 30), `ingest-503` (veritabanı meşgul, Retry-After 5), `ask-429`
+(dakikalık soru sınırı, Retry-After 42), `post-403` (başka siteden istek; tüm POST'lar).
+Metinler backend `api.py` ile aynıdır.
+
 Soru-Cevap: soruda "bulunamadı"/"kripto" → `not_found`, "alıntı" → `extractive`, "gömme" →
 `warning` alanı; "almalı mıyım" gibi tavsiye soruları → `advice_refused: true` ve cevabın başında
 sabit ret cümlesi. Metin analizi yapılmamış şirkette her soru `not_found` döner.
@@ -203,6 +208,7 @@ class Handler(SimpleHTTPRequestHandler):
     # ------------------------------------------------------------ yardımcılar
     search_reason: str | None = None
     no_freshness = False
+    reject: frozenset[str] = frozenset()
 
     def log_message(self, fmt: str, *args) -> None:  # sessiz
         return
@@ -211,6 +217,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Expose-Headers", "Retry-After")
 
     def _json(self, payload, status: int = 200, headers: dict[str, str] | None = None) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -224,8 +231,28 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _error(self, status: int, detail: str) -> None:
-        self._json({"detail": detail}, status)
+    def _error(self, status: int, detail: str, retry_after: int | None = None) -> None:
+        headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+        self._json({"detail": detail}, status, headers=headers)
+
+    def _rejected(self, what: str) -> bool:
+        """--reject ile istenen v1.5 hata yanıtını üretir (backend api.py metinleriyle)."""
+        if "post-403" in Handler.reject:
+            self._error(403, "Başka bir siteden gelen istek reddedildi (CSRF koruması).")
+            return True
+        if what == "ingest" and "ingest-429" in Handler.reject:
+            self._error(429, "Şu anda çok fazla veri çekme işi var (en fazla 2 çalışan, toplam 10 iş). "
+                             "Mevcut işler bitince tekrar deneyin.", retry_after=30)
+            return True
+        if what == "ingest" and "ingest-503" in Handler.reject:
+            self._error(503, "Veritabanı şu anda meşgul (başka bir işlem yazıyor). Birkaç saniye sonra "
+                             "tekrar deneyin.", retry_after=5)
+            return True
+        if what == "ask" and "ask-429" in Handler.reject:
+            self._error(429, "Çok fazla soru gönderildi; lütfen biraz bekleyip tekrar deneyin.",
+                        retry_after=42)
+            return True
+        return False
 
     def _delay(self, factor: float = 1.0) -> None:
         if self.latency_ms > 0:
@@ -268,6 +295,9 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         parts = [p for p in url.path.split("/") if p]
         self._delay()
+        if len(parts) == 4 and parts[:2] == ["api", "companies"] and parts[3] in ("ingest", "ask") \
+                and self._rejected(parts[3]):
+            return
         if len(parts) == 4 and parts[:2] == ["api", "companies"] and parts[3] == "ingest":
             ticker = parts[2].upper()
             if not TICKER_RE.match(ticker):
@@ -543,9 +573,13 @@ class Handler(SimpleHTTPRequestHandler):
             d = DATA.get(t)
             has_fin = d is not None and state_of(t) in ("full", "fin")
             sc = score_of(t)
+            period_end = d["ratios"]["periods"][-1] if has_fin else None
+            info = d["ratios"].get("period_info") if has_fin else None
             companies.append({
                 "ticker": t, "name": company_obj(t)["name"],
-                "period_end": d["ratios"]["periods"][-1] if has_fin else None,
+                "period_end": period_end,
+                # v1.4: son sütunun dayanağı ve dönemi (backend views.compare_view)
+                "basis": info[-1]["basis"] if info else "annual", "as_of_period": period_end,
                 "score": None if sc["total"] is None else {"total": sc["total"], "band": sc["band"]},
                 "ratios": ({r["key"]: r["values"][-1]["value"] for r in d["ratios"]["ratios"]} if has_fin
                            else {m["key"]: None for m in ratio_meta}),
@@ -564,7 +598,10 @@ def main() -> None:
                     help="SEC şirket listesi alınamamış gibi davran (yalnızca yerel arama)")
     ap.add_argument("--no-freshness", action="store_true",
                     help="/freshness uç noktası yokmuş gibi davran (v1.3 öncesi sunucu)")
+    ap.add_argument("--reject", default="",
+                    help="v1.5 hata yanıtları: ingest-429, ingest-503, ask-429, post-403 (virgülle)")
     args = ap.parse_args()
+    Handler.reject = frozenset(x.strip() for x in args.reject.split(",") if x.strip())
     Handler.no_freshness = args.no_freshness
     Handler.search_reason = args.search_local
     if args.empty:

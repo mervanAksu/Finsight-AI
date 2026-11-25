@@ -76,14 +76,38 @@ export function errorMessage(error: unknown, t: TFunc): string {
   return t("state.errorNetwork");
 }
 
+/**
+ * v1.5 sınır ve güvenlik yanıtları için kullanıcıya ne yapacağını söyleyen ek cümle:
+ * 429 (hız / eşzamanlı iş sınırı), 503 (veritabanı meşgul), 403 (başka siteden istek).
+ */
+export function errorHint(error: unknown, t: TFunc): string | null {
+  if (!(error instanceof ApiError)) return null;
+  const sec = error.retryAfter;
+  if (error.status === 429) return sec !== null ? t("state.hint429", { sec }) : t("state.hint429NoTime");
+  if (error.status === 503) return sec !== null ? t("state.hint503", { sec }) : t("state.hint503NoTime");
+  if (error.status === 403) return t("state.hint403");
+  return null;
+}
+
+/** Hata başlığı: sınır / güvenlik durumları için özel, diğerlerinde genel. */
+export function errorTitle(error: unknown, t: TFunc, fallback: string): string {
+  if (error instanceof ApiError) {
+    if (error.status === 429) return t("state.title429");
+    if (error.status === 503) return t("state.title503");
+    if (error.status === 403) return t("state.title403");
+  }
+  return fallback;
+}
+
 export function ErrorCard({ error, onRetry, title }: { error: unknown; onRetry?: () => void; title?: string }) {
   const { t } = useI18n();
   return (
     <div className="state-card state-error" role="alert">
       <LuCircleAlert className="state-icon" aria-hidden="true" />
       <div className="state-body">
-        <p className="state-title">{title ?? t("state.errorTitle")}</p>
+        <p className="state-title">{title ?? errorTitle(error, t, t("state.errorTitle"))}</p>
         <p className="state-text">{errorMessage(error, t)}</p>
+        {errorHint(error, t) && <p className="state-hint">{errorHint(error, t)}</p>}
       </div>
       {onRetry && (
         <button type="button" className="btn btn-secondary" onClick={onRetry}>

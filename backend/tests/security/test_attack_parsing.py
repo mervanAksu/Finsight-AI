@@ -22,8 +22,6 @@ import sys
 
 import pytest
 
-from .attack_support import xfail_until
-
 BACKEND = pathlib.Path(__file__).resolve().parents[2]
 REPO = BACKEND.parent
 REDOS_LIMIT_SECONDS = 1.0
@@ -180,7 +178,6 @@ def _parse_hash(tmp_path: pathlib.Path, hashes: list[str]) -> list[dict]:
     return json.loads(res.stdout.strip().splitlines()[-1])
 
 
-@xfail_until("SEC-11", "bozuk URL karması")
 def test_sec11_malformed_hash_does_not_crash_router(tmp_path):
     """SEC-11 (CWE-248) — Saldırganın amacı: kullanıcıya
     ``http://127.0.0.1:8000/#/company/%E0/overview`` bağlantısı gönderip arayüzü beyaz

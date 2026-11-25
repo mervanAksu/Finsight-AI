@@ -340,6 +340,17 @@ const tr = {
   "ask.question": "Soru",
   "ask.answer": "Cevap",
   "ask.examplesLead": "Raporlarda geçen konular hakkında sorun; cevaptaki her iddia numaralı bir alıntıya bağlanır.",
+  "state.crashTitle": "Sayfa açılamadı",
+  "state.crashBody": "Adres bozuk olabilir ya da sayfa beklenmeyen bir veriyle karşılaştı. Ana sayfadan yeniden deneyin.",
+  "state.title429": "İstek sınırına ulaşıldı",
+  "state.title503": "Sunucu şu anda meşgul",
+  "state.title403": "İstek güvenlik denetiminden geçmedi",
+  "state.hint429": "Yaklaşık {sec} sn sonra yeniden deneyin.",
+  "state.hint429NoTime": "Birkaç saniye bekleyip yeniden deneyin.",
+  "state.hint503": "Veritabanı başka bir işlemle meşgul; yaklaşık {sec} sn sonra yeniden deneyin.",
+  "state.hint503NoTime": "Veritabanı başka bir işlemle meşgul; biraz sonra yeniden deneyin.",
+  "state.hint403": "Arayüzü API'nin kendi adresinden açın (ör. http://127.0.0.1:8000); başka bir siteden gönderilen istekler reddedilir.",
+  "ingest.retryIn": "Yeniden dene ({sec})",
 } as const;
 
 export type MsgKey = keyof typeof tr;
@@ -679,6 +690,17 @@ const en: Record<MsgKey, string> = {
   "ask.question": "Question",
   "ask.answer": "Answer",
   "ask.examplesLead": "Ask about topics covered in the filings; every claim in the answer links to a numbered quotation.",
+  "state.crashTitle": "This page could not be opened",
+  "state.crashBody": "The address may be malformed or the page met unexpected data. Try again from the home page.",
+  "state.title429": "Request limit reached",
+  "state.title503": "Server is busy",
+  "state.title403": "Request blocked by a security check",
+  "state.hint429": "Try again in about {sec} s.",
+  "state.hint429NoTime": "Wait a few seconds and try again.",
+  "state.hint503": "The database is busy with another operation; try again in about {sec} s.",
+  "state.hint503NoTime": "The database is busy with another operation; try again shortly.",
+  "state.hint403": "Open the interface from the API's own address (e.g. http://127.0.0.1:8000); requests from other sites are refused.",
+  "ingest.retryIn": "Try again ({sec})",
 };
 
 const DICTS: Record<Lang, Record<MsgKey, string>> = { tr, en };

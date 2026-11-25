@@ -2,11 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { LuCheck, LuCircleAlert, LuPlay, LuRefreshCw, LuTriangleAlert } from "react-icons/lu";
-import { api } from "../api";
 import { fmtNumber, fmtPercent } from "../format";
 import { useI18n } from "../i18n";
 import type { Job } from "../types";
-import { cx, errorMessage } from "./ui";
+import { ApiError, api } from "../api";
+import { cx, errorHint, errorMessage, errorTitle } from "./ui";
 
 const POLL_MS = 900;
 
@@ -15,7 +15,7 @@ type Phase =
   | { kind: "starting" }
   | { kind: "polling"; job: Job | null; jobId: number }
   | { kind: "done"; job: Job }
-  | { kind: "error"; message: string; job: Job | null };
+  | { kind: "error"; message: string; job: Job | null; title?: string; hint?: string | null; retryAt?: number | null };
 
 export function IngestPanel({
   ticker,
@@ -48,11 +48,33 @@ export function IngestPanel({
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
+  // v1.5: 429 / 503 / 403 yanıtlarında sunucunun `detail` metni + ne yapılacağı + bekleme süresi.
+  const failure = (err: unknown): Phase => ({
+    kind: "error",
+    message: errorMessage(err, t),
+    job: null,
+    title: errorTitle(err, t, t("ingest.failed")),
+    hint: errorHint(err, t),
+    retryAt: err instanceof ApiError && err.retryAfter !== null ? Date.now() + err.retryAfter * 1000 : null,
+  });
+
+  const [now, setNow] = useState(() => Date.now());
+  const retryAt = phase.kind === "error" ? (phase.retryAt ?? null) : null;
+  useEffect(() => {
+    if (retryAt === null) return undefined;
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      if (Date.now() >= retryAt) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
+  const waitSec = retryAt !== null ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
+
   const start = () => {
     setPhase({ kind: "starting" });
     api.ingest(ticker, analyze).then(
       (res) => setPhase({ kind: "polling", job: null, jobId: res.job_id }),
-      (err: unknown) => setPhase({ kind: "error", message: errorMessage(err, t), job: null }),
+      (err: unknown) => setPhase(failure(err)),
     );
   };
 
@@ -83,7 +105,7 @@ export function IngestPanel({
         },
         (err: unknown) => {
           if (cancelled || (err instanceof DOMException && err.name === "AbortError")) return;
-          setPhase({ kind: "error", message: errorMessage(err, t), job: null });
+          setPhase(failure(err));
         },
       );
     };
@@ -102,7 +124,7 @@ export function IngestPanel({
     phase.kind === "done"
       ? t("ingest.done")
       : phase.kind === "error"
-        ? t("ingest.failed")
+        ? (phase.title ?? t("ingest.failed"))
         : job?.status === "queued" || phase.kind === "starting"
           ? t("ingest.queued")
           : t("ingest.running");
@@ -129,9 +151,9 @@ export function IngestPanel({
           </button>
         )}
         {phase.kind === "error" && (
-          <button type="button" className="btn btn-secondary" onClick={start}>
+          <button type="button" className="btn btn-secondary" onClick={start} disabled={waitSec > 0}>
             <LuRefreshCw aria-hidden="true" />
-            {t("ingest.retry")}
+            {waitSec > 0 ? t("ingest.retryIn", { sec: waitSec }) : t("ingest.retry")}
           </button>
         )}
       </div>
@@ -164,6 +186,7 @@ export function IngestPanel({
             <span>{phase.kind === "error" ? phase.message : (job?.step ?? "…")}</span>
             {job && job.request_count > 0 && <span>{t("ingest.requests", { n: fmtNumber(job.request_count) })}</span>}
           </div>
+          {phase.kind === "error" && phase.hint && <p className="state-hint ingest-hint">{phase.hint}</p>}
           {warnings.length > 0 && (
             <ul className="ingest-warnings" aria-label={t("ingest.warnings")}>
               {warnings.map((w) => (
