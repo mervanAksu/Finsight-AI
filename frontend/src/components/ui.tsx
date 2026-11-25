@@ -1,18 +1,20 @@
-// Ortak küçük bileşenler: kart, iskelet, hata/boş durumları, uyarı, kaynak çipi, ipucu.
-import { useEffect, useId, useRef, useState } from "react";
+// Ortak küçük bileşenler: bölüm (sheet), iskelet, hata/boş durumları, uyarı, kaynak ipucu,
+// kaynaklı sayı, form damgası, dönem tabanı etiketi.
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { LuArrowDownRight, LuArrowUpRight, LuCircleAlert, LuExternalLink, LuInfo, LuMinus, LuRefreshCw } from "react-icons/lu";
 import { ApiError, edgarFilingUrl } from "../api";
-import { fmtDate, fmtSignedPercent } from "../format";
+import { fmtDate, fmtMoneyFull, fmtSignedPercent } from "../format";
 import { useI18n } from "../i18n";
 import type { TFunc } from "../i18n";
-import type { Source } from "../types";
+import type { Basis, DerivedPart, Source } from "../types";
 
 export function cx(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(" ");
 }
 
-// ------------------------------------------------------------------ Panel
+// ------------------------------------------------------------------ Bölüm
+// "sheet": beyaz yaprak (birincil veri), "margin": kutusuz kenar sütunu (ikincil bilgi).
 interface PanelProps {
   title?: ReactNode;
   subtitle?: ReactNode;
@@ -20,12 +22,13 @@ interface PanelProps {
   children: ReactNode;
   className?: string;
   id?: string;
+  variant?: "sheet" | "margin";
 }
 
-export function Panel({ title, subtitle, actions, children, className, id }: PanelProps) {
+export function Panel({ title, subtitle, actions, children, className, id, variant = "sheet" }: PanelProps) {
   const headingId = useId();
   return (
-    <section className={cx("panel", className)} id={id} aria-labelledby={title ? headingId : undefined}>
+    <section className={cx("panel", `panel-${variant}`, className)} id={id} aria-labelledby={title ? headingId : undefined}>
       {(title || actions) && (
         <header className="panel-head">
           <div className="panel-titles">
@@ -44,7 +47,7 @@ export function Panel({ title, subtitle, actions, children, className, id }: Pan
   );
 }
 
-// ------------------------------------------------------------------ Skeleton
+// ------------------------------------------------------------------ İskelet
 export function Skeleton({ width, height = 14, radius }: { width?: number | string; height?: number; radius?: number }) {
   return <span className="skeleton" style={{ width: width ?? "100%", height, borderRadius: radius }} aria-hidden="true" />;
 }
@@ -54,9 +57,9 @@ export function SkeletonBlock({ lines = 3, chart = false }: { lines?: number; ch
   return (
     <div className="skeleton-block" role="status" aria-live="polite">
       <span className="sr-only">{t("state.loading")}</span>
-      {chart && <Skeleton height={180} radius={8} />}
+      {chart && <Skeleton height={200} />}
       {Array.from({ length: lines }, (_, i) => (
-        <Skeleton key={i} width={`${90 - i * 14}%`} />
+        <Skeleton key={i} width={`${92 - i * 11}%`} />
       ))}
     </div>
   );
@@ -132,9 +135,9 @@ export function Disclaimer({ text }: { text?: string | null }) {
 
 // ------------------------------------------------------------------ İpucu
 // Balon `position: fixed` ile yerleşir; böylece kaydırılabilir tablo kapsayıcıları
-// (overflow) tarafından kırpılmaz. Fare ve klavye odağıyla açılır.
+// (overflow) tarafından kırpılmaz. Fare ve klavye odağıyla açılır; Escape kapatır.
 type TipAlign = "center" | "start" | "end";
-const TIP_W = 280;
+const TIP_W = 300;
 
 interface TipPos {
   left: number;
@@ -148,34 +151,50 @@ export function Tip({
   children,
   align = "center",
   className,
+  mark = false,
 }: {
   content: ReactNode;
   children: ReactNode;
   align?: TipAlign;
   className?: string;
+  /** Kaynağı olan sayı: noktalı alt çizgi ve üzerine gelince fosforlu vurgu. */
+  mark?: boolean;
 }) {
   const id = useId();
   const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const [pos, setPos] = useState<TipPos | null>(null);
+
+  // Balon yukarıda sığmıyorsa (uzun kaynak ipucu) tetikleyicinin altına çevrilir.
+  useLayoutEffect(() => {
+    const el = triggerRef.current;
+    const bubble = bubbleRef.current;
+    if (!pos || pos.below || !el || !bubble) return;
+    if (bubble.getBoundingClientRect().top < 64) {
+      const r = el.getBoundingClientRect();
+      setPos({ ...pos, below: true, top: r.bottom + 8 });
+    }
+  }, [pos]);
 
   const show = () => {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
-    const below = r.top < 140;
+    const w = Math.min(TIP_W, vw - 24);
+    const below = r.top < 180;
     const top = below ? r.bottom + 8 : r.top - 8;
     const margin = 12;
     let left: number;
     let shift: string;
     if (align === "start") {
-      left = Math.max(margin, Math.min(r.left, vw - TIP_W - margin));
+      left = Math.max(margin, Math.min(r.left, vw - w - margin));
       shift = "0";
     } else if (align === "end") {
-      left = Math.min(vw - margin, Math.max(r.right, TIP_W + margin));
+      left = Math.min(vw - margin, Math.max(r.right, w + margin));
       shift = "-100%";
     } else {
-      left = Math.max(TIP_W / 2 + margin, Math.min(r.left + r.width / 2, vw - TIP_W / 2 - margin));
+      left = Math.max(w / 2 + margin, Math.min(r.left + r.width / 2, vw - w / 2 - margin));
       shift = "-50%";
     }
     setPos({ left, top, below, shift });
@@ -193,7 +212,7 @@ export function Tip({
   }, [pos]);
 
   return (
-    <span className={cx("tip", className)} onMouseEnter={show} onMouseLeave={hide}>
+    <span className={cx("tip", mark && "is-mark", pos && "is-open", className)} onMouseEnter={show} onMouseLeave={hide}>
       <span
         ref={triggerRef}
         className="tip-trigger"
@@ -208,6 +227,7 @@ export function Tip({
         {children}
       </span>
       <span
+        ref={bubbleRef}
         role="tooltip"
         id={id}
         className={cx("tip-bubble", pos && "is-open", pos?.below && "is-below")}
@@ -227,44 +247,131 @@ export function InfoTip({ content, label, align }: { content: ReactNode; label: 
   );
 }
 
-// ------------------------------------------------------------------ Kaynak çipi
+// ------------------------------------------------------------------ Kaynak bilgisi (NFR-06)
 export function shortAccession(acc: string): string {
   const parts = acc.split("-");
   return parts.length === 3 ? `${parts[0]}-${parts[1]}-…` : acc;
 }
 
+function isPart(x: string | DerivedPart): x is DerivedPart {
+  return typeof x === "object" && x !== null && "role" in x;
+}
+
+/** İpucu gövdesi: form, accession, tarih, XBRL etiketi, dönem tabanı ve TTM parçaları. */
+export function SourceDetails({ source, value }: { source: Source; value?: number | null }) {
+  const { t } = useI18n();
+  // api-contract v1.4: `parts`; asama4-sozlesme §2: `derived_from` içinde parça nesneleri.
+  const parts = source.parts && source.parts.length > 0 ? source.parts : (source.derived_from ?? []).filter(isPart);
+  const tags = (source.derived_from ?? []).filter((x): x is string => typeof x === "string");
+  const roleLabel = (role: string) =>
+    role === "annual" ? t("fin.partAnnual") : role === "ytd_current" ? t("fin.partYtd") : role === "ytd_prior" ? t("fin.partYtdPrior") : role;
+  return (
+    <span className="src-tip">
+      {value !== undefined && value !== null && <span className="src-tip-value">{fmtMoneyFull(value)}</span>}
+      <span className="src-tip-grid">
+        <span>{t("filings.form")}</span>
+        <span>
+          {source.form}
+          {source.basis === "ttm" ? ` · ${t("basis.ttmLong")}` : ""}
+        </span>
+        <span>{t("filings.accession")}</span>
+        <span className="tnum">{source.accession_no}</span>
+        <span>{t("filings.filed")}</span>
+        <span>{fmtDate(source.filed)}</span>
+        {source.period_end && (
+          <>
+            <span>{t("common.period")}</span>
+            <span>
+              {source.period_start ? `${fmtDate(source.period_start)} – ` : ""}
+              {fmtDate(source.period_end)}
+            </span>
+          </>
+        )}
+        <span>{t("fin.tag")}</span>
+        <span className="src-tag">{source.xbrl_tag}</span>
+      </span>
+      {tags.length > 0 && <span className="src-tip-note">{t("fin.derived", { tags: tags.join(", ") })}</span>}
+      {parts.length > 0 && (
+        <span className="src-parts">
+          <span className="src-tip-note">{t("fin.ttmFormula")}</span>
+          {parts.map((p) => (
+            <span key={`${p.role}-${p.period_end}`} className="src-part">
+              <span>{roleLabel(p.role)}</span>
+              <span className="tnum">{fmtMoneyFull(p.value)}</span>
+              <span className="src-part-sub">
+                {p.form ? `${p.form}, ` : ""}
+                {fmtDate(p.period_end)} · {shortAccession(p.accession_no)}
+              </span>
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Kaynağı olan sayı: noktalı alt çizgi, üzerine gelince fosforlu vurgu ve kaynak ipucu. */
+export function Figure({
+  children,
+  source,
+  value,
+  align,
+  extra,
+}: {
+  children: ReactNode;
+  source: Source | null | undefined;
+  value?: number | null;
+  align?: TipAlign;
+  extra?: ReactNode;
+}) {
+  if (!source) {
+    return <span className="figure">{children}</span>;
+  }
+  return (
+    <Tip
+      mark
+      align={align}
+      className="figure"
+      content={
+        <>
+          <SourceDetails source={source} value={value} />
+          {extra}
+        </>
+      }
+    >
+      {children}
+    </Tip>
+  );
+}
+
+/** Kısa kaynak etiketi: "10-Q · 28 Eki 2026" + EDGAR bağlantısı; accession ipucunda. */
 export function SourceChip({ source, cik, align }: { source: Source | null; cik: string; align?: TipAlign }) {
   const { t } = useI18n();
   if (!source) return null;
   const url = source.url || edgarFilingUrl(cik, source.accession_no);
   return (
     <span className="source-chip-wrap">
-      <Tip
-        align={align}
-        content={
-          <span className="tip-rows">
-            <span>
-              <b>XBRL</b> {source.xbrl_tag}
-            </span>
-            {source.derived_from && source.derived_from.length > 0 && (
-              <span>{t("fin.derived", { tags: source.derived_from.join(", ") })}</span>
-            )}
-            <span>
-              <b>{t("filings.accession")}</b> {source.accession_no}
-            </span>
-            <span>
-              <b>{t("filings.filed")}</b> {fmtDate(source.filed)}
-            </span>
-          </span>
-        }
-      >
+      <Tip align={align} content={<SourceDetails source={source} />} className="source-chip-tip">
         <span className="source-chip">
-          {source.form} · {source.filed} · {shortAccession(source.accession_no)}
+          <FormBadge form={source.form} />
+          <span className="source-chip-date">{fmtDate(source.filed)}</span>
         </span>
       </Tip>
       <a className="icon-link" href={url} target="_blank" rel="noreferrer" aria-label={t("common.openEdgar", { form: source.form })}>
         <LuExternalLink aria-hidden="true" />
       </a>
+    </span>
+  );
+}
+
+// ------------------------------------------------------------------ Dönem tabanı etiketi
+export function BasisTag({ basis, instant = false }: { basis: Basis | null | undefined; instant?: boolean }) {
+  const { t } = useI18n();
+  if (!basis) return null;
+  if (instant) return <span className="basis-tag is-balance">{t("basis.balance")}</span>;
+  return (
+    <span className={cx("basis-tag", basis === "ttm" && "is-ttm")} title={basis === "ttm" ? t("basis.ttmLong") : t("basis.annualLong")}>
+      {basis === "ttm" ? t("basis.ttm") : t("basis.annual")}
     </span>
   );
 }
@@ -326,7 +433,7 @@ export function Segmented<T extends string>({
   );
 }
 
-// ------------------------------------------------------------------ Form rozeti
+// ------------------------------------------------------------------ Form damgası
 export function FormBadge({ form }: { form: string }) {
   const kind = form.startsWith("10-K") ? "k" : form.startsWith("10-Q") ? "q" : form.startsWith("8-K") ? "e" : "o";
   return <span className={cx("form-badge", `form-${kind}`)}>{form}</span>;

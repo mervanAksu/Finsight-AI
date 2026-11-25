@@ -139,6 +139,8 @@ def folder_url(cik: str, acc: str) -> str:
 # ---------------------------------------------------------------- şirketler
 COMPANIES: dict[str, dict] = {
     "EXMP": {
+        "ttm": {"q_end": "2026-09-30", "f": 0.25},
+        "freshness": "fresh",
         "company": {"ticker": "EXMP", "cik": "0009990001", "name": "EXAMPLE CORP", "sic": "7372",
                     "sic_description": "Services-Prepackaged Software", "fiscal_year_end": "0630",
                     "exchanges": ["Nasdaq"]},
@@ -163,6 +165,8 @@ COMPANIES: dict[str, dict] = {
         "scale": B,
     },
     "NVLT": {
+        "ttm": {"q_end": "2026-09-30", "f": 0.75},
+        "freshness": "error",
         "company": {"ticker": "NVLT", "cik": "0009990002", "name": "NOVALIGHT SYSTEMS INC", "sic": "3674",
                     "sic_description": "Semiconductors & Related Devices", "fiscal_year_end": "1231",
                     "exchanges": ["Nasdaq"]},
@@ -186,6 +190,8 @@ COMPANIES: dict[str, dict] = {
         "scale": B,
     },
     "HRBR": {
+        "ttm": {"q_end": "2026-06-30", "f": 0.5},
+        "freshness": "stale",
         "company": {"ticker": "HRBR", "cik": "0009990003", "name": "HARBOR FREIGHT LINES INC", "sic": "4213",
                     "sic_description": "Trucking (No Local)", "fiscal_year_end": "1231",
                     "exchanges": ["NYSE"]},
@@ -209,6 +215,8 @@ COMPANIES: dict[str, dict] = {
         "scale": B,
     },
     "QNTA": {
+        "ttm": {"q_end": "2026-06-30", "f": 0.75, "missing": ["operating_cash_flow"]},
+        "freshness": "fresh",
         "company": {"ticker": "QNTA", "cik": "0009990004", "name": "QUANTA RIDGE FOODS CO", "sic": "2000",
                     "sic_description": "Food and Kindred Products", "fiscal_year_end": "0930",
                     "exchanges": ["NYSE"]},
@@ -234,6 +242,8 @@ COMPANIES: dict[str, dict] = {
     # CDRW: örnek verisi var ama başlangıçta hiç işlenmemiş (sunucu 404 döner); "SEC'ten çek
     # ve analiz et" akışını gösterir.
     "CDRW": {
+        "ttm": {"q_end": "2026-09-30", "f": 0.75},
+        "freshness": "fresh",
         "company": {"ticker": "CDRW", "cik": "0009990009", "name": "CEDARWAY OUTDOOR INC", "sic": "3949",
                     "sic_description": "Sporting & Athletic Goods, NEC", "fiscal_year_end": "1231",
                     "exchanges": ["NYSE"]},
@@ -573,6 +583,32 @@ def build_filings(tk: str, spec: dict) -> list[dict]:
     return out
 
 
+def build_freshness(tk: str, spec: dict, filings: list[dict], q_filing: dict) -> dict:
+    """/freshness senaryosu (sözleşme §4). checked_at sunucuda eklenir.
+
+    fresh: SEC'teki en son 10-K/10-Q analiz edilmiş. stale: analizden sonra yeni 10-Q/10-K var
+    (yeni başvurular `pending` ile işaretlenir; sunucu Güncelle'ye kadar onları listelerde gizler).
+    error: SEC'e ulaşılamadı (stale null).
+    """
+    scenario = spec.get("freshness", "fresh")
+
+    def stamp(f: dict) -> dict:
+        return {k: f[k] for k in ("form", "filing_date", "report_date", "accession_no")}
+
+    periodic = [f for f in filings if f["form"].split("/")[0] in ("10-K", "10-Q")]
+    newer = [f for f in periodic if f["filing_date"] > q_filing["filing_date"]]
+    analyzed_latest = stamp(q_filing)
+    if scenario == "error":
+        return {"sec_latest": None, "analyzed_latest": analyzed_latest, "new_filings": [], "stale": None,
+                "error": "SEC'e ulaşılamadı (zaman aşımı); tazelik şu an kontrol edilemiyor."}
+    if scenario == "stale":
+        return {"sec_latest": stamp(newer[0]), "analyzed_latest": analyzed_latest,
+                "new_filings": [stamp(f) for f in newer], "stale": True, "error": None,
+                "pending": [f["accession_no"] for f in newer]}
+    return {"sec_latest": analyzed_latest, "analyzed_latest": analyzed_latest, "new_filings": [],
+            "stale": False, "error": None}
+
+
 def ref(f: dict) -> dict:
     return {k: f[k] for k in ("accession_no", "form", "filing_date", "report_date", "url")}
 
@@ -630,9 +666,142 @@ def build(tk: str, spec: dict) -> dict:
             vals.append(item)
         facts_metrics.append({"metric": metric, "label": label, "kind": kind, "values": vals})
 
-    # ---- oranlar
-    def g(metric: str, i: int):
-        return raw[metric][i]
+    # ---- TTM (Aşama 4 sözleşmesi §2): A + YTD_cur − YTD_prior; anlık kalemler 10-Q bilançosu
+    tt = spec["ttm"]
+    q_filing = next(f for f in filings if f["form"] == "10-Q" and f["report_date"] == tt["q_end"])
+    q_acc, f_frac = q_filing["accession_no"], tt["f"]
+    i_a = len(years) - 1
+
+    def growth(metric: str, i: int) -> float:
+        cur, prev = raw[metric][i], raw[metric][i - 1]
+        if cur is None or prev is None or prev == 0:
+            return 0.0
+        return (cur - prev) / abs(prev)
+
+    ttm: dict[str, int] = {}
+    ttm_prev: dict[str, int] = {}
+    ttm_parts: dict[str, list] = {}
+    q_prior_bal: dict[str, int] = {}  # önceki yılın aynı çeyreği (ortalamalar için)
+    fy_start = pstart(years[i_a] + 1) if (m, d) != (12, 31) else f"{years[i_a] + 1}-01-01"
+    for metric in METRIC_LABELS:
+        if metric == "gross_profit":
+            continue
+        a = raw[metric][i_a]
+        if a is None:
+            continue
+        if metric in DURATION and metric in tt.get("missing", []):
+            # YTD_prior yok → TTM üretilmez, yıllık değer kullanılır (sözleşme §2)
+            ttm[metric] = a
+            ttm_prev[metric] = raw[metric][i_a - 1]
+            continue
+        if metric in DURATION:
+            ytd_prior = round(a * f_frac)
+            ytd_cur = round(ytd_prior * (1 + growth(metric, i_a)))
+            ttm[metric] = a + ytd_cur - ytd_prior
+            a_prev = raw[metric][i_a - 1]
+            ttm_prev[metric] = round(a_prev * (1 + f_frac * growth(metric, i_a - 1))) if i_a >= 2 else a_prev
+            prior_end = f"{int(tt['q_end'][:4]) - 1}{tt['q_end'][4:]}"
+            prior_start = f"{int(fy_start[:4]) - 1}{fy_start[4:]}"
+            ttm_parts[metric] = [
+                {"role": "annual", "metric": None, "xbrl_tag": TAGS[metric], "form": "10-K",
+                 "accession_no": tenk_by_year[years[i_a]]["accession_no"],
+                 "period_start": pstart(years[i_a]), "period_end": pend(years[i_a]), "value": a,
+                 "url": folder_url(cik, tenk_by_year[years[i_a]]["accession_no"])},
+                {"role": "ytd_current", "metric": None, "xbrl_tag": TAGS[metric], "form": "10-Q",
+                 "accession_no": q_acc, "period_start": fy_start, "period_end": tt["q_end"], "value": ytd_cur,
+                 "url": folder_url(cik, q_acc)},
+                {"role": "ytd_prior", "metric": None, "xbrl_tag": TAGS[metric], "form": "10-Q",
+                 "accession_no": q_acc, "period_start": prior_start, "period_end": prior_end, "value": ytd_prior,
+                 "url": folder_url(cik, q_acc)},
+            ]
+        else:
+            ttm[metric] = round(a * (1 + growth(metric, i_a) * f_frac))
+            prev = raw[metric][i_a - 1]
+            q_prior_bal[metric] = round(prev + (a - prev) * f_frac) if prev is not None else a
+    ttm["gross_profit"] = ttm["revenue"] - ttm["cost_of_revenue"]
+    ttm_prev["gross_profit"] = ttm_prev["revenue"] - ttm_prev["cost_of_revenue"]
+
+    def ttm_yoy(metric: str) -> float | None:
+        cur, prev = ttm.get(metric), ttm_prev.get(metric)
+        if cur is None or not prev:
+            return None
+        return round((cur - prev) / abs(prev), 4)
+
+    def ttm_source(metric: str) -> dict:
+        derived = metric in spec["derived"]
+        return {"xbrl_tag": "derived" if derived else TAGS[metric], "form": "10-Q", "accession_no": q_acc,
+                "filed": q_filing["filing_date"], "derived_from": DERIVED[metric] if derived else None,
+                "url": folder_url(cik, q_acc), "basis": "ttm", "parts": ttm_parts.get(metric, []),
+                "period_start": fy_start if metric in DURATION else None, "period_end": tt["q_end"]}
+
+    missing_ttm = set(tt.get("missing", []))
+    ttm_reason_text = "TTM hesaplanamadı: geçen yılın aynı dönemi (YTD) 10-Q'da yok; yıllık değer kullanıldı."
+
+    # ---- oranlar (yıllık dönemler + en sonda TTM dönemi)
+    def compute_ratio(key: str, cur, prev_bal, acc: str):
+        val, status, reason, inputs = None, "ok", None, []
+
+        def inp(mt: str, v):
+            inputs.append({"metric": mt, "value": v, "accession_no": acc})
+
+        try:
+            if key in ("gross_margin", "operating_margin", "net_margin", "fcf_margin"):
+                num_metric = {"gross_margin": "gross_profit", "operating_margin": "operating_income",
+                              "net_margin": "net_income"}.get(key)
+                rev = cur("revenue")
+                inp("revenue", rev)
+                if key == "fcf_margin":
+                    ocf, cap = cur("operating_cash_flow"), cur("capex")
+                    inp("operating_cash_flow", ocf)
+                    inp("capex", cap)
+                    val = (ocf - cap) / rev
+                else:
+                    num = cur(num_metric)
+                    inp(num_metric, num)
+                    val = num / rev
+            elif key in ("roa", "roe"):
+                base = "total_assets" if key == "roa" else "stockholders_equity"
+                ni = cur("net_income")
+                c, pv = cur(base), prev_bal(base)
+                inp("net_income", ni)
+                inp(base, c)
+                if key == "roe" and c <= 0:
+                    raise ValueError("özkaynak negatif veya sıfır; oran anlamlı değil")
+                val = ni / ((c + pv) / 2)
+            elif key == "current_ratio":
+                ca, cl = cur("current_assets"), cur("current_liabilities")
+                if ca is None:
+                    raise ValueError("eksik veri: current_assets")
+                inp("current_assets", ca)
+                inp("current_liabilities", cl)
+                val = ca / cl
+            elif key == "debt_to_equity":
+                tl, eq = cur("total_liabilities"), cur("stockholders_equity")
+                inp("total_liabilities", tl)
+                inp("stockholders_equity", eq)
+                val = tl / eq
+            elif key == "liabilities_to_assets":
+                tl, ta = cur("total_liabilities"), cur("total_assets")
+                inp("total_liabilities", tl)
+                inp("total_assets", ta)
+                val = tl / ta
+            elif key == "ocf_to_net_income":
+                ocf, ni = cur("operating_cash_flow"), cur("net_income")
+                inp("operating_cash_flow", ocf)
+                inp("net_income", ni)
+                if ni <= 0:
+                    raise ValueError("net kâr sıfır veya negatif; oran anlamlı değil")
+                val = ocf / ni
+        except ValueError as exc:
+            val, status, reason = None, "missing", str(exc)
+        return val, status, reason, inputs
+
+    for fm in facts_metrics:
+        mt = fm["metric"]
+        if mt in ttm and mt not in missing_ttm:
+            fm["latest"] = {"period_start": fy_start if mt in DURATION else None, "period_end": tt["q_end"],
+                            "value": ttm[mt], "yoy": ttm_yoy(mt) if mt in DURATION else None,
+                            "source": ttm_source(mt), "basis": "ttm"}
 
     ratio_rows = []
     latest_ratio: dict[str, float | None] = {}
@@ -640,68 +809,19 @@ def build(tk: str, spec: dict) -> dict:
         values = []
         for i in shown:
             y = years[i]
-            acc = tenk_by_year[y]["accession_no"]
-            val, status, reason, note, inputs = None, "ok", None, None, []
-
-            def inp(mt: str, v):
-                inputs.append({"metric": mt, "value": v, "accession_no": acc})
-
-            try:
-                if key in ("gross_margin", "operating_margin", "net_margin", "fcf_margin"):
-                    num_metric = {"gross_margin": "gross_profit", "operating_margin": "operating_income",
-                                  "net_margin": "net_income"}.get(key)
-                    rev = g("revenue", i)
-                    inp("revenue", rev)
-                    if key == "fcf_margin":
-                        ocf, cap = g("operating_cash_flow", i), g("capex", i)
-                        inp("operating_cash_flow", ocf)
-                        inp("capex", cap)
-                        val = (ocf - cap) / rev
-                    else:
-                        num = g(num_metric, i)
-                        inp(num_metric, num)
-                        val = num / rev
-                elif key in ("roa", "roe"):
-                    base = "total_assets" if key == "roa" else "stockholders_equity"
-                    ni = g("net_income", i)
-                    cur, prev = g(base, i), g(base, i - 1)
-                    inp("net_income", ni)
-                    inp(base, cur)
-                    if key == "roe" and cur <= 0:
-                        raise ValueError("özkaynak negatif veya sıfır; oran anlamlı değil")
-                    avg = (cur + prev) / 2
-                    val = ni / avg
-                elif key == "current_ratio":
-                    ca, cl = g("current_assets", i), g("current_liabilities", i)
-                    if ca is None:
-                        raise ValueError("eksik veri: current_assets")
-                    inp("current_assets", ca)
-                    inp("current_liabilities", cl)
-                    val = ca / cl
-                elif key == "debt_to_equity":
-                    tl, eq = g("total_liabilities", i), g("stockholders_equity", i)
-                    inp("total_liabilities", tl)
-                    inp("stockholders_equity", eq)
-                    val = tl / eq
-                elif key == "liabilities_to_assets":
-                    tl, ta = g("total_liabilities", i), g("total_assets", i)
-                    inp("total_liabilities", tl)
-                    inp("total_assets", ta)
-                    val = tl / ta
-                elif key == "ocf_to_net_income":
-                    ocf, ni = g("operating_cash_flow", i), g("net_income", i)
-                    inp("operating_cash_flow", ocf)
-                    inp("net_income", ni)
-                    if ni <= 0:
-                        raise ValueError("net kâr sıfır veya negatif; oran anlamlı değil")
-                    val = ocf / ni
-            except ValueError as exc:
-                val, status, reason = None, "missing", str(exc)
+            val, status, reason, inputs = compute_ratio(
+                key, lambda mt, i=i: raw[mt][i], lambda mt, i=i: raw[mt][i - 1], tenk_by_year[y]["accession_no"])
             values.append({"period_end": pend(y), "value": None if val is None else round(val, 4),
-                           "status": status, "reason": reason, "note": note, "inputs": inputs})
+                           "status": status, "reason": reason, "note": None, "inputs": inputs, "basis": "annual"})
+        val, status, reason, inputs = compute_ratio(
+            key, lambda mt: ttm.get(mt), lambda mt: q_prior_bal.get(mt), q_acc)
+        fallback = sorted(missing_ttm & {i["metric"] for i in inputs})
+        note = (f"TTM yok, yıllık değer kullanıldı: {', '.join(fallback)}" if fallback else None)
+        values.append({"period_end": tt["q_end"], "value": None if val is None else round(val, 4),
+                       "status": status, "reason": reason, "note": note, "inputs": inputs, "basis": "ttm"})
         latest_ratio[key] = values[-1]["value"]
         ratio_rows.append({"key": key, "label": label, "formula": formula, "unit": unit,
-                           "higher_is_better": hib, "values": values})
+                           "higher_is_better": hib, "values": values, "basis": "ttm"})
 
     # ---- duygu
     sent_spec = SENTIMENT[tk]
@@ -781,12 +901,12 @@ def build(tk: str, spec: dict) -> dict:
         comp("cash_quality", "Nakit akışı kalitesi", 15, inds,
              f"İşletme nakit akışı / net kâr {tr_num(oc, 2)} (eşik 0–1,2 → {tr_num(inds[0]['points'])} puan); "
              f"serbest nakit akışı marjı {tr_pct(fm)} (eşik −%5–%15 → {tr_num(inds[1]['points'])} puan).")
-        ry, ny = yoy("revenue", len(years) - 1), yoy("net_income", len(years) - 1)
+        ry, ny = ttm_yoy("revenue"), ttm_yoy("net_income")
         inds = [indicator("revenue_yoy", "Gelir değişimi", ry, tr_pct(ry), lin(ry, -0.10, 0.15)),
                 indicator("net_income_yoy", "Net kâr değişimi", ny, tr_pct(ny), lin(ny, -0.20, 0.20))]
         comp("growth", "Büyüme", 10, inds,
-             f"Gelir yıllık {tr_pct(ry)} (eşik −%10–%15 → {tr_num(inds[0]['points'])} puan); "
-             f"net kâr yıllık {tr_pct(ny)} (eşik −%20–%20 → {tr_num(inds[1]['points'])} puan).")
+             f"Gelir (TTM, önceki TTM'ye göre) {tr_pct(ry)} (eşik −%10–%15 → {tr_num(inds[0]['points'])} puan); "
+             f"net kâr (TTM) {tr_pct(ny)} (eşik −%20–%20 → {tr_num(inds[1]['points'])} puan).")
         if not with_text:
             comp("text_tone", "Metin tonu", 10, [], NO_TEXT_EXPLANATION, available=False)
         elif mdna_tone is not None:
@@ -812,10 +932,15 @@ def build(tk: str, spec: dict) -> dict:
         wsum = sum(c["weight"] for c in avail)
         total = r1(sum(c["weight"] * c["score"] for c in avail) / wsum)
         missing = [c["key"] for c in comps if not c["available"]]
-        explanation = (f"Toplam skor {len(avail)} bileşenin ağırlıklı ortalamasıdır "
+        explanation = (f"Toplam skor {len(avail)} bileşenin ağırlıklı ortalamasıdır; finansal göstergeler "
+                       f"son on iki aya (TTM, {tt['q_end']} itibarıyla) dayanır "
                        f"(kullanılabilen ağırlık {wsum}/100). Bant gösterim amaçlıdır; derecelendirme değildir.")
-        score = {"total": total, "band": band(total), "as_of_period": pend(latest_year),
-                 "weights_version": "v1-2026-11", "components": comps, "missing_components": missing,
+        score = {"total": total, "band": band(total), "as_of_period": tt["q_end"],
+                 "basis": "ttm", "data_through": tt["q_end"],
+                 "as_of_filing": {"form": "10-Q", "accession_no": q_acc, "filing_date": q_filing["filing_date"]},
+                 "basis_notes": [f"{METRIC_LABELS[m_]}: TTM hesaplanamadı, yıllık değer kullanıldı."
+                                 for m_ in sorted(missing_ttm)],
+                 "weights_version": "v1-2026-11", "method_version": "v2-2026-11-ttm", "components": comps, "missing_components": missing,
                  "explanation": explanation, "disclaimer": DISCLAIMER}
         return score
 
@@ -825,16 +950,36 @@ def build(tk: str, spec: dict) -> dict:
     # ---- genel bakış
     key_order = ["revenue", "net_income", "operating_cash_flow", "total_assets", "total_liabilities",
                  "stockholders_equity"]
+    # v1.4: en son nokta TTM (süreli kalemler) veya son 10-Q bilançosu (anlık kalemler)
     i_last = len(years) - 1
-    key_metrics = [{"metric": k, "label": METRIC_LABELS[k], "value": raw[k][i_last],
-                    "period_end": pend(latest_year), "yoy": yoy(k, i_last),
-                    "source": source(k, latest_year)} for k in key_order]
+
+    def km(k: str) -> dict:
+        item = {"metric": k, "label": METRIC_LABELS[k], "value": raw[k][i_last], "period_end": pend(latest_year),
+                "yoy": yoy(k, i_last), "source": source(k, latest_year), "basis": "ttm"}
+        if k in missing_ttm:
+            item.update(ttm=None, ttm_reason=ttm_reason_text)
+        else:
+            item["ttm"] = {"value": ttm[k], "period_start": fy_start if k in DURATION else None,
+                           "period_end": tt["q_end"],
+                           "yoy": ttm_yoy(k) if k in DURATION else round(ttm[k] / q_prior_bal[k] - 1, 4),
+                           "source": ttm_source(k)}
+        return item
+
+    key_metrics = [km(k) for k in key_order]
     latest_10k = tenk_by_year[latest_year]
+    # Analize seçilen başvurular: son iki 10-K + son 10-K'dan sonraki en son 10-Q (sözleşme §3)
+    for f in filings:
+        if f["accession_no"] == q_acc:
+            f["analyzed"] = True
+
+    def score_summary(sc: dict) -> dict:
+        return {k: sc[k] for k in ("total", "band", "as_of_period", "basis", "as_of_filing", "data_through")}
     overview = {
         "company": company,
         "analyzed": True,
-        "score": {"total": score["total"], "band": score["band"], "as_of_period": score["as_of_period"]},
+        "score": score_summary(score),
         "key_metrics": key_metrics,
+        "latest_filing": ref(q_filing),
         "latest_filings": [ref(f) for f in filings[:5]],
         "sentiment_summary": {"filing": ref(latest_10k), "mdna_net_tone": mdna_tone,
                               "risk_net_tone": risk_tone, "model": sent_spec["model"]},
@@ -846,8 +991,7 @@ def build(tk: str, spec: dict) -> dict:
     overview_fin = {
         **overview,
         "analyzed": False,
-        "score": {"total": score_fin["total"], "band": score_fin["band"],
-                  "as_of_period": score_fin["as_of_period"]},
+        "score": score_summary(score_fin),
         "sentiment_summary": None,
         "risk_summary": None,
         "analysis_updated_at": None,
@@ -883,7 +1027,11 @@ def build(tk: str, spec: dict) -> dict:
         "overview": overview,
         "overview_fin": overview_fin,
         "facts": {"company": company, "metrics": facts_metrics, "disclaimer": DISCLAIMER},
-        "ratios": {"company": company, "periods": [pend(years[i]) for i in shown], "ratios": ratio_rows,
+        "ratios": {"company": company, "periods": [pend(years[i]) for i in shown] + [tt["q_end"]],
+                   "period_info": [{"period_end": pend(years[i]), "basis": "annual", "label": pend(years[i])}
+                                   for i in shown] + [{"period_end": tt["q_end"], "basis": "ttm",
+                                                       "label": f"TTM {tt['q_end']}"}],
+                   "ratios": ratio_rows,
                    "disclaimer": DISCLAIMER},
         "score": score,
         "score_fin": score_fin,
@@ -891,6 +1039,7 @@ def build(tk: str, spec: dict) -> dict:
         "sentiment": {"model": sent_spec["model"], "sections": sections, "disclaimer": DISCLAIMER},
         "risk_changes": risk_changes,
         "ask": ask,
+        "freshness": build_freshness(tk, spec, filings, q_filing),
     }
 
 

@@ -18,6 +18,13 @@ Kullanım:
         CDRW için iş başarıyla biter; LMNR, ORVB, PLSD, EXMR için örnek veri yoktur ve iş
         hata ile biter (şirket kaydı oluşur ama verisi boş kalır: "empty").
 
+Tazelik (Aşama 4, `GET /api/companies/{t}/freshness`): EXMP, QNTA, CDRW güncel (`stale: false`);
+HRBR'de analizden sonra yayımlanmış bir 10-Q var (`stale: true`; bu başvuru "Güncelle" ile iş
+bitene kadar başvuru listelerinde görünmez); NVLT'de SEC'e ulaşılamamış gibi davranılır
+(`stale: null`, `error`). `--no-freshness`: uç nokta yokmuş gibi 404 (eski sunucu). Not: demo
+sunucusunda güncelleme yalnızca tazelik durumunu ve başvuru listesini değiştirir; skor ve
+oranlar aynı kalır.
+
 Soru-Cevap: soruda "bulunamadı"/"kripto" → `not_found`, "alıntı" → `extractive`, "gömme" →
 `warning` alanı; "almalı mıyım" gibi tavsiye soruları → `advice_refused: true` ve cevabın başında
 sabit ret cümlesi. Metin analizi yapılmamış şirkette her soru `not_found` döner.
@@ -63,8 +70,11 @@ STATE: dict[str, str] = {c["ticker"]: c["state"] for c in META["search_index"]}
 JOBS: dict[int, dict] = {}
 NEXT_JOB = [1]
 TICKER_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")  # backend api.TICKER_RE ile aynı
-EMPTY_SCORE = {"total": None, "band": None, "as_of_period": None, "weights_version": "v1-2026-11",
+EMPTY_SCORE = {"total": None, "band": None, "as_of_period": None, "basis": None, "as_of_filing": None,
+               "data_through": None, "weights_version": "v1-2026-11", "method_version": "v2-2026-11-ttm",
                "components": [], "missing_components": [], "explanation": None}
+# "Güncelle" (POST /ingest) ile tamamlanmış tazelik güncellemeleri
+REFRESHED: set[str] = set()
 
 # Yatırım tavsiyesi niyeti (backend rag._ADVICE_QUESTION'ın sadeleştirilmiş kopyası)
 _ADVICE_PATTERNS = (
@@ -118,6 +128,7 @@ def job_view(job: dict) -> dict:
         return view
     if frac >= 1.0:
         with STATE_LOCK:
+            REFRESHED.add(ticker)
             if job["analyze"]:
                 STATE[ticker] = "full"
             elif STATE.get(ticker) != "full":
@@ -151,6 +162,26 @@ def company_obj(ticker: str) -> dict:
             "sic_description": None, "fiscal_year_end": None, "exchanges": []}
 
 
+def pending_of(ticker: str) -> set[str]:
+    """Henüz analiz edilmemiş (Güncelle bekleyen) başvuruların accession numaraları."""
+    d = DATA.get(ticker)
+    if not d or ticker in REFRESHED:
+        return set()
+    return set(d["freshness"].get("pending", []))
+
+
+def freshness_of(ticker: str) -> dict:
+    d = DATA.get(ticker)
+    base = {"checked_at": now_iso(), "disclaimer": DISCLAIMER}
+    if not d or state_of(ticker) not in ("full", "fin"):
+        return {**base, "sec_latest": None, "analyzed_latest": None, "new_filings": [], "stale": None,
+                "error": None}
+    fr = {k: v for k, v in d["freshness"].items() if k != "pending"}
+    if fr["stale"] and ticker in REFRESHED:
+        fr = {**fr, "analyzed_latest": fr["sec_latest"], "new_filings": [], "stale": False}
+    return {**base, **fr}
+
+
 def score_of(ticker: str) -> dict:
     """Şirketin durumuna göre skor yanıtı (disclaimer hariç)."""
     st = state_of(ticker)
@@ -171,6 +202,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ------------------------------------------------------------ yardımcılar
     search_reason: str | None = None
+    no_freshness = False
 
     def log_message(self, fmt: str, *args) -> None:  # sessiz
         return
@@ -210,12 +242,12 @@ class Handler(SimpleHTTPRequestHandler):
         return data if isinstance(data, dict) else {}
 
     # ------------------------------------------------------------ HTTP
-    def do_OPTIONS(self) -> None:  # noqa: N802
+    def do_OPTIONS(self) -> None:
         self.send_response(HTTPStatus.NO_CONTENT)
         self._cors()
         self.end_headers()
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         url = urlparse(self.path)
         if url.path.startswith("/api/"):
             self._delay()
@@ -232,7 +264,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         url = urlparse(self.path)
         parts = [p for p in url.path.split("/") if p]
         self._delay()
@@ -268,8 +300,9 @@ class Handler(SimpleHTTPRequestHandler):
         q = {k: v[0] for k, v in query.items() if v}
 
         if parts == ["api", "health"]:
-            sec = {"user_agent_configured": Handler.search_reason != "sec_user_agent_missing"}
-            self._json({**META["health"], "sec": sec})
+            sec = {"user_agent_configured": Handler.search_reason != "sec_user_agent_missing",
+                   "json_ttl_seconds": 3600}
+            self._json({**META["health"], "sec": sec, "auto_refresh_minutes": 0})
             return
         if parts == ["api", "companies"]:
             out = []
@@ -341,11 +374,20 @@ class Handler(SimpleHTTPRequestHandler):
         full = st == "full" and d is not None
         has_fin = st in ("full", "fin") and d is not None
 
+        if what == "freshness":
+            if Handler.no_freshness:
+                self._error(404, "Not Found")
+                return
+            self._delay(2.0)  # SEC'e tek istek
+            self._json(freshness_of(ticker))
+            return
         if what == "overview":
-            if full:
-                self._json(d["overview"])
-            elif has_fin:
-                self._json(d["overview_fin"])
+            if has_fin:
+                ov = d["overview"] if full else d["overview_fin"]
+                hidden = pending_of(ticker)
+                visible = [f for f in d["filings"] if f["accession_no"] not in hidden][:5]
+                keys = ("accession_no", "form", "filing_date", "report_date", "url")
+                self._json({**ov, "latest_filings": [{k: f[k] for k in keys} for f in visible]})
             else:
                 self._json({"company": company, "analyzed": False, "score": None, "key_metrics": [],
                             "latest_filings": [], "sentiment_summary": None, "risk_summary": None,
@@ -368,6 +410,8 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if what == "filings":
             filings = d["filings"] if has_fin else []
+            hidden = pending_of(ticker)
+            filings = [f for f in filings if f["accession_no"] not in hidden]
             if not full:
                 filings = [{**f, "analyzed": False} for f in filings]
             form = q.get("form")
@@ -413,7 +457,8 @@ class Handler(SimpleHTTPRequestHandler):
         for r in (d["ratios"]["ratios"] if d else []):
             for v in r["values"]:
                 w.writerow([ticker, cik, "ratio", r["key"], r["label"], "", v["period_end"],
-                            "" if v["value"] is None else v["value"], r["unit"], v["status"], "", "10-K",
+                            "" if v["value"] is None else v["value"], r["unit"], v["status"], "",
+                            "10-Q" if v.get("basis") == "ttm" else "10-K",
                             (v["inputs"][0]["accession_no"] if v["inputs"] else ""), ""])
         sc = score_of(ticker)
         if with_score and sc["total"] is not None:
@@ -517,7 +562,10 @@ def main() -> None:
                     help="hiç işlenmiş şirket olmadan başla (boş ana sayfa durumu)")
     ap.add_argument("--search-local", choices=["sec_user_agent_missing", "sec_unavailable"],
                     help="SEC şirket listesi alınamamış gibi davran (yalnızca yerel arama)")
+    ap.add_argument("--no-freshness", action="store_true",
+                    help="/freshness uç noktası yokmuş gibi davran (v1.3 öncesi sunucu)")
     args = ap.parse_args()
+    Handler.no_freshness = args.no_freshness
     Handler.search_reason = args.search_local
     if args.empty:
         with STATE_LOCK:

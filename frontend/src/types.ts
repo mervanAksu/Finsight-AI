@@ -1,4 +1,5 @@
-// docs/api-contract.md (v1, v1.1 netleştirmeleriyle) ile birebir tipler. Alan adları sözleşmeden kopyalanmıştır;
+// docs/api-contract.md (v1, v1.1 netleştirmeleriyle) ile birebir tipler. Aşama 4 (v1.4,
+// docs/asama4-sozlesme.md) alanları isteğe bağlıdır (?): eski sunucu bu alanları göndermez. Alan adları sözleşmeden kopyalanmıştır;
 // değiştirmeden önce sözleşme güncellenmelidir.
 
 export type ISODate = string; // "2025-06-30"
@@ -22,14 +23,46 @@ export interface FilingRef {
   url: string;
 }
 
+/** Değerin dönem tabanı (Aşama 4 §2): son on iki ay ya da yıllık (10-K). Alan yoksa annual. */
+export type Basis = "ttm" | "annual";
+
+/** TTM hesabına giren parça (Aşama 4 §2: A + YTD_cur − YTD_prior). api-contract v1.4
+ * `Source.parts` öğesi (xbrl_tag, form, metric, url); asama4-sozlesme §2 sözlüğünde `tag`. */
+export interface DerivedPart {
+  role: "annual" | "ytd_current" | "ytd_prior" | string;
+  accession_no: string;
+  xbrl_tag?: string;
+  tag?: string;
+  form?: string;
+  metric?: string | null;
+  period_start: ISODate | null;
+  period_end: ISODate;
+  value: number | null;
+  url?: string;
+}
+
 export interface Source {
   xbrl_tag: string;
   form: string;
   accession_no: string;
   filed: ISODate;
-  derived_from: string[] | null;
+  /** v1: türetilmiş kalemde etiket listesi; v1.4 TTM noktasında hesaba giren parçalar. */
+  derived_from: Array<string | DerivedPart> | null;
   /** Başvuru klasörü (sözleşme v1.1): .../edgar/data/{cik}/{accession tiresiz}/ */
   url: string;
+  /** v1.4 */
+  basis?: Basis;
+  /** v1.4 (api-contract): TTM noktasının parçaları; anlık kalemde boş. */
+  parts?: DerivedPart[];
+  period_start?: ISODate | null;
+  period_end?: ISODate;
+}
+
+/** v1.4: skorun dayandığı başvuru. */
+export interface FilingStamp {
+  form: string;
+  accession_no: string;
+  filing_date: ISODate;
 }
 
 export interface ApiErrorBody {
@@ -47,7 +80,9 @@ export interface Health {
   version: string;
   models: { sentiment: string; embedding: string; llm: LlmInfo };
   /** v1.3: SEC erişim ayarı (eski sunucularda yok) */
-  sec?: { user_agent_configured: boolean };
+  sec?: { user_agent_configured: boolean; json_ttl_seconds?: number };
+  /** v1.4: arka planda otomatik güncelleme aralığı (0 = kapalı) */
+  auto_refresh_minutes?: number;
 }
 
 // GET /api/companies
@@ -103,6 +138,24 @@ export interface Job {
   warnings?: string[];
 }
 
+// GET /api/companies/{ticker}/freshness (v1.4, Aşama 4 §4)
+export interface FilingBrief {
+  form: string;
+  filing_date: ISODate;
+  report_date: ISODate | null;
+  accession_no: string;
+}
+export interface Freshness {
+  checked_at: ISODateTime;
+  sec_latest: FilingBrief | null;
+  analyzed_latest: FilingBrief | null;
+  new_filings: FilingBrief[];
+  /** true: analizden sonra yeni 10-K/10-Q var; null: SEC'e ulaşılamadı (error dolu). */
+  stale: boolean | null;
+  error: string | null;
+  disclaimer?: string;
+}
+
 // GET /api/companies/{ticker}/overview
 export type MetricKey =
   | "revenue"
@@ -128,8 +181,20 @@ export interface KeyMetric {
   source: Source | null;
   /** Değer yoksa neden (ör. "veri yok"). */
   reason?: string | null;
+  /** v1.4: şirketin en son dönem tabanı; `value`/`period_end`/`yoy` yıllık kalır. */
+  basis?: Basis;
+  /** v1.4: TTM noktası (anlık kalemde son 10-Q bilançosu) veya null */
+  ttm?: { value: number | null; period_start: ISODate | null; period_end: ISODate; yoy: number | null; source: Source | null } | null;
+  /** v1.4: TTM şirketinde bu kalemin TTM'si yoksa nedeni */
+  ttm_reason?: string | null;
 }
-export interface ScoreSummary {
+/** v1.4 skor dayanağı: dönem tabanı, başvuru ve veri tarihi. */
+export interface ScoreBasisFields {
+  basis?: Basis | null;
+  as_of_filing?: FilingStamp | null;
+  data_through?: ISODate | null;
+}
+export interface ScoreSummary extends ScoreBasisFields {
   total: number | null;
   band: string | null;
   as_of_period: ISODate | null;
@@ -157,6 +222,8 @@ export interface Overview {
   risk_summary: RiskCounts | null;
   analysis_updated_at: ISODateTime | null;
   disclaimer: string;
+  /** v1.4: en son analiz edilen başvuru */
+  latest_filing?: FilingRef | null;
 }
 
 // GET /api/companies/{ticker}/facts
@@ -166,12 +233,15 @@ export interface FactValue {
   value: number | null;
   yoy: number | null;
   source: Source | null;
+  basis?: Basis;
 }
 export interface FactMetric {
   metric: MetricKey | string;
   label: string;
   kind: "duration" | "instant";
   values: FactValue[];
+  /** v1.4: en son nokta (TTM veya son 10-Q bilançosu); yıllık seri ayrı kalır. */
+  latest?: FactValue | null;
 }
 export interface FactsResponse {
   company: Company;
@@ -193,6 +263,8 @@ export interface RatioValue {
   reason: string | null;
   note: string | null;
   inputs: RatioInput[];
+  /** v1.4: en son dönem TTM ise "ttm" */
+  basis?: Basis;
 }
 export interface Ratio {
   key: string;
@@ -201,10 +273,19 @@ export interface Ratio {
   unit: RatioUnit;
   higher_is_better: boolean;
   values: RatioValue[];
+  /** v1.4: en son noktanın dayanağı */
+  basis?: Basis;
+}
+export interface PeriodInfo {
+  period_end: ISODate;
+  basis: Basis;
+  label: string;
 }
 export interface RatiosResponse {
   company: Company;
   periods: ISODate[];
+  /** v1.4: dönem tabanı ve etiketi ("TTM 2026-09-30") */
+  period_info?: PeriodInfo[];
   ratios: Ratio[];
   disclaimer: string;
 }
@@ -218,6 +299,10 @@ export interface ScoreIndicator {
   points: number | null;
   reason?: string | null;
   threshold?: string;
+  /** v1.4: ör. "TTM büyümesi hesaplanamadı; yıllık YoY kullanıldı" */
+  note?: string | null;
+  /** v1.4: metin tonu göstergesinin başvurusu */
+  source?: FilingStamp | null;
 }
 export interface ScoreComponent {
   key: string;
@@ -228,11 +313,15 @@ export interface ScoreComponent {
   indicators: ScoreIndicator[];
   explanation: string;
 }
-export interface ScoreResponse {
+export interface ScoreResponse extends ScoreBasisFields {
   total: number | null;
   band: string | null;
   as_of_period: ISODate | null;
   weights_version: string;
+  /** v1.4: yöntem sürümü (ör. "v2-2026-11-ttm") */
+  method_version?: string;
+  /** v1.4: TTM'si hesaplanamayıp yıllığa düşen kalemler (Türkçe) */
+  basis_notes?: string[] | string | null;
   components: ScoreComponent[];
   missing_components: string[];
   explanation: string | null;

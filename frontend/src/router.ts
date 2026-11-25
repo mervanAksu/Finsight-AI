@@ -1,8 +1,8 @@
 // Basit hash yönlendirici: #/ · #/company/EXMP/overview · #/compare?tickers=A,B
 import { useSyncExternalStore } from "react";
 
-export type CompanyTab = "overview" | "financials" | "risk" | "ask" | "filings";
-export const COMPANY_TABS: readonly CompanyTab[] = ["overview", "financials", "risk", "ask", "filings"];
+export type CompanyTab = "overview" | "financials" | "ratios" | "tone" | "risk" | "ask" | "filings";
+export const COMPANY_TABS: readonly CompanyTab[] = ["overview", "financials", "ratios", "tone", "risk", "ask", "filings"];
 
 export type Route =
   | { name: "home" }

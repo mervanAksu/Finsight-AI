@@ -45,7 +45,7 @@ const options = {
   minify: !serve,
   sourcemap: true,
   legalComments: "none",
-  loader: { ".svg": "file", ".woff2": "file" },
+  loader: { ".svg": "file", ".woff": "file", ".woff2": "file" },
   nodePaths,
   define: {
     "process.env.NODE_ENV": JSON.stringify(serve ? "development" : "production"),

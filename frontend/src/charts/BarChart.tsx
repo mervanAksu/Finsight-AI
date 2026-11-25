@@ -1,10 +1,11 @@
 // Gruplu çubuk grafik (d3-scale + elle SVG). Dönem üzerine gelince / odaklanınca tüm
-// serilerin değerini, YoY'u ve kaynağını gösteren ipucu açılır.
+// serilerin değerini, YoY'u ve kaynağını gösteren ipucu açılır. `ttmIndex` verilirse o
+// dönemin çubukları taralı çizilir (son on iki ay, Aşama 4): yıllık seriyle karışmaz.
 import { max, min } from "d3-array";
 import { scaleBand, scaleLinear } from "d3-scale";
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { fmtAxisMoney, fmtMoneyFull, fmtMoneyShort, fmtMonthYear, fmtSignedPercent } from "../format";
+import { fmtAxisMoney, fmtDate, fmtMoneyFull, fmtMoneyShort, fmtMonthYear, fmtSignedPercent } from "../format";
 import { useI18n } from "../i18n";
 import { useElementWidth } from "../lib/useElementWidth";
 import type { Source } from "../types";
@@ -28,9 +29,13 @@ interface BarChartProps {
   height?: number;
   ariaLabel: string;
   showValueLabels?: boolean;
+  /** Bu dönem TTM'dir: taralı çubuk ve "TTM" eksen etiketi. */
+  ttmIndex?: number | null;
+  /** Taralı dönemin eksen etiketi öneki (varsayılan "TTM "; bilanço için ""). */
+  ttmPrefix?: string;
 }
 
-const MARGIN = { top: 20, right: 8, bottom: 30, left: 56 };
+const MARGIN = { top: 22, right: 4, bottom: 30, left: 52 };
 
 /** Yalnızca üst köşeleri yuvarlatılmış çubuk (negatifte alt köşeler). */
 function barPath(x: number, y0: number, y1: number, w: number, r: number): string {
@@ -45,8 +50,10 @@ function barPath(x: number, y0: number, y1: number, w: number, r: number): strin
   return `M${x},${top}V${bottom - rr}Q${x},${bottom} ${x + rr},${bottom}H${x + w - rr}Q${x + w},${bottom} ${x + w},${bottom - rr}V${top}Z`;
 }
 
-export function BarChart({ periods, series, height = 260, ariaLabel, showValueLabels = false }: BarChartProps) {
+export function BarChart({ periods, series, height = 260, ariaLabel, showValueLabels = false, ttmIndex = null, ttmPrefix = "TTM " }: BarChartProps) {
   const { t } = useI18n();
+  const uid = useId().replace(/:/g, "");
+  const periodLabel = (i: number) => (i === ttmIndex ? `${ttmPrefix}${fmtMonthYear(periods[i])}` : fmtMonthYear(periods[i]));
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
 
@@ -58,7 +65,7 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
 
   const y = scaleLinear().domain([lo, hi === lo ? lo + 1 : hi]).nice(4).range([innerH, 0]);
   const x0 = scaleBand<string>().domain(periods).range([0, innerW]).paddingInner(0.3).paddingOuter(0.15);
-  const groupW = Math.min(x0.bandwidth(), series.length * 64);
+  const groupW = Math.min(x0.bandwidth(), series.length * 56);
   const x1 = scaleBand<string>()
     .domain(series.map((s) => s.key))
     .range([0, groupW])
@@ -82,6 +89,14 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
     <div className="chart" ref={ref} style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} role="img" aria-label={ariaLabel}>
+          <defs>
+            {series.map((s) => (
+              <pattern key={s.key} id={`${uid}-h-${s.key}`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect width="5" height="5" fill="var(--surface)" />
+                <rect width="2.2" height="5" fill={s.color} />
+              </pattern>
+            ))}
+          </defs>
           <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
             {ticks.map((tk) => (
               <g key={tk} transform={`translate(0,${y(tk)})`}>
@@ -96,7 +111,7 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
               return (
                 <g key={p}>
                   {active === i && (
-                    <rect className="band-hover" x={x0(p) ?? 0} y={0} width={x0.bandwidth()} height={innerH} rx={6} />
+                    <rect className="band-hover" x={x0(p) ?? 0} y={0} width={x0.bandwidth()} height={innerH} />
                   )}
                   {series.map((s) => {
                     const pt = s.points[i];
@@ -105,7 +120,13 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
                     const bw = x1.bandwidth();
                     return (
                       <g key={s.key}>
-                        <path d={barPath(bx, y(0), y(pt.value), bw, 3)} fill={s.color} className="bar" />
+                        <path
+                          d={barPath(bx, y(0), y(pt.value), bw, 1)}
+                          fill={i === ttmIndex ? `url(#${uid}-h-${s.key})` : s.color}
+                          stroke={i === ttmIndex ? s.color : "none"}
+                          strokeWidth={i === ttmIndex ? 1.25 : 0}
+                          className="bar"
+                        />
                         {showValueLabels && (
                           <text
                             className="bar-label"
@@ -119,8 +140,13 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
                       </g>
                     );
                   })}
-                  <text className="axis-label" x={(x0(p) ?? 0) + x0.bandwidth() / 2} y={innerH + 20} textAnchor="middle">
-                    {fmtMonthYear(p)}
+                  <text
+                    className={i === ttmIndex ? "axis-label is-ttm" : "axis-label"}
+                    x={(x0(p) ?? 0) + x0.bandwidth() / 2}
+                    y={innerH + 20}
+                    textAnchor="middle"
+                  >
+                    {periodLabel(i)}
                   </text>
                   <rect
                     className="hit"
@@ -130,7 +156,7 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
                     height={innerH}
                     tabIndex={0}
                     role="button"
-                    aria-label={`${fmtMonthYear(p)}: ${series
+                    aria-label={`${periodLabel(i)}: ${series
                       .map((s) => `${s.label} ${fmtMoneyShort(s.points[i]?.value ?? null)}`)
                       .join(", ")}`}
                     onMouseEnter={() => setActive(i)}
@@ -151,7 +177,7 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
           style={tipStyle}
           role="presentation"
         >
-          <p className="chart-tip-title">{fmtMonthYear(periods[active])}</p>
+          <p className="chart-tip-title">{periodLabel(active)}</p>
           {series.map((s) => {
             const pt = s.points[active];
             return (
@@ -175,7 +201,9 @@ export function BarChart({ periods, series, height = 260, ariaLabel, showValueLa
                 {full !== null && <p className="chart-tip-note">{fmtMoneyFull(full)}</p>}
                 {src && (
                   <p className="chart-tip-note">
-                    {t("common.source")}: {src.form} · {src.filed} · {src.accession_no}
+                    {t("common.source")}: {src.form}, {fmtDate(src.filed)}
+                    <br />
+                    <span className="tnum">{src.accession_no}</span>
                   </p>
                 )}
               </>

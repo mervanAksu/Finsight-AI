@@ -93,24 +93,27 @@ export function AskTab({ ticker, analyzed }: { ticker: string; analyzed: boolean
           {turns.length === 0 && (
             <div className="chat-empty">
               <p className="sub-title">{t("ask.examples")}</p>
-              <div className="chips">
+              <p className="muted">{t("ask.examplesLead")}</p>
+              <ul className="example-list">
                 {examples.map((ex) => (
-                  <button key={ex} type="button" className="chip-btn" onClick={() => send(ex)}>
-                    {ex}
-                  </button>
+                  <li key={ex}>
+                    <button type="button" className="example-btn" onClick={() => send(ex)}>
+                      {ex}
+                    </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
           {turns.map((turn) => (
-            <div key={turn.id} className="turn">
-              <div className="msg msg-user">
-                <span className="msg-who">{t("ask.you")}</span>
-                <p>{turn.question}</p>
-              </div>
+            <article key={turn.id} className="turn">
+              <h3 className="qa-q">
+                <span className="qa-label">{t("ask.question")}</span>
+                <span>{turn.question}</span>
+              </h3>
               {turn.kind === "pending" && (
                 <div className="msg msg-bot is-pending" role="status">
-                  <span className="msg-who">{t("ask.assistant")}</span>
+                  <span className="qa-label">{t("ask.answer")}</span>
                   <p className="thinking">
                     {t("ask.thinking")}
                     <span className="dots" aria-hidden="true">
@@ -123,14 +126,14 @@ export function AskTab({ ticker, analyzed }: { ticker: string; analyzed: boolean
               )}
               {turn.kind === "error" && (
                 <div className="msg msg-bot is-error" role="alert">
-                  <span className="msg-who">{t("ask.assistant")}</span>
+                  <span className="qa-label">{t("ask.answer")}</span>
                   <p>
                     <LuCircleAlert aria-hidden="true" /> {t("ask.error")}: {turn.message}
                   </p>
                 </div>
               )}
               {turn.kind === "answer" && <Answer response={turn.response} turnId={turn.id} />}
-            </div>
+            </article>
           ))}
           <div ref={endRef} />
         </div>
@@ -218,7 +221,7 @@ function Answer({ response, turnId }: { response: AskResponse; turnId: number })
 
   return (
     <div className={cx("msg msg-bot", notFound && "is-notfound")}>
-      <span className="msg-who">{t("ask.assistant")}</span>
+      <span className="qa-label">{t("ask.answer")}</span>
       {response.advice_refused && (
         <p className="msg-note is-advice" role="note">
           <LuShieldAlert aria-hidden="true" />
@@ -253,7 +256,7 @@ function Answer({ response, turnId }: { response: AskResponse; turnId: number })
       {response.sources.length > 0 && (
         <div className="sources">
           <p className="sub-title">{t("ask.sources")}</p>
-          <ol className="source-list">
+          <ol className="source-list footnotes">
             {response.sources.map((s) => (
               <SourceCard key={s.n} source={s} id={anchor(s.n)} active={highlight === s.n} />
             ))}
@@ -281,9 +284,8 @@ function SourceCard({ source: s, id, active }: { source: AskSource; id: string; 
           {sectionLabel(lang, s.section, s.section_title)} <span className="muted">(Item {s.section})</span>
         </span>
         <span className="source-meta">
-          {s.form} · {fmtDate(s.filing_date)}
+          {s.form}, {fmtDate(s.filing_date)}. {t("ask.similarity", { pct: fmtPercent(s.similarity, 0) })}
         </span>
-        <span className="source-sim">{t("ask.similarity", { pct: fmtPercent(s.similarity, 0) })}</span>
       </div>
       <blockquote className={cx("source-text", long && !expanded && "is-clamped")} lang="en">
         {s.text}

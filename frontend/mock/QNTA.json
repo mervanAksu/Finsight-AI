@@ -24,9 +24,16 @@
   },
   "analyzed": true,
   "score": {
-   "total": 61.9,
+   "total": 62.0,
    "band": "Dengeli",
-   "as_of_period": "2025-09-30"
+   "as_of_period": "2026-06-30",
+   "basis": "ttm",
+   "as_of_filing": {
+    "form": "10-Q",
+    "accession_no": "0009990004-26-000301",
+    "filing_date": "2026-08-05"
+   },
+   "data_through": "2026-06-30"
   },
   "key_metrics": [
    {
@@ -42,6 +49,59 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 16487019231,
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "yoy": 0.0209,
+     "source": {
+      "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 16100000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 12462019231,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 12075000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -57,6 +117,59 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 1333027344,
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "yoy": -0.04,
+     "source": {
+      "xbrl_tag": "us-gaap:NetIncomeLoss",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 1310000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 1005527344,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 982500000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -72,7 +185,10 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
-    }
+    },
+    "basis": "ttm",
+    "ttm": null,
+    "ttm_reason": "TTM hesaplanamadı: geçen yılın aynı dönemi (YTD) 10-Q'da yok; yıllık değer kullanıldı."
    },
    {
     "metric": "total_assets",
@@ -87,6 +203,25 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 23562000000,
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "yoy": 0.0267,
+     "source": {
+      "xbrl_tag": "us-gaap:Assets",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -102,6 +237,25 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 13452290076,
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "yoy": 0.0153,
+     "source": {
+      "xbrl_tag": "us-gaap:Liabilities",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -117,9 +271,35 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 10112765957,
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "yoy": 0.0426,
+     "source": {
+      "xbrl_tag": "us-gaap:StockholdersEquity",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     }
     }
    }
   ],
+  "latest_filing": {
+   "accession_no": "0009990004-26-000301",
+   "form": "10-Q",
+   "filing_date": "2026-08-05",
+   "report_date": "2026-06-30",
+   "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/0009990004-26-000301-index.htm"
+  },
   "latest_filings": [
    {
     "accession_no": "0009990004-26-000323",
@@ -192,9 +372,16 @@
   },
   "analyzed": false,
   "score": {
-   "total": 57.9,
+   "total": 58.1,
    "band": "İzlenmeli",
-   "as_of_period": "2025-09-30"
+   "as_of_period": "2026-06-30",
+   "basis": "ttm",
+   "as_of_filing": {
+    "form": "10-Q",
+    "accession_no": "0009990004-26-000301",
+    "filing_date": "2026-08-05"
+   },
+   "data_through": "2026-06-30"
   },
   "key_metrics": [
    {
@@ -210,6 +397,59 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 16487019231,
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "yoy": 0.0209,
+     "source": {
+      "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 16100000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 12462019231,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 12075000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -225,6 +465,59 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 1333027344,
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "yoy": -0.04,
+     "source": {
+      "xbrl_tag": "us-gaap:NetIncomeLoss",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 1310000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 1005527344,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 982500000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -240,7 +533,10 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
-    }
+    },
+    "basis": "ttm",
+    "ttm": null,
+    "ttm_reason": "TTM hesaplanamadı: geçen yılın aynı dönemi (YTD) 10-Q'da yok; yıllık değer kullanıldı."
    },
    {
     "metric": "total_assets",
@@ -255,6 +551,25 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 23562000000,
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "yoy": 0.0267,
+     "source": {
+      "xbrl_tag": "us-gaap:Assets",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -270,6 +585,25 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 13452290076,
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "yoy": 0.0153,
+     "source": {
+      "xbrl_tag": "us-gaap:Liabilities",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     }
     }
    },
    {
@@ -285,9 +619,35 @@
      "filed": "2025-11-20",
      "derived_from": null,
      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+    },
+    "basis": "ttm",
+    "ttm": {
+     "value": 10112765957,
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "yoy": 0.0426,
+     "source": {
+      "xbrl_tag": "us-gaap:StockholdersEquity",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     }
     }
    }
   ],
+  "latest_filing": {
+   "accession_no": "0009990004-26-000301",
+   "form": "10-Q",
+   "filing_date": "2026-08-05",
+   "report_date": "2026-06-30",
+   "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/0009990004-26-000301-index.htm"
+  },
   "latest_filings": [
    {
     "accession_no": "0009990004-26-000323",
@@ -390,7 +750,60 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "value": 16487019231,
+     "yoy": 0.0209,
+     "source": {
+      "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 16100000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 12462019231,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 12075000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "cost_of_revenue",
@@ -439,7 +852,60 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "value": 11331250000,
+     "yoy": 0.0198,
+     "source": {
+      "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 11100000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 8556250000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:CostOfGoodsAndServicesSold",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 8325000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "gross_profit",
@@ -488,7 +954,26 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "value": 5155769231,
+     "yoy": 0.0234,
+     "source": {
+      "xbrl_tag": "us-gaap:GrossProfit",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "operating_income",
@@ -537,7 +1022,60 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "value": 2038461538,
+     "yoy": -0.0161,
+     "source": {
+      "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 2000000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 1538461538,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 1500000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "net_income",
@@ -586,7 +1124,60 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "value": 1333027344,
+     "yoy": -0.04,
+     "source": {
+      "xbrl_tag": "us-gaap:NetIncomeLoss",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 1310000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 1005527344,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:NetIncomeLoss",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 982500000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "operating_cash_flow",
@@ -684,7 +1275,60 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": "2025-10-01",
+     "period_end": "2026-06-30",
+     "value": 503427419,
+     "yoy": -0.1589,
+     "source": {
+      "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [
+       {
+        "role": "annual",
+        "metric": null,
+        "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+        "form": "10-K",
+        "accession_no": "0009990004-25-000213",
+        "period_start": "2024-10-01",
+        "period_end": "2025-09-30",
+        "value": 550000000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
+       },
+       {
+        "role": "ytd_current",
+        "metric": null,
+        "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2025-10-01",
+        "period_end": "2026-06-30",
+        "value": 365927419,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       },
+       {
+        "role": "ytd_prior",
+        "metric": null,
+        "xbrl_tag": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+        "form": "10-Q",
+        "accession_no": "0009990004-26-000301",
+        "period_start": "2024-10-01",
+        "period_end": "2025-06-30",
+        "value": 412500000,
+        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/"
+       }
+      ],
+      "period_start": "2025-10-01",
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "total_assets",
@@ -733,7 +1377,26 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "value": 23562000000,
+     "yoy": null,
+     "source": {
+      "xbrl_tag": "us-gaap:Assets",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "current_assets",
@@ -782,7 +1445,26 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "value": 7085714286,
+     "yoy": null,
+     "source": {
+      "xbrl_tag": "us-gaap:AssetsCurrent",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "current_liabilities",
@@ -831,7 +1513,26 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "value": 5056382979,
+     "yoy": null,
+     "source": {
+      "xbrl_tag": "us-gaap:LiabilitiesCurrent",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "total_liabilities",
@@ -880,7 +1581,26 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "value": 13452290076,
+     "yoy": null,
+     "source": {
+      "xbrl_tag": "us-gaap:Liabilities",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    },
    {
     "metric": "stockholders_equity",
@@ -929,7 +1649,26 @@
        "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000425000213/"
       }
      }
-    ]
+    ],
+    "latest": {
+     "period_start": null,
+     "period_end": "2026-06-30",
+     "value": 10112765957,
+     "yoy": null,
+     "source": {
+      "xbrl_tag": "us-gaap:StockholdersEquity",
+      "form": "10-Q",
+      "accession_no": "0009990004-26-000301",
+      "filed": "2026-08-05",
+      "derived_from": null,
+      "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/",
+      "basis": "ttm",
+      "parts": [],
+      "period_start": null,
+      "period_end": "2026-06-30"
+     },
+     "basis": "ttm"
+    }
    }
   ],
   "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
@@ -949,7 +1688,30 @@
   "periods": [
    "2023-09-30",
    "2024-09-30",
-   "2025-09-30"
+   "2025-09-30",
+   "2026-06-30"
+  ],
+  "period_info": [
+   {
+    "period_end": "2023-09-30",
+    "basis": "annual",
+    "label": "2023-09-30"
+   },
+   {
+    "period_end": "2024-09-30",
+    "basis": "annual",
+    "label": "2024-09-30"
+   },
+   {
+    "period_end": "2025-09-30",
+    "basis": "annual",
+    "label": "2025-09-30"
+   },
+   {
+    "period_end": "2026-06-30",
+    "basis": "ttm",
+    "label": "TTM 2026-06-30"
+   }
   ],
   "ratios": [
    {
@@ -976,7 +1738,8 @@
         "value": 4500000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -995,7 +1758,8 @@
         "value": 4800000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1014,9 +1778,31 @@
         "value": 5000000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.3127,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 16487019231,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "gross_profit",
+        "value": 5155769231,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "operating_margin",
@@ -1042,7 +1828,8 @@
         "value": 1800000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1061,7 +1848,8 @@
         "value": 1950000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1080,9 +1868,31 @@
         "value": 2000000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.1236,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 16487019231,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "operating_income",
+        "value": 2038461538,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "net_margin",
@@ -1108,7 +1918,8 @@
         "value": 1150000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1127,7 +1938,8 @@
         "value": 1280000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1146,9 +1958,31 @@
         "value": 1310000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.0809,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 16487019231,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "net_income",
+        "value": 1333027344,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "roa",
@@ -1174,7 +2008,8 @@
         "value": 21800000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1193,7 +2028,8 @@
         "value": 22500000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1212,9 +2048,31 @@
         "value": 23100000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.0573,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 1333027344,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "total_assets",
+        "value": 23562000000,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "roe",
@@ -1240,7 +2098,8 @@
         "value": 8900000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1259,7 +2118,8 @@
         "value": 9400000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1278,9 +2138,31 @@
         "value": 9800000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.1346,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "net_income",
+        "value": 1333027344,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 10112765957,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "current_ratio",
@@ -1306,7 +2188,8 @@
         "value": 4500000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1325,7 +2208,8 @@
         "value": 4700000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1344,9 +2228,31 @@
         "value": 4900000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 1.4013,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "current_assets",
+        "value": 7085714286,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "current_liabilities",
+        "value": 5056382979,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "debt_to_equity",
@@ -1372,7 +2278,8 @@
         "value": 8900000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1391,7 +2298,8 @@
         "value": 9400000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1410,9 +2318,31 @@
         "value": 9800000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 1.3302,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 13452290076,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "stockholders_equity",
+        "value": 10112765957,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "liabilities_to_assets",
@@ -1438,7 +2368,8 @@
         "value": 21800000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1457,7 +2388,8 @@
         "value": 22500000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1476,9 +2408,31 @@
         "value": 23100000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.5709,
+      "status": "ok",
+      "reason": null,
+      "note": null,
+      "inputs": [
+       {
+        "metric": "total_liabilities",
+        "value": 13452290076,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "total_assets",
+        "value": 23562000000,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "ocf_to_net_income",
@@ -1504,7 +2458,8 @@
         "value": 1150000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1523,7 +2478,8 @@
         "value": 1280000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1542,9 +2498,31 @@
         "value": 1310000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 1.3653,
+      "status": "ok",
+      "reason": null,
+      "note": "TTM yok, yıllık değer kullanıldı: operating_cash_flow",
+      "inputs": [
+       {
+        "metric": "operating_cash_flow",
+        "value": 1820000000,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "net_income",
+        "value": 1333027344,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    },
    {
     "key": "fcf_margin",
@@ -1575,7 +2553,8 @@
         "value": 650000000,
         "accession_no": "0009990004-23-000137"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2024-09-30",
@@ -1599,7 +2578,8 @@
         "value": 620000000,
         "accession_no": "0009990004-24-000175"
        }
-      ]
+      ],
+      "basis": "annual"
      },
      {
       "period_end": "2025-09-30",
@@ -1623,145 +2603,183 @@
         "value": 550000000,
         "accession_no": "0009990004-25-000213"
        }
-      ]
+      ],
+      "basis": "annual"
+     },
+     {
+      "period_end": "2026-06-30",
+      "value": 0.0799,
+      "status": "ok",
+      "reason": null,
+      "note": "TTM yok, yıllık değer kullanıldı: operating_cash_flow",
+      "inputs": [
+       {
+        "metric": "revenue",
+        "value": 16487019231,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "operating_cash_flow",
+        "value": 1820000000,
+        "accession_no": "0009990004-26-000301"
+       },
+       {
+        "metric": "capex",
+        "value": 503427419,
+        "accession_no": "0009990004-26-000301"
+       }
+      ],
+      "basis": "ttm"
      }
-    ]
+    ],
+    "basis": "ttm"
    }
   ],
   "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
  },
  "score": {
-  "total": 61.9,
+  "total": 62.0,
   "band": "Dengeli",
-  "as_of_period": "2025-09-30",
+  "as_of_period": "2026-06-30",
+  "basis": "ttm",
+  "data_through": "2026-06-30",
+  "as_of_filing": {
+   "form": "10-Q",
+   "accession_no": "0009990004-26-000301",
+   "filing_date": "2026-08-05"
+  },
+  "basis_notes": [
+   "İşletme nakit akışı: TTM hesaplanamadı, yıllık değer kullanıldı."
+  ],
   "weights_version": "v1-2026-11",
+  "method_version": "v2-2026-11-ttm",
   "components": [
    {
     "key": "profitability",
     "label": "Kârlılık",
     "weight": 25,
-    "score": 45.8,
+    "score": 45.5,
     "available": true,
     "indicators": [
      {
       "key": "net_margin",
       "label": "Net kâr marjı",
-      "value": 0.0814,
+      "value": 0.0809,
       "display": "%8,1",
-      "points": 40.7
+      "points": 40.4
      },
      {
       "key": "operating_margin",
       "label": "Faaliyet kâr marjı",
-      "value": 0.1242,
+      "value": 0.1236,
       "display": "%12,4",
-      "points": 49.7
+      "points": 49.4
      },
      {
       "key": "roa",
       "label": "ROA",
-      "value": 0.0575,
-      "display": "%5,8",
-      "points": 38.3
+      "value": 0.0573,
+      "display": "%5,7",
+      "points": 38.2
      },
      {
       "key": "roe",
       "label": "ROE",
-      "value": 0.1365,
-      "display": "%13,7",
-      "points": 54.6
+      "value": 0.1346,
+      "display": "%13,5",
+      "points": 53.8
      }
     ],
-    "explanation": "Net kâr marjı %8,1 → 40,7 puan; Faaliyet kâr marjı %12,4 → 49,7 puan; ROA %5,8 → 38,3 puan; ROE %13,7 → 54,6 puan. Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25."
+    "explanation": "Net kâr marjı %8,1 → 40,4 puan; Faaliyet kâr marjı %12,4 → 49,4 puan; ROA %5,7 → 38,2 puan; ROE %13,5 → 53,8 puan. Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25."
    },
    {
     "key": "leverage",
     "label": "Kaldıraç ve borç",
     "weight": 20,
-    "score": 59.9,
+    "score": 60.8,
     "available": true,
     "indicators": [
      {
       "key": "debt_to_equity",
       "label": "Borç / özkaynak",
-      "value": 1.3571,
-      "display": "1,36",
-      "points": 65.7
+      "value": 1.3302,
+      "display": "1,33",
+      "points": 66.8
      },
      {
       "key": "liabilities_to_assets",
       "label": "Yükümlülük / varlık",
-      "value": 0.5758,
-      "display": "%57,6",
-      "points": 54.0
+      "value": 0.5709,
+      "display": "%57,1",
+      "points": 54.9
      }
     ],
-    "explanation": "Borç/özkaynak 1,36 (eşik 3,0–0,5, ters → 65,7 puan); yükümlülük/varlık %57,6 (eşik %90–%30, ters → 54,0 puan)."
+    "explanation": "Borç/özkaynak 1,33 (eşik 3,0–0,5, ters → 66,8 puan); yükümlülük/varlık %57,1 (eşik %90–%30, ters → 54,9 puan)."
    },
    {
     "key": "liquidity",
     "label": "Likidite",
     "weight": 15,
-    "score": 53.7,
+    "score": 60.1,
     "available": true,
     "indicators": [
      {
       "key": "current_ratio",
       "label": "Cari oran",
-      "value": 1.3061,
-      "display": "1,31",
-      "points": 53.7
+      "value": 1.4013,
+      "display": "1,40",
+      "points": 60.1
      }
     ],
-    "explanation": "Cari oran 1,31 (eşik 0,5–2,0 → 53,7 puan)."
+    "explanation": "Cari oran 1,40 (eşik 0,5–2,0 → 60,1 puan)."
    },
    {
     "key": "cash_quality",
     "label": "Nakit akışı kalitesi",
     "weight": 15,
-    "score": 82.2,
+    "score": 82.5,
     "available": true,
     "indicators": [
      {
       "key": "ocf_to_net_income",
       "label": "Nakit akışı kalitesi",
-      "value": 1.3893,
-      "display": "1,39",
+      "value": 1.3653,
+      "display": "1,37",
       "points": 100.0
      },
      {
       "key": "fcf_margin",
       "label": "Serbest nakit akışı marjı",
-      "value": 0.0789,
-      "display": "%7,9",
-      "points": 64.5
+      "value": 0.0799,
+      "display": "%8,0",
+      "points": 65.0
      }
     ],
-    "explanation": "İşletme nakit akışı / net kâr 1,39 (eşik 0–1,2 → 100,0 puan); serbest nakit akışı marjı %7,9 (eşik −%5–%15 → 64,5 puan)."
+    "explanation": "İşletme nakit akışı / net kâr 1,37 (eşik 0–1,2 → 100,0 puan); serbest nakit akışı marjı %8,0 (eşik −%5–%15 → 65,0 puan)."
    },
    {
     "key": "growth",
     "label": "Büyüme",
     "weight": 10,
-    "score": 54.3,
+    "score": 44.2,
     "available": true,
     "indicators": [
      {
       "key": "revenue_yoy",
       "label": "Gelir değişimi",
-      "value": 0.0321,
-      "display": "%3,2",
-      "points": 52.8
+      "value": 0.0209,
+      "display": "%2,1",
+      "points": 48.4
      },
      {
       "key": "net_income_yoy",
       "label": "Net kâr değişimi",
-      "value": 0.0234,
-      "display": "%2,3",
-      "points": 55.9
+      "value": -0.04,
+      "display": "-%4,0",
+      "points": 40.0
      }
     ],
-    "explanation": "Gelir yıllık %3,2 (eşik −%10–%15 → 52,8 puan); net kâr yıllık %2,3 (eşik −%20–%20 → 55,9 puan)."
+    "explanation": "Gelir (TTM, önceki TTM'ye göre) %2,1 (eşik −%10–%15 → 48,4 puan); net kâr (TTM) -%4,0 (eşik −%20–%20 → 40,0 puan)."
    },
    {
     "key": "text_tone",
@@ -1799,141 +2817,152 @@
    }
   ],
   "missing_components": [],
-  "explanation": "Toplam skor 7 bileşenin ağırlıklı ortalamasıdır (kullanılabilen ağırlık 100/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
+  "explanation": "Toplam skor 7 bileşenin ağırlıklı ortalamasıdır; finansal göstergeler son on iki aya (TTM, 2026-06-30 itibarıyla) dayanır (kullanılabilen ağırlık 100/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
   "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
  },
  "score_fin": {
-  "total": 57.9,
+  "total": 58.1,
   "band": "İzlenmeli",
-  "as_of_period": "2025-09-30",
+  "as_of_period": "2026-06-30",
+  "basis": "ttm",
+  "data_through": "2026-06-30",
+  "as_of_filing": {
+   "form": "10-Q",
+   "accession_no": "0009990004-26-000301",
+   "filing_date": "2026-08-05"
+  },
+  "basis_notes": [
+   "İşletme nakit akışı: TTM hesaplanamadı, yıllık değer kullanıldı."
+  ],
   "weights_version": "v1-2026-11",
+  "method_version": "v2-2026-11-ttm",
   "components": [
    {
     "key": "profitability",
     "label": "Kârlılık",
     "weight": 25,
-    "score": 45.8,
+    "score": 45.5,
     "available": true,
     "indicators": [
      {
       "key": "net_margin",
       "label": "Net kâr marjı",
-      "value": 0.0814,
+      "value": 0.0809,
       "display": "%8,1",
-      "points": 40.7
+      "points": 40.4
      },
      {
       "key": "operating_margin",
       "label": "Faaliyet kâr marjı",
-      "value": 0.1242,
+      "value": 0.1236,
       "display": "%12,4",
-      "points": 49.7
+      "points": 49.4
      },
      {
       "key": "roa",
       "label": "ROA",
-      "value": 0.0575,
-      "display": "%5,8",
-      "points": 38.3
+      "value": 0.0573,
+      "display": "%5,7",
+      "points": 38.2
      },
      {
       "key": "roe",
       "label": "ROE",
-      "value": 0.1365,
-      "display": "%13,7",
-      "points": 54.6
+      "value": 0.1346,
+      "display": "%13,5",
+      "points": 53.8
      }
     ],
-    "explanation": "Net kâr marjı %8,1 → 40,7 puan; Faaliyet kâr marjı %12,4 → 49,7 puan; ROA %5,8 → 38,3 puan; ROE %13,7 → 54,6 puan. Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25."
+    "explanation": "Net kâr marjı %8,1 → 40,4 puan; Faaliyet kâr marjı %12,4 → 49,4 puan; ROA %5,7 → 38,2 puan; ROE %13,5 → 53,8 puan. Eşikler: net marj %0–%20, faaliyet marjı %0–%25, ROA %0–%15, ROE %0–%25."
    },
    {
     "key": "leverage",
     "label": "Kaldıraç ve borç",
     "weight": 20,
-    "score": 59.9,
+    "score": 60.8,
     "available": true,
     "indicators": [
      {
       "key": "debt_to_equity",
       "label": "Borç / özkaynak",
-      "value": 1.3571,
-      "display": "1,36",
-      "points": 65.7
+      "value": 1.3302,
+      "display": "1,33",
+      "points": 66.8
      },
      {
       "key": "liabilities_to_assets",
       "label": "Yükümlülük / varlık",
-      "value": 0.5758,
-      "display": "%57,6",
-      "points": 54.0
+      "value": 0.5709,
+      "display": "%57,1",
+      "points": 54.9
      }
     ],
-    "explanation": "Borç/özkaynak 1,36 (eşik 3,0–0,5, ters → 65,7 puan); yükümlülük/varlık %57,6 (eşik %90–%30, ters → 54,0 puan)."
+    "explanation": "Borç/özkaynak 1,33 (eşik 3,0–0,5, ters → 66,8 puan); yükümlülük/varlık %57,1 (eşik %90–%30, ters → 54,9 puan)."
    },
    {
     "key": "liquidity",
     "label": "Likidite",
     "weight": 15,
-    "score": 53.7,
+    "score": 60.1,
     "available": true,
     "indicators": [
      {
       "key": "current_ratio",
       "label": "Cari oran",
-      "value": 1.3061,
-      "display": "1,31",
-      "points": 53.7
+      "value": 1.4013,
+      "display": "1,40",
+      "points": 60.1
      }
     ],
-    "explanation": "Cari oran 1,31 (eşik 0,5–2,0 → 53,7 puan)."
+    "explanation": "Cari oran 1,40 (eşik 0,5–2,0 → 60,1 puan)."
    },
    {
     "key": "cash_quality",
     "label": "Nakit akışı kalitesi",
     "weight": 15,
-    "score": 82.2,
+    "score": 82.5,
     "available": true,
     "indicators": [
      {
       "key": "ocf_to_net_income",
       "label": "Nakit akışı kalitesi",
-      "value": 1.3893,
-      "display": "1,39",
+      "value": 1.3653,
+      "display": "1,37",
       "points": 100.0
      },
      {
       "key": "fcf_margin",
       "label": "Serbest nakit akışı marjı",
-      "value": 0.0789,
-      "display": "%7,9",
-      "points": 64.5
+      "value": 0.0799,
+      "display": "%8,0",
+      "points": 65.0
      }
     ],
-    "explanation": "İşletme nakit akışı / net kâr 1,39 (eşik 0–1,2 → 100,0 puan); serbest nakit akışı marjı %7,9 (eşik −%5–%15 → 64,5 puan)."
+    "explanation": "İşletme nakit akışı / net kâr 1,37 (eşik 0–1,2 → 100,0 puan); serbest nakit akışı marjı %8,0 (eşik −%5–%15 → 65,0 puan)."
    },
    {
     "key": "growth",
     "label": "Büyüme",
     "weight": 10,
-    "score": 54.3,
+    "score": 44.2,
     "available": true,
     "indicators": [
      {
       "key": "revenue_yoy",
       "label": "Gelir değişimi",
-      "value": 0.0321,
-      "display": "%3,2",
-      "points": 52.8
+      "value": 0.0209,
+      "display": "%2,1",
+      "points": 48.4
      },
      {
       "key": "net_income_yoy",
       "label": "Net kâr değişimi",
-      "value": 0.0234,
-      "display": "%2,3",
-      "points": 55.9
+      "value": -0.04,
+      "display": "-%4,0",
+      "points": 40.0
      }
     ],
-    "explanation": "Gelir yıllık %3,2 (eşik −%10–%15 → 52,8 puan); net kâr yıllık %2,3 (eşik −%20–%20 → 55,9 puan)."
+    "explanation": "Gelir (TTM, önceki TTM'ye göre) %2,1 (eşik −%10–%15 → 48,4 puan); net kâr (TTM) -%4,0 (eşik −%20–%20 → 40,0 puan)."
    },
    {
     "key": "text_tone",
@@ -1958,7 +2987,7 @@
    "text_tone",
    "risk_change"
   ],
-  "explanation": "Toplam skor 5 bileşenin ağırlıklı ortalamasıdır (kullanılabilen ağırlık 85/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
+  "explanation": "Toplam skor 5 bileşenin ağırlıklı ortalamasıdır; finansal göstergeler son on iki aya (TTM, 2026-06-30 itibarıyla) dayanır (kullanılabilen ağırlık 85/100). Bant gösterim amaçlıdır; derecelendirme değildir.",
   "disclaimer": "Bu analiz yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. Veriler SEC EDGAR başvurularından otomatik çıkarılmıştır; hata içerebilir."
  },
  "filings": [
@@ -1986,7 +3015,7 @@
    "items": [],
    "item_labels": [],
    "url": "https://www.sec.gov/Archives/edgar/data/9990004/000999000426000301/0009990004-26-000301-index.htm",
-   "analyzed": false
+   "analyzed": true
   },
   {
    "accession_no": "0009990004-26-000272",
@@ -2352,5 +3381,22 @@
     }
    ]
   }
- ]
+ ],
+ "freshness": {
+  "sec_latest": {
+   "form": "10-Q",
+   "filing_date": "2026-08-05",
+   "report_date": "2026-06-30",
+   "accession_no": "0009990004-26-000301"
+  },
+  "analyzed_latest": {
+   "form": "10-Q",
+   "filing_date": "2026-08-05",
+   "report_date": "2026-06-30",
+   "accession_no": "0009990004-26-000301"
+  },
+  "new_filings": [],
+  "stale": false,
+  "error": null
+ }
 }

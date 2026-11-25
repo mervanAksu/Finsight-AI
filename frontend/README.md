@@ -37,7 +37,7 @@ altından sunar. Gerekirse `FINSIGHT_API_BASE` ile derleme anında değiştirili
 `scripts/mock_server.py` yalnızca Python standart kütüphanesiyle çalışır; `dist/` klasörünü ve
 `/api/*` uç noktalarını `mock/*.json` içindeki **kurgusal** verilerle sunar (EXMP – Example Corp,
 NVLT – Novalight Systems, HRBR – Harbor Freight Lines, QNTA – Quanta Ridge Foods, CDRW – Cedarway
-Outdoor). Ağa, SEC'e veya LLM'e bağlanmaz; yanıtlar `docs/api-contract.md` (v1.1) şeklindedir.
+Outdoor). Ağa, SEC'e veya LLM'e bağlanmaz; yanıtlar `docs/api-contract.md` (v1.4) şeklindedir.
 
 ```bash
 npm run build
@@ -58,6 +58,12 @@ Demo akışları:
   `extractive`, "gömme" geçerse `warning` alanlı yanıt döner; "almalı mıyım" gibi tavsiye
   sorularında `advice_refused: true` ve cevabın başında sabit ret cümlesi bulunur.
 - **Eksik oran:** NVLT'de 2023 cari oranı hesaplanamaz ("—", nedeni ipucunda).
+- **TTM (Aşama 4):** skor, temel kalemler ve oranların son sütunu son on iki aya dayanır
+  ("TTM · 30 Eyl 2026 · 10-Q"). QNTA'da işletme nakit akışının TTM'si yoktur; yıllık değere
+  düşer ve nedeni (`ttm_reason`, `basis_notes`, oran `note`) gösterilir.
+- **Tazelik (`/freshness`):** HRBR'de analizden sonra yayımlanmış bir 10-Q vardır → şirket
+  sayfasında "Yeni rapor yayımlandı" bandı ve Güncelle; NVLT'de SEC'e ulaşılamamış gibi
+  davranılır ("SEC kontrol edilemedi"). `--no-freshness`: uç nokta yok (eski sunucu).
 
 Sunucu durumu bellektedir; CDRW / QNTA'yı yeniden başlangıç durumunda görmek için sunucuyu yeniden başlatın.
 Sahte veriyi yeniden üretmek için: `python3 scripts/gen_mock_data.py` (oranlar ve skor,
@@ -69,8 +75,12 @@ Sahte veriyi yeniden üretmek için: `python3 scripts/gen_mock_data.py` (oranlar
 src/main.tsx, App.tsx      giriş, dil/tema durumu, hash yönlendirme (#/company/EXMP/overview)
 src/api.ts, types.ts       API istemcisi ve sözleşme tipleri
 src/format.ts, i18n.ts     Intl biçimlendirme (tr-TR / en-US), TR/EN sözlük
-src/components/            başlık, arama, analiz ilerlemesi, ortak durum bileşenleri
-src/charts/                skor göstergesi, çubuk grafik, sparkline, ton çubukları
-src/pages/                 ana sayfa, şirket sekmeleri, karşılaştırma
+src/components/            başlık, arama, analiz ilerlemesi, tazelik bandı, ortak bileşenler
+src/fonts/                 Bitter ve Fira Sans (WOFF alt kümeleri, SIL OFL 1.1; lisanslar yanında)
+src/charts/                skor cetveli, çubuk grafik (TTM taralı), sparkline, ton çubukları
+src/pages/                 ana sayfa, şirket sekmeleri (özet, finansallar, oranlar, metin tonu,
+                           risk değişimi, soru-cevap, başvurular), karşılaştırma
+
+Tasarım dili ve tokenlar: `.claude/skills/ui-design-system/SKILL.md`.
 src/lib/                   veri kancası, boyut izleme, kelime farkı (LCS), localStorage
 ```

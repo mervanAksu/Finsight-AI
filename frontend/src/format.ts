@@ -190,3 +190,41 @@ export function scoreTone(total: number | null | undefined): Tone {
   if (total >= 45) return "warning";
   return "negative";
 }
+
+// ---- Aşama 4: dönem tabanı (TTM / yıllık) ----
+/** Değer anlık (bilanço) kalemi mi? TTM etiketi yalnızca süreli kalemlere uygulanır. */
+export const INSTANT_METRICS = new Set([
+  "total_assets",
+  "current_assets",
+  "current_liabilities",
+  "total_liabilities",
+  "stockholders_equity",
+]);
+
+/** Skor / değer dayanak satırı: "TTM · 30 Eyl 2026 · 10-Q" veya "Yıllık · 30 Haz 2026 · 10-K". */
+export function fmtBasisLine(basis: string | null | undefined, period: string | null | undefined, form?: string | null): string {
+  const parts: string[] = [];
+  if (basis === "ttm") parts.push("TTM");
+  else if (basis === "annual") parts.push(current === "en" ? "Annual" : "Yıllık");
+  if (period) parts.push(fmtDate(period));
+  if (form) parts.push(form);
+  return parts.join(" · ");
+}
+
+/** Tablo sütun başlığı: yıllık "Haz 2026", TTM "TTM Eyl 2026". */
+export function fmtPeriodHead(iso: string, basis?: string | null): string {
+  return basis === "ttm" ? `TTM ${fmtMonthYear(iso)}` : fmtMonthYear(iso);
+}
+
+/** Saat: "09:30" */
+export function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return DASH;
+  const d = parseDate(iso);
+  if (!d) return iso;
+  return new Intl.DateTimeFormat(locale(), { hour: "2-digit", minute: "2-digit" }).format(d);
+}
+
+/** Skor katkısı (ağırlık × puan / kullanılan ağırlık): 21,3 */
+export function fmtPoints(value: number | null | undefined): string {
+  return fmtNumber(value, 1);
+}

@@ -1,9 +1,11 @@
-// Skor göstergesi: yarım daire. Dış ince halka bant eşiklerini (45 / 60 / 75) gösterir,
-// iç kalın yay toplam puanı. Bant renkleri financial-analysis §3 eşikleriyle aynıdır.
-import { arc } from "d3-shape";
+// Skor ölçeği: 0–100 doğrusal cetvel. Bant eşikleri (45 / 60 / 75; financial-analysis §3)
+// cetvelin altında ince bölütler olarak, puan dikey bir işaretle gösterilir. Yarım daire
+// gösterge yerine cetvel seçildi: aynı genişlikte daha kesin okunur ve tabloda küçültülebilir.
 import { fmtScore, scoreTone } from "../format";
 import type { Tone } from "../format";
 import { bandLabel, useI18n } from "../i18n";
+import { cx } from "../components/ui";
+import { useElementWidth } from "../lib/useElementWidth";
 
 export const BANDS: Array<{ from: number; to: number; tone: Tone; name: string }> = [
   { from: 0, to: 45, tone: "negative", name: "Zayıf" },
@@ -12,128 +14,73 @@ export const BANDS: Array<{ from: number; to: number; tone: Tone; name: string }
   { from: 75, to: 100, tone: "positive", name: "Güçlü" },
 ];
 
-const GAUGE_PAD_TOP = 10;
-const GAUGE_PAD_BOTTOM = 6;
+const clamp = (v: number) => Math.max(0, Math.min(100, v));
 
-const toAngle = (v: number) => -Math.PI / 2 + (Math.max(0, Math.min(100, v)) / 100) * Math.PI;
-
-interface ArcDatum {
-  innerRadius: number;
-  outerRadius: number;
-  startAngle: number;
-  endAngle: number;
-}
-
-export function ScoreGauge({ total, band, size = 300 }: { total: number | null; band: string | null; size?: number }) {
-  const { lang } = useI18n();
-  const w = size;
-  const rOuter = w / 2 - 22;
-  const h = rOuter + 30;
-  const cxp = w / 2;
-  const cyp = rOuter + 14;
-  const ringOuter = rOuter;
-  const ringInner = rOuter - 5;
-  const valOuter = rOuter - 13;
-  const valInner = rOuter - 31;
-  const gen = arc<ArcDatum>().cornerRadius(2);
-  const gap = 0.012;
-  const tone = scoreTone(total);
-  const valueAngle = total === null ? null : toAngle(total);
-  const label = bandLabel(lang, band);
-
-  const needle =
-    valueAngle === null
-      ? null
-      : {
-          x1: cxp + Math.sin(valueAngle) * (valInner - 4),
-          y1: cyp - Math.cos(valueAngle) * (valInner - 4),
-          x2: cxp + Math.sin(valueAngle) * (ringOuter + 3),
-          y2: cyp - Math.cos(valueAngle) * (ringOuter + 3),
-        };
+/** Büyük cetvel (şirket başlığı). */
+export function ScoreScale({ total, band }: { total: number | null; band: string | null }) {
+  const { t, lang } = useI18n();
+  const [ref, width] = useElementWidth<HTMLDivElement>();
+  const h = 46;
+  const padX = 8;
+  const inner = Math.max(0, width - padX * 2);
+  const x = (v: number) => padX + (clamp(v) / 100) * inner;
+  const trackY = 18;
+  const label = `${fmtScore(total)} / 100 · ${bandLabel(lang, band)}. ${t("score.scaleLabel")}`;
 
   return (
-    <figure className="gauge" style={{ maxWidth: w }}>
-      {/* Üstte eşik etiketleri (45/60/75), altta 0/100 için pay: metin viewBox dışına taşmaz */}
-      <svg viewBox={`0 ${-GAUGE_PAD_TOP} ${w} ${h + GAUGE_PAD_TOP + GAUGE_PAD_BOTTOM}`} width="100%" role="img" aria-label={`${fmtScore(total)} / 100 · ${label}`}>
-        <g transform={`translate(${cxp},${cyp})`}>
+    <div className="score-scale" ref={ref} style={{ height: h }}>
+      {width > 0 && (
+        <svg width={width} height={h} role="img" aria-label={label}>
           {BANDS.map((b) => (
-            <path
+            <rect
               key={b.name}
-              className={`gauge-band tone-${b.tone}`}
-              d={
-                gen({
-                  innerRadius: ringInner,
-                  outerRadius: ringOuter,
-                  startAngle: toAngle(b.from) + (b.from === 0 ? 0 : gap),
-                  endAngle: toAngle(b.to) - (b.to === 100 ? 0 : gap),
-                }) ?? ""
-              }
+              className={cx("scale-band", `tone-${b.tone}`, band === b.name && "is-current")}
+              x={x(b.from) + (b.from === 0 ? 0 : 1)}
+              y={trackY}
+              width={Math.max(0, x(b.to) - x(b.from) - (b.from === 0 ? 1 : 2))}
+              height={band === b.name ? 6 : 4}
             />
           ))}
-          <path
-            className="gauge-track"
-            d={gen({ innerRadius: valInner, outerRadius: valOuter, startAngle: toAngle(0), endAngle: toAngle(100) }) ?? ""}
-          />
-          {valueAngle !== null && (
-            <path
-              className={`gauge-value tone-${tone}`}
-              d={gen({ innerRadius: valInner, outerRadius: valOuter, startAngle: toAngle(0), endAngle: valueAngle }) ?? ""}
-            />
+          {[0, 45, 60, 75, 100].map((v) => (
+            <g key={v}>
+              <line className="scale-tick" x1={x(v)} x2={x(v)} y1={trackY + 7} y2={trackY + 11} />
+              <text
+                className="scale-label"
+                x={x(v)}
+                y={trackY + 24}
+                textAnchor={v === 0 ? "start" : v === 100 ? "end" : "middle"}
+              >
+                {v}
+              </text>
+            </g>
+          ))}
+          {total !== null && (
+            <g className="scale-marker" transform={`translate(${x(total)},0)`}>
+              <path d="M-5,4 L5,4 L0,11 Z" />
+              <line x1={0} x2={0} y1={11} y2={trackY + 8} />
+            </g>
           )}
-        </g>
-        {needle && <line className="gauge-needle" x1={needle.x1} y1={needle.y1} x2={needle.x2} y2={needle.y2} />}
-        {[45, 60, 75].map((v) => {
-          const a = toAngle(v);
-          const r = ringOuter + 11;
-          return (
-            <text
-              key={v}
-              className="gauge-tick"
-              x={cxp + Math.sin(a) * r}
-              y={cyp - Math.cos(a) * r + 3}
-              textAnchor={v < 50 ? "end" : v > 50 ? "start" : "middle"}
-            >
-              {v}
-            </text>
-          );
-        })}
-        <text className="gauge-end" x={cxp - (valInner + valOuter) / 2} y={cyp + 16} textAnchor="middle">
-          0
-        </text>
-        <text className="gauge-end" x={cxp + (valInner + valOuter) / 2} y={cyp + 16} textAnchor="middle">
-          100
-        </text>
-        <text className="gauge-total" x={cxp} y={cyp - 14} textAnchor="middle">
-          {fmtScore(total)}
-        </text>
-        <text className={`gauge-band-label tone-text-${tone}`} x={cxp} y={cyp + 12} textAnchor="middle">
-          {label}
-        </text>
-      </svg>
-    </figure>
+        </svg>
+      )}
+    </div>
   );
 }
 
-/** Kartlarda kullanılan küçük halka. */
-export function ScoreRing({ total, size = 56, stroke = 5 }: { total: number | null; size?: number; stroke?: number }) {
-  const r = size / 2 - stroke / 2 - 1;
-  const gen = arc<ArcDatum>().cornerRadius(stroke / 2);
+/** Küçük cetvel + sayı (tablolar, karşılaştırma). */
+export function ScoreMini({ total, band, width = 72 }: { total: number | null; band?: string | null; width?: number }) {
+  const { lang } = useI18n();
   const tone = scoreTone(total);
-  const end = total === null ? 0 : (Math.max(0, Math.min(100, total)) / 100) * Math.PI * 2;
+  const x = (v: number) => 1 + (clamp(v) / 100) * (width - 2);
   return (
-    <svg className="score-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-      <g transform={`translate(${size / 2},${size / 2})`}>
-        <circle className="ring-track" r={r} fill="none" strokeWidth={stroke} />
-        {total !== null && (
-          <path
-            className={`ring-value tone-${tone}`}
-            d={gen({ innerRadius: r - stroke / 2, outerRadius: r + stroke / 2, startAngle: 0, endAngle: end }) ?? ""}
-          />
-        )}
-        <text className="ring-text" textAnchor="middle" dy="0.35em" style={{ fontSize: Math.round(size * 0.3) }}>
-          {total === null ? "—" : Math.round(total)}
-        </text>
-      </g>
-    </svg>
+    <span className="score-mini">
+      <span className={cx("score-mini-num", `tone-text-${tone}`)}>{total === null ? "—" : fmtScore(total)}</span>
+      <svg width={width} height={12} aria-hidden="true" className="score-mini-svg">
+        {BANDS.map((b) => (
+          <rect key={b.name} className={`scale-band tone-${b.tone}`} x={x(b.from)} y={5} width={Math.max(0, x(b.to) - x(b.from) - 1)} height={2} />
+        ))}
+        {total !== null && <rect className="scale-mini-mark" x={x(total) - 1} y={0} width={2.5} height={12} />}
+      </svg>
+      {band !== undefined && <span className={cx("score-mini-band", `tone-text-${tone}`)}>{bandLabel(lang, band ?? null)}</span>}
+    </span>
   );
 }

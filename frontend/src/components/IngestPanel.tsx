@@ -116,7 +116,7 @@ export function IngestPanel({
           <p className="ingest-name">
             {heading ?? (
               <>
-                <span className="ticker-tag">{ticker}</span> {name ?? ""}
+                <span className="ticker">{ticker}</span> {name ?? ""}
               </>
             )}
           </p>

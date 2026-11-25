@@ -5,6 +5,7 @@ import type {
   CompareResponse,
   FactsResponse,
   FilingsResponse,
+  Freshness,
   Health,
   IngestResponse,
   Job,
@@ -119,6 +120,10 @@ export const api = {
 
   facts: (ticker: string, metric?: string, signal?: AbortSignal) =>
     request<FactsResponse>(`/api/companies/${enc(ticker)}/facts${metric ? `?metric=${enc(metric)}` : ""}`, { signal }),
+
+  /** v1.4: SEC'te analizden sonra yeni 10-K/10-Q yayımlanmış mı (Aşama 4 §4). */
+  freshness: (ticker: string, signal?: AbortSignal) =>
+    request<Freshness>(`/api/companies/${enc(ticker)}/freshness`, { signal }),
 
   ratios: (ticker: string, signal?: AbortSignal) =>
     request<RatiosResponse>(`/api/companies/${enc(ticker)}/ratios`, { signal }),

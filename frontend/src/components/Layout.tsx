@@ -11,11 +11,12 @@ import { cx } from "./ui";
 
 export type Theme = "light" | "dark";
 
+/** Marka işareti: iki defter satırı ve muhasebedeki "toplam" çift çizgisi. */
 export function Logo() {
   return (
-    <svg className="logo-mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-      <rect width="28" height="28" rx="7" className="logo-bg" />
-      <path d="M8 19.5V14M14 19.5V8.5M20 19.5v-3.5" className="logo-bars" />
+    <svg className="logo-mark" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+      <rect x="0.75" y="0.75" width="20.5" height="20.5" rx="2" className="logo-frame" />
+      <path d="M5 7H17M5 11H13M5 15.2H17M5 17.6H17" className="logo-lines" />
     </svg>
   );
 }
@@ -36,7 +37,9 @@ export function Header({
       <div className="topbar-inner">
         <a className="brand" href={hrefFor({ name: "home" })} aria-label={`${t("app.name")}, ${t("nav.home")}`}>
           <Logo />
-          <span className="brand-name">{t("app.name")}</span>
+          <span className="brand-name">
+            FinSight<span className="brand-ai">AI</span>
+          </span>
         </a>
         {route.name !== "home" && (
           <div className="topbar-search">
@@ -93,20 +96,32 @@ export function Footer() {
         <p className="footer-disclaimer">
           <strong>{t("disclaimer.short")}</strong> {t("disclaimer.full")}
         </p>
-        <div className="footer-meta">
-          <span>{t("footer.source")}</span>
+        <dl className="footer-meta">
+          <div>
+            <dt>{t("common.source")}</dt>
+            <dd>SEC EDGAR</dd>
+          </div>
           {state.status === "success" && (
-            <span>
-              {t("footer.models")}: {t("footer.sentiment")} {state.data.models.sentiment}; {t("footer.embedding")}{" "}
-              {state.data.models.embedding.split("/").pop()}; {t("footer.llm")}{" "}
-              {state.data.models.llm.enabled ? state.data.models.llm.model : t("footer.llmOff")}
-            </span>
+            <div>
+              <dt>{t("footer.models")}</dt>
+              <dd>
+                {t("footer.sentiment")} {state.data.models.sentiment}; {t("footer.embedding")}{" "}
+                {state.data.models.embedding.split("/").pop()}; {t("footer.llm")}{" "}
+                {state.data.models.llm.enabled ? state.data.models.llm.model : t("footer.llmOff")}
+              </dd>
+            </div>
           )}
-          {state.status === "error" && <span className="footer-warn">{t("footer.apiDown")}</span>}
-          <span>
-            {t("footer.project")} · v{state.status === "success" ? state.data.version : "—"}
-          </span>
-        </div>
+          {state.status === "error" && (
+            <div>
+              <dt>API</dt>
+              <dd className="footer-warn">{t("footer.apiDown")}</dd>
+            </div>
+          )}
+          <div>
+            <dt>{t("footer.project")}</dt>
+            <dd>v{state.status === "success" ? state.data.version : "—"}</dd>
+          </div>
+        </dl>
       </div>
     </footer>
   );

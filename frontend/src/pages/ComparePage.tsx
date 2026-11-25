@@ -2,12 +2,12 @@
 import { useState } from "react";
 import { LuPlus, LuX } from "react-icons/lu";
 import { api } from "../api";
-import { ScoreRing } from "../charts/ScoreGauge";
+import { ScoreMini } from "../charts/ScoreGauge";
 import { HBars } from "../charts/small";
 import { CompanySearch } from "../components/CompanySearch";
 import { Disclaimer, EmptyState, ErrorCard, Panel, SkeletonBlock, cx } from "../components/ui";
-import { fmtDate, fmtRatio, scoreTone } from "../format";
-import { bandLabel, ratioLabel, useI18n } from "../i18n";
+import { fmtDate, fmtRatio } from "../format";
+import { ratioLabel, useI18n } from "../i18n";
 import { useAsync } from "../lib/useAsync";
 import { hrefFor, navigate } from "../router";
 import type { CompareCompany, CompareResponse, RatioMeta } from "../types";
@@ -53,7 +53,9 @@ export function ComparePage({ tickers }: { tickers: string[] }) {
         <ul className="picked">
           {tickers.map((tk) => (
             <li key={tk} className="picked-chip">
-              <a href={hrefFor({ name: "company", ticker: tk, tab: "overview" })}>{tk}</a>
+              <a className="ticker" href={hrefFor({ name: "company", ticker: tk, tab: "overview" })}>
+                {tk}
+              </a>
               <button type="button" onClick={() => remove(tk)} aria-label={t("compare.remove", { t: tk })}>
                 <LuX aria-hidden="true" />
               </button>
@@ -108,19 +110,12 @@ function CompareView({ data }: { data: CompareResponse }) {
       <section className={`span-12 score-cards cols-${cols}`} aria-label={t("compare.scores")}>
         {data.companies.map((c) => (
           <a key={c.ticker} className="score-card" href={hrefFor({ name: "company", ticker: c.ticker, tab: "overview" })}>
-            <ScoreRing total={c.score?.total ?? null} size={64} stroke={6} />
-            <div>
-              <p className="company-card-top">
-                <span className="ticker-tag">{c.ticker}</span>
-                {c.score && (
-                  <span className={`band-pill tone-${scoreTone(c.score.total)}`}>{bandLabel(lang, c.score.band)}</span>
-                )}
-              </p>
-              <p className="company-card-name">{c.name}</p>
-              <p className="company-card-meta">
-                {t("common.period")}: {fmtDate(c.period_end)}
-              </p>
-            </div>
+            <span className="ticker">{c.ticker}</span>
+            <span className="score-card-name">{c.name}</span>
+            <ScoreMini total={c.score?.total ?? null} band={c.score?.band ?? null} width={96} />
+            <span className="score-card-meta">
+              {t("compare.period")} {fmtDate(c.period_end)}
+            </span>
           </a>
         ))}
       </section>
