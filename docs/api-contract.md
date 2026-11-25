@@ -363,3 +363,15 @@ Başarılı yanıtların JSON şekli değişmedi. Yeni hata durumları ve başl�
   `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin` (SEC-12).
 - `POST /ingest` gövdesi isteğe bağlı kalır (geriye uyumluluk; tarayıcı kaynaklı CSRF yukarıdaki
   403 kuralıyla engellenir).
+
+### v1.5.1 — 2. güvenlik inceleme turu (yalnızca davranış netleştirmesi; şekil aynı)
+
+- `POST /ask` (`mode: "llm"`): atıf (`[n]`) içermeyen içerik cümleleri de çıkarılır; yalnızca
+  kısa bağlaç / başlık ("Özet:") ve yatırım tavsiyesi / "bulunamadı" uyarı cümleleri atıfsız
+  kalabilir. Sayı ve tarih doğrulaması biçim farklarını (TR/EN ondalık, ölçek ekleri, tarih
+  biçimleri, gösterilen hassasiyete yuvarlama) tolere eder; ölçekli cevap sayısı yalnızca ölçekli
+  kaynak sayısıyla eşleşir; başvuru tarihi yalnızca tam tarih olarak kaynak sayılır.
+- Günlük LLM bütçesi (`FINSIGHT_LLM_DAILY_LIMIT`) yalnızca LLM gerçekten çağrıldığında, soru
+  başına bir birim düşer (ilgili parça bulunamayan sorular bütçe harcamaz).
+- Host reddi (400) mesajı `http://127.0.0.1:8000` adresini önerir (`0.0.0.0` tarayıcı adresi
+  değildir).

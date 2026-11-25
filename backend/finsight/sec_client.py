@@ -20,8 +20,16 @@ from .rate_limiter import RateLimiter, shared_file_limiter
 log = logging.getLogger(__name__)
 
 RETRY_STATUSES = {429, 500, 502, 503, 504}
-# SEC hız sınırı aşımında 429 veya 403 ("Request Rate Threshold Exceeded") döndürür.
+# SEC hız sınırı aşımında 429 veya gövdesinde "Request Rate Threshold Exceeded" yazan 403
+# döndürür. Diğer 403'ler (ör. yasak yol) küresel duraklama tetiklemez (O5).
 RATE_LIMIT_STATUSES = {429, 403}
+RATE_LIMIT_MARKER = b"request rate threshold"
+
+
+def _is_rate_limited(status: int, body: bytes) -> bool:
+    if status == 429:
+        return True
+    return status == 403 and RATE_LIMIT_MARKER in (body or b"")[:20_000].lower()
 RATE_LIMIT_PAUSE_SECONDS = 10.0  # SEC-07: küresel duraklama (SEC penceresi 1 sn)
 
 
@@ -271,7 +279,7 @@ class SecClient:
                 if self.cache is not None:
                     self.cache.set(url, body)
                 return result
-            if status in RATE_LIMIT_STATUSES:
+            if _is_rate_limited(status, body):
                 # SEC-07: küresel devre kesici — sınırlayıcıyı paylaşan tüm istekler (ve dosya
                 # tabanlı sınırlayıcıda tüm süreçler) bekler.
                 pause = getattr(self.limiter, "pause", None)

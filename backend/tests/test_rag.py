@@ -355,8 +355,9 @@ def test_llm_advice_sentences_and_uncited_numbers_removed(kw_chunks):
              "Şirket 10-K raporunda tedarik riskini açıklıyor.")
     out = answer_question("supplier currency risk", kw_chunks, KeywordEmbedder(), FakeLLM(reply))
     assert out["mode"] == "llm"
+    # K4 (güvenlik 2. tur): atıfsız içerik cümlesi ("Şirket 10-K raporunda ...") da çıkarılır.
     assert out["answer"] == ("Şirket yarı iletken tedarikine bağımlı [1]. Kur riski de "
-                             "bulunuyor [2]. Şirket 10-K raporunda tedarik riskini açıklıyor.")
+                             "bulunuyor [2].")
 
 
 def test_llm_answer_with_only_advice_or_uncited_numbers_falls_back(kw_chunks):

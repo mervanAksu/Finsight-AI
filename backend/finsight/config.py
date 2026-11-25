@@ -85,8 +85,14 @@ def get_database_url() -> str:
     return os.getenv("DATABASE_URL", "").strip() or "sqlite:///finsight.db"
 
 
+# O4: varsayılan önbellek klasörü MUTLAK yoldur (backend/.sec_cache): API backend/ içinden, CLI
+# depo kökünden çalıştırılsa da aynı önbellek ve aynı süreçler arası hız sınırı dosyası
+# (.ratelimit) kullanılır. backend/.sec_cache, API'nin önceki varsayılanıdır (veri kaybolmaz).
+DEFAULT_CACHE_DIR = os.path.join(_REPO_ROOT, "backend", ".sec_cache")
+
+
 def get_cache_dir() -> str:
-    return os.getenv("SEC_CACHE_DIR", "").strip() or ".sec_cache"
+    return os.getenv("SEC_CACHE_DIR", "").strip() or DEFAULT_CACHE_DIR
 
 
 # --- Aşama 3 eklemeleri: API, arayüz ve belge depolama -----------------------------------

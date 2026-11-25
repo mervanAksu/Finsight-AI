@@ -67,7 +67,7 @@ def test_empty_values_fall_back_to_defaults(monkeypatch):
     monkeypatch.setenv("SEC_CACHE_DIR", " ")
     assert config.get_max_rps() == 8.0
     assert config.get_database_url() == "sqlite:///finsight.db"
-    assert config.get_cache_dir() == ".sec_cache"
+    assert config.get_cache_dir() == config.DEFAULT_CACHE_DIR  # O4: mutlak backend/.sec_cache
     monkeypatch.setenv("SEC_MAX_RPS", "hızlı")
     with pytest.raises(config.ConfigError):
         config.get_max_rps()

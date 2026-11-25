@@ -154,6 +154,21 @@ Swagger: <http://localhost:8000/docs>
 Portlar yalnızca bu bilgisayara (127.0.0.1) açılır. Veritabanı portu dışarı açılmaz; gerekirse
 `docker-compose.yml` içindeki yorumlu satırı açın.
 
+Güvenlik notları (`docs/guvenlik/duzeltmeler.md`):
+
+- `.env` içinde `POSTGRES_PASSWORD` **zorunludur** (varsayılan parola yoktur).
+- Tarayıcıda `http://0.0.0.0:8000` değil `http://127.0.0.1:8000` (veya `localhost`) açın;
+  API yalnızca bu adlarla gelen istekleri kabul eder (DNS rebinding koruması). Başka bir ad
+  gerekiyorsa `FINSIGHT_ALLOWED_HOSTS` ile ekleyin.
+- Kapsayıcı root olmayan `finsight` (uid 10001) kullanıcısıyla çalışır. Önceki sürümde root ile
+  oluşturulmuş birimler yazılamayabilir ("Permission denied"). Bu birimler yalnızca önbellek
+  içerir; silip yeniden oluşturun: `docker compose down` →
+  `docker volume rm finsight-ai_seccache finsight-ai_hfcache` → `docker compose up -d --build`.
+  (Birim adlarını `docker volume ls` ile kontrol edin; veritabanı birimi `pgdata`'yı SİLMEYİN.)
+- `docker run` ile tek başına çalıştırırken portu yalnızca bu bilgisayara açın ve SQLite için
+  birim bağlayın: `docker run --env-file .env -p 127.0.0.1:8000:8000 -v finsight-data:/app/data
+  finsight-ai`.
+
 ### İsteğe bağlı ML paketleri
 
 Kurulmazsa sistem yedek modellerle çalışır: duygu için `lexicon-fallback` (sözlük), gömme için

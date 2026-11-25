@@ -521,9 +521,18 @@ def run_ingest_job(job_id: int, ticker: str, analyze: bool = True, *,
                 fields.setdefault("request_count", client.request_count)
             repo.update_job(session, job_id, **fields)
 
+        # O2: iş hâlâ kuyruktaysa atomik olarak sahiplenilir; değilse (eskime ile kapatıldı veya
+        # başka süreç başlattı) hiçbir şey yapılmaz — aynı şirket için iki iş koşmaz.
         try:
-            update(status="running", started_at=utcnow(), step="SEC verisi çekiliyor",
-                   progress=0.02)
+            claimed = repo.claim_job(session, job_id)
+        except Exception:
+            log.exception("İş sahiplenilemedi: %s", job_id)
+            return
+        if not claimed:
+            log.warning("İş %s artık kuyrukta değil; çalıştırılmadı.", job_id)
+            return
+        try:
+            update(status="running", step="SEC verisi çekiliyor", progress=0.02)
             client = (client_factory or make_sec_client)()
             ticker_map = build_ticker_map(client.company_tickers())
             data = collect(client, ticker, ticker_map, years=DEFAULT_YEARS, today=today,

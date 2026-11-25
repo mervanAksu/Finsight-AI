@@ -43,6 +43,7 @@ from .config import (ConfigError, get_allowed_hosts, get_ask_per_minute,
                      get_frontend_dist, get_llm_daily_limit, get_sec_json_ttl, get_user_agent,
                      qa_log_enabled)
 from .edgar import build_ticker_map, search_companies
+from .llm import LLMError
 from .rag import EMBEDDING_MISMATCH_WARNING, answer_question
 from .ratios import compute_ratios
 from .refresh import (AUTO_REFRESH_BUDGET_PER_MINUTE, LOCK_FILE_NAME, AutoRefresher,
@@ -429,12 +430,13 @@ def ask(ticker: str, body: AskRequest, request: Request,
         raise HTTPException(400, "Soru boş olamaz.")
     embedder = jobs.get_embedder_cached()
     llm = jobs.get_llm()
-    budget_warning = None
-    if llm is not None and not request.app.state.llm_budget.take():
-        llm = None
-        budget_warning = LLM_BUDGET_WARNING
+    # O7: bütçe yalnızca LLM gerçekten çağrılacağında (ilk complete) düşer; ilgili parça
+    # bulunamayan veya LLM'e gitmeyen sorular bütçeyi harcamaz.
+    budgeted = BudgetedLLM(llm, request.app.state.llm_budget) if llm is not None else None
     chunks = repo.load_chunks_for_rag(session, company["id"], embedder.name)
-    result = answer_question(question, chunks, embedder, llm)
+    result = answer_question(question, chunks, embedder, budgeted)
+    budget_warning = LLM_BUDGET_WARNING if budgeted is not None and budgeted.exhausted \
+        else None
     if not chunks and "warning" not in result and \
             repo.count_chunks_other_models(session, company["id"], embedder.name) > 0:
         # K4: parçalar başka bir gömme modeliyle oluşturulmuş → yeniden analiz uyarısı.
@@ -501,8 +503,10 @@ DOCS_CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.j
             "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.redoc.ly; "
             "worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; "
             "base-uri 'none'; form-action 'self'; object-src 'none'")
-HOST_REJECTED = ("Geçersiz Host başlığı: FinSight yalnızca 127.0.0.1 / localhost üzerinden "
-                 "kullanılabilir (DNS rebinding koruması).")
+HOST_REJECTED = ("Geçersiz Host başlığı: FinSight yalnızca http://127.0.0.1:8000 veya "
+                 "http://localhost:8000 adresinden kullanılabilir (DNS rebinding koruması). "
+                 "0.0.0.0 bir dinleme adresidir, tarayıcıda 127.0.0.1 yazın; başka bir ad "
+                 "gerekiyorsa FINSIGHT_ALLOWED_HOSTS ile ekleyin.")
 ORIGIN_REJECTED = "Başka bir siteden gelen istek reddedildi (CSRF koruması)."
 
 
@@ -631,6 +635,28 @@ class SlidingWindowLimiter:
                 return max(1, int(self.window - (now - self._events[0])) + 1)
             self._events.append(now)
             return None
+
+
+class BudgetedLLM:
+    """O7: LLM istemcisi sarmalayıcısı — günlük bütçeden İLK gerçek çağrıda bir birim düşer
+    (soru başına bir birim; sorgu çevirisi + cevap aynı soruya sayılır). Bütçe doluysa
+    ``LLMError`` yükselir; ``rag`` bunu yakalayıp çıkarımsal moda düşer."""
+
+    def __init__(self, llm, budget: DailyBudget) -> None:
+        self._llm = llm
+        self._budget = budget
+        self.provider = getattr(llm, "provider", "")
+        self.model = getattr(llm, "model", None)
+        self.charged = False
+        self.exhausted = False
+
+    def complete(self, system: str, user: str, max_tokens: int = 800) -> str:
+        if not self.charged:
+            if self.exhausted or not self._budget.take():
+                self.exhausted = True
+                raise LLMError("Günlük LLM soru sınırı doldu.")
+            self.charged = True
+        return self._llm.complete(system, user, max_tokens=max_tokens)
 
 
 class DailyBudget:

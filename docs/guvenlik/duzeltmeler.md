@@ -13,7 +13,7 @@
 
 | | Başlangıç | Şimdi |
 | --- | --- | --- |
-| `cd backend && python -m pytest -q` (bulut) | 659 passed, 9 skipped, 50 xfailed | **780 passed, 10 skipped, 8 xfailed** |
+| `cd backend && python -m pytest -q` (bulut) | 659 passed, 9 skipped, 50 xfailed | 1. tur: 780 passed, 10 skipped, 8 xfailed · **2. tur (§7): 878 passed, 13 skipped, 1 xfailed** |
 | `ruff check backend/finsight backend/tests` | temiz | temiz |
 
 Buluttaki 8 `xfail`: CSV-DID (6 parametre), SEC-11 (1), SEC-15 kilit dosyası (1) — bu ajanın
@@ -121,9 +121,13 @@ kaynağından AST ile alınıp Starlette `TestClient` ile) bulutta koşturuldu.
 - **Testler:** `test_attack_dos.py::test_sec02_ingest_flood_exhausts_threadpool` (xfail
   kaldırıldı; kullanıcıda), yeni `::test_ingest_capacity_full_returns_429`,
   `::test_ingest_db_locked_returns_503`, `::test_ingest_passes_sec_cik_to_job_lock`
-  (kullanıcıda). Bulutta: `test_defense_cloud.py::test_job_flood_does_not_starve_request_pool`
-  (42 eşzamanlı istek: en fazla 2 çalışan, 10 kabul / 32 × 429, `/health` < 1 sn),
-  `::test_job_runner_capacity_and_release`.
+  (kullanıcıda). **Durum: kullanıcı bilgisayarında doğrulanacak** — gerçek `POST /ingest`
+  uç noktası (FastAPI) bulutta koşmuyor. Bulutta koşan yalnızca mekanizmanın benzetimidir:
+  `test_defense_cloud.py::test_job_flood_does_not_starve_request_pool` `JobRunner` ve
+  `_await_job`'ı (kaynaktan AST ile) yalın bir Starlette uç noktasına bağlar (42 eşzamanlı
+  istek: en fazla 2 çalışan, 10 kabul / 32 × 429, `/health` < 1 sn);
+  `::test_job_runner_capacity_and_release` kapasite sayımını sınar. Bu, `api.py`'deki
+  bağlantının (kilit, 409/503 yolları) kanıtı değildir.
 - **Kalan risk:** Sınır süreç içidir; otomatik yenileyici (`refresh.AutoRefresher`) kendi tek
   iş parçacığında çalışır ve bu sayıma girmez (en fazla +1 iş).
 - **Arayüz notu:** `frontend/src/api.ts` 429/503 yanıtındaki `detail` metnini kullanıcıya
@@ -222,6 +226,9 @@ kaynağından AST ile alınıp Starlette `TestClient` ile) bulutta koşturuldu.
 - **Değişiklik:** `backend/finsight/text_extract.py:509` `_PUNCT_RUN` ve `:557`:
   `split_sentences` her satırda 4+ uzunluktaki `[.!?]` dizilerini ilk 3 karaktere kısaltır
   (doğrusal). lxml yolu ve derinlik koruması değiştirilmedi.
+- **Commit:** düzeltme çalışma ağacında performans değişiklikleriyle aynı dosyada olduğu için
+  `43c49ec` ("Performans: lxml metin yolu …") commit'ine girdi (güvenlik commit'i `0d27ddf`
+  değil).
 - **Testler (bulutta kanıtlandı):** `test_attack_parsing.py::test_sec08_redos_dot_run_in_filing_text`
   (100 000 nokta: 0.2 ms), `::test_sec08_redos_mixed_punctuation_run`; kontrol
   `::test_sec08_normal_text_still_split`, `tests/test_text_extract*.py`, `test_perf_asama4.py`
@@ -387,3 +394,43 @@ docker build -t finsight-ai . ; docker run --rm finsight-ai id -u   # 10001
 HTTP katmanında beklenen: `test_attack_csrf_host.py`, `test_attack_dos.py`,
 `test_api.py`, `test_api_freshness.py`, `test_api_facts_latest.py` geçer; yalnızca
 `test_sec01_bodiless_ingest_requires_json` XFAIL.
+
+
+## 7. İkinci bağımsız inceleme turu (HEAD c83a571 üzerine)
+
+Durum: saf Python kısımlar **bulutta kanıtlandı**; SQLAlchemy / FastAPI gerektirenler
+**kullanıcıda doğrulanacak**. Bulut sonucu: `878 passed, 13 skipped, 1 xfailed`; ruff temiz.
+Kalan tek xfail: SEC-01/A03 (bilinçli; HTTP dosyası bulutta atlandığından bulutta görünen xfail
+`test_sec15_frontend_lockfile_and_npm_ci`'dir).
+
+| Kimlik | Sorun | Değişiklik (`dosya:satır`) | Test | Durum |
+| --- | --- | --- | --- | --- |
+| K1 | Root olmayan kullanıcı varsayılan `sqlite:///finsight.db`'yi `/app`'te oluşturamıyordu | `Dockerfile:36` `ENV DATABASE_URL=sqlite:////app/data/finsight.db`, `Dockerfile:48-53` `/app/data` oluşturulup `chown`; `docker-compose.yml:40` `appdata` birimi; README Docker notu (eski root birimleri) | `test_defense_round2.py::test_k1_docker_sqlite_path_writable_by_non_root` | Bulutta (dosya analizi); `docker run` kullanıcıda |
+| K2 | Doğru cümleler siliniyordu (tarih biçimleri, `5.2B`, `5,2 mlr`, ölçek dönüşümü + yuvarlama, `%46,2`~`46.21%`, `211 915`, "Madde/Bölüm 7") | `rag.py:383-617`: tarih ayrıştırıcı (`_take_dates`, TR/ABD sayısal, ISO, ay adlı TR/EN, ay-yıl), sayı yorumları (`_interpretations`: binlik / ondalık belirsizliği, gösterilen hane), ek / kelime ölçekleri (`_quantity_groups`), "(in millions)" tablo ölçeği (`_SourceFacts`), hassasiyete göre tolerans (`_qty_match`); `_NON_NUMERIC_TOKENS` Madde/Bölüm/Kısım/Part/Note | `test_k2_correct_sentences_are_kept[20]`, `test_k2_table_scale_context` | Bulutta kanıtlandı |
+| K3 | Uydurma sayılar geçiyordu | Üst veri (başvuru tarihi) yalnız TAM tarih olarak (`rag.py:561` `_SourceFacts`, `rag.py:828`); bölüm kodu ve form artık havuzda değil; ölçekli cevap yalnız ölçekli kaynakla (`_qty_match`); `1.5` yalnız ondalık (≠ 15); yazıyla ölçekli sayılar (`_WRITTEN_SCALED`, "yüz milyar", "one hundred billion") | `test_k3_fabricated_numbers_are_removed[10]`, `test_k3_metadata_full_date_still_allowed[2]`, `test_k3_written_number_matching_source_kept` | Bulutta kanıtlandı |
+| K4 | Atıfsız iddia cümleleri kalıyordu | `rag.py:343-376` `_uncited_allowed`: atıfsız cümle yalnız ≤ 3 kelimelik bağlaç, ≤ 8 kelimelik ":" başlık veya tavsiye / "bulunamadı" uyarısı olabilir; sayı içeremez | `test_k4_uncited_content_sentences[8]`; `test_rag.py::test_llm_advice_sentences_and_uncited_numbers_removed` güncellendi | Bulutta kanıtlandı |
+| K5 | Meşru soru / cümleler tavsiye sayılıyordu | `rag.py:110-235` kalıplar kişi / kip ekine (`almalı mıyım`, `alsam mı`, should I / would you recommend) ve hisse / stock nesnesine bağlandı; "portföy" yalnız yönelme hâli + ekle/kat; "entry opportunity", "fiyat … cazip", "uzun pozisyon", "geri almak için uygun", şirket öznesiyle "suggests investing / recommends holding" artık eşleşmiyor | `test_k5_legit_questions_not_advice[6]`, `test_k5_legit_sentences_kept[7]` + 1. tur kontrolleri | Bulutta kanıtlandı |
+| O1 | Tavsiye yanlış negatifleri | Aynı kalıp seti: TR (`almaya değer mi`, `girmeli/toplamalı/elden çıkarmalı mıyım`, `alsam mı`, `almak mantıklı mı`, `tutmaya devam edeyim mi`, `alınmaya değer`, `toplayabilir`, `elde tutmak mantıklı`, `alım yapılabilir`, `satın alınabilir`), EN (`Is X a buy`, `recommend buying`, `be buying`, `Buy X now?`, `compelling buy`, `I'd buy`, `investors should buy`, `consider buying the stock`, `looks like a bargain`) | `test_o1_advice_questions_detected[11]`, `test_o1_advice_sentences_removed[11]` | Bulutta kanıtlandı |
+| O2 | Kuyruktaki iş 30 dk eskimeyle hata sayılıp ikinci iş açılabiliyordu | `repository.py:36` `STALE_QUEUED_AFTER` (6 sa; yalnız yeniden başlatmada sahipsiz kalan kuyruk işi için) ve `repository.py:847` (30 dk yalnız `running`); `repository.py:760` `claim_job` (atomik `queued→running`); `jobs.py:527` iş artık kuyrukta değilse çalışmaz | `test_o2_queued_job_not_staled_and_not_duplicated`, `test_o2_run_ingest_job_skips_job_no_longer_queued`; mevcut `test_repository.py::test_stale_running_job_is_closed` | Kullanıcıda doğrulanacak (SQLAlchemy) |
+| O3 | Geçici OSError'da kalıcı düşüş; kilit beklemesi sınırsız | `rate_limiter.py:66-68` sabitler; `_FileLock` bloklamayan deneme + 5 sn zaman aşımı (`TimeoutError`); `rate_limiter.py:180` `_locked` 3 kısa yeniden deneme; `rate_limiter.py:193` `_file_usable` 60 sn sonra dosya yolunu yeniden sınar | `test_o3_transient_oserror_retried_then_recovers`, `test_o3_lock_wait_has_timeout` | Bulutta kanıtlandı (POSIX; Windows `msvcrt` yolu kullanıcıda) |
+| O4 | Göreli `.sec_cache`: API (backend/) ve CLI (kök) farklı önbellek ve `.ratelimit` | `config.py:91` `DEFAULT_CACHE_DIR = <depo>/backend/.sec_cache` (mutlak; API'nin önceki varsayılanı, mevcut önbellek korunur) | `test_o4_default_cache_dir_is_absolute_backend_sec_cache`; `test_config.py` güncellendi | Bulutta kanıtlandı |
+| O5 | Her 403 küresel duraklama tetikliyordu | `sec_client.py:29` `_is_rate_limited`: 429 veya gövdesinde "Request Rate Threshold" olan 403 | `test_o5_pause_only_on_real_rate_limit[3]` | Bulutta kanıtlandı |
+| O7 | LLM bütçesi LLM çağrılmasa da düşüyordu | `api.py:640` `BudgetedLLM`: ilk gerçek `complete` çağrısında soru başına bir birim; dolunca `LLMError` → çıkarımsal mod + `warning` (`api.py:435`) | `test_defense_cloud.py::test_o7_budget_charged_only_on_real_llm_call`; `test_create_app_wiring.py::test_o7_llm_budget_only_charged_when_llm_called` | Bulutta (sınıf); uç nokta kullanıcıda |
+| O8 | `0.0.0.0` Host reddi açıklamasızdı | `api.py:506` `HOST_REJECTED` 127.0.0.1'i önerir; Dockerfile ve README notu | `test_o8_host_rejection_message_suggests_loopback`, `test_create_app_wiring.py::test_o8_zero_host_rejected_with_hint` | Bulutta (metin); HTTP kullanıcıda |
+| Bağlantı | create_app ara katman sırası / listeler / CSP test edilmiyordu | — | `tests/security/test_create_app_wiring.py` (ara katman sırası: Guard en dışta, CORS sonra; izinli Host ve kökenler, `*` reddi; CSP özeti; index/404/`/docs` başlıkları; 5173 preflight + POST) | Kullanıcıda doğrulanacak |
+
+**Kalan riskler (2. tur):**
+
+- Sayı doğrulaması sözdizimseldir: doğru sayının yanlış bağlamda kullanılması (2024 değerini
+  2025 diye yazmak) yakalanmaz; yuvarlama toleransı gösterilen haneye göredir ("412 milyar"
+  ±0,5 milyar kabul edilir).
+- Tavsiye kalıpları sözlük tabanlıdır; yeni ifade biçimleri için LLM ile ikinci sınıflandırma
+  önerisi açık.
+- O2: sunucu yeniden başlatılınca sahipsiz kalan kuyruk işi 6 saat boyunca o şirketi "meşgul"
+  gösterir (30 dk eskime kuyruk işine bilinçli olarak uygulanmadı). Daha kısa süre isteniyorsa
+  `STALE_QUEUED_AFTER` düşürülebilir veya başlangıçta süreç içi sahipsiz kuyruk işleri
+  temizlenebilir.
+- O4: Docker'da `SEC_CACHE_DIR` imaj ortamında `/app/.sec_cache` olarak verildiği için
+  etkilenmez; `.env`'de `SEC_CACHE_DIR` farklı verilen süreçler bütçeyi paylaşmaz.
+- K1: `.env`'de boş `DATABASE_URL=` satırı imajdaki `DATABASE_URL`'yi ezerse göreli SQLite yolu
+  yeniden yazılamaz olur; `.env.example`'da bu satır yorum olarak durur.

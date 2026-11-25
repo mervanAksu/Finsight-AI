@@ -37,6 +37,7 @@ services:
     volumes:
       - seccache:/app/.sec_cache
       - hfcache:/app/.hf_cache
+      - appdata:/app/data       # K1: SQLite kullanılırsa (DATABASE_URL kaldırılırsa) veritabanı burada
     depends_on:
       db:
         condition: service_healthy
@@ -45,3 +46,4 @@ volumes:
   pgdata:
   seccache:
   hfcache:
+  appdata:

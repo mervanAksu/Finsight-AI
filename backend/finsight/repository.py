@@ -30,6 +30,10 @@ ACTIVE_JOB_STATUSES = ("queued", "running")
 # Bu süre boyunca ilerleme yazmayan "çalışıyor" işi ölü sayılır (süreç yeniden başlatıldı vb.).
 STALE_JOB_AFTER = timedelta(minutes=30)
 STALE_JOB_ERROR = "İş yarıda kaldı (sunucu yeniden başlatılmış olabilir); tekrar başlatın."
+# O2 (güvenlik 2. tur): kuyruktaki (queued) iş 30 dk'lık eskimeye girmez — sınırlı kuyrukta
+# (FINSIGHT_MAX_QUEUED_JOBS) beklerken hata sayılıp aynı şirkete ikinci iş açılmasın. Yalnızca
+# sunucu yeniden başlatılınca sahipsiz kalan kuyruk işi için çok daha uzun bir süre uygulanır.
+STALE_QUEUED_AFTER = timedelta(hours=6)
 
 
 def dumps(obj) -> str:
@@ -753,6 +757,20 @@ _JOB_FIELDS = {"status", "step", "progress", "error", "request_count", "started_
                "finished_at"}
 
 
+def claim_job(session: Session, job_id: int) -> bool:
+    """O2: kuyruktaki işi atomik olarak "running" yapar (UPDATE ... WHERE status='queued').
+    İş artık kuyrukta değilse (eskime ile hata sayıldı, başka süreç başlattı) False."""
+    from sqlalchemy import update
+
+    now = utcnow()
+    result = session.execute(
+        update(IngestionJob).where(IngestionJob.id == job_id,
+                                   IngestionJob.status == "queued")
+        .values(status="running", started_at=now, updated_at=now))
+    session.commit()
+    return bool(result.rowcount)
+
+
 def update_job(session: Session, job_id: int, **fields) -> dict | None:
     """İş alanlarını günceller ve commit eder (ilerleme başka oturumlardan görünsün)."""
     row = session.get(IngestionJob, job_id)
@@ -826,7 +844,8 @@ def find_running_job(session: Session, ticker: str, now: datetime | None = None,
     found = None
     for row in rows:
         last = row.updated_at or row.started_at or row.created_at
-        if last is not None and now - last > STALE_JOB_AFTER:
+        limit = STALE_JOB_AFTER if row.status == "running" else STALE_QUEUED_AFTER
+        if last is not None and now - last > limit:
             row.status = "error"
             row.error = STALE_JOB_ERROR
             row.finished_at = now

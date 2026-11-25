@@ -39,6 +39,7 @@ import pytest
 from finsight import config
 from finsight.config import ConfigError
 from finsight.edgar import build_ticker_map
+from finsight.llm import LLMError
 from finsight.rate_limiter import FileRateLimiter, RateLimiter
 from finsight.sec_client import FileCache, SecClient, cache_ttl_for, follow_sec_redirects
 
@@ -86,7 +87,8 @@ def _load(module: str, names: set[str], extra: dict | None = None) -> dict:
 
 API = _load("api", {"_host_name", "build_app_csp", "inline_script_hashes",
                     "LocalGuardMiddleware", "SlidingWindowLimiter", "DailyBudget",
-                    "_TickerMapCache", "_await_job"})
+                    "_TickerMapCache", "_await_job", "BudgetedLLM"},
+           {"LLMError": LLMError})
 
 
 # --------------------------------------------------------------------------- SEC-01 / 03 / 12
@@ -602,3 +604,31 @@ def test_number_check_rejects_wrong_source():
 
     text, used = filter_answer("Hasılat 999 milyar oldu [1].", ["Revenue grew.", "999 billion"])
     assert text == "" and used == set()
+
+
+# --------------------------------------------------------------------------- O7
+
+
+def test_o7_budget_charged_only_on_real_llm_call():
+    """O7: günlük LLM bütçesi yalnızca LLM gerçekten çağrıldığında (soru başına bir kez) düşer;
+    LLM'e gitmeyen soru (ilgili parça yok) bütçe harcamaz; bütçe dolunca LLMError → rag
+    çıkarımsal moda düşer ve ``exhausted`` uyarı için işaretlenir."""
+    from finsight.rag import answer_question
+
+    from .attack_support import FakeLLM, KeywordEmbedder, make_chunk
+
+    budget = API["DailyBudget"](1)
+    llm = FakeLLM("Revenue risk discussed [1].")
+    unused = API["BudgetedLLM"](llm, budget)
+    out = answer_question("weather football", [make_chunk("supplier risk")], KeywordEmbedder(),
+                          unused)
+    assert out["mode"] == "not_found" and not unused.charged and llm.calls == []
+    first = API["BudgetedLLM"](llm, budget)
+    out = answer_question("supplier risk?", [make_chunk("Supplier risk is high.")],
+                          KeywordEmbedder(), first)
+    assert out["mode"] == "llm" and first.charged and not first.exhausted
+    first.complete("s", "u")  # aynı soru içinde ikinci çağrı ek birim harcamaz
+    second = API["BudgetedLLM"](llm, budget)
+    out = answer_question("supplier risk?", [make_chunk("Supplier risk is high.")],
+                          KeywordEmbedder(), second)
+    assert second.exhausted and out["mode"] == "extractive"

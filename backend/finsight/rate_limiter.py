@@ -63,31 +63,48 @@ class RateLimiter:
             self._paused_until = max(self._paused_until or until, until)
 
 
-class _FileLock:
-    """Süreçler arası engelleyen dosya kilidi (refresh.ProcessLock kalıbı; burada bekler)."""
+LOCK_TIMEOUT_SECONDS = 5.0   # O3: kilit bekleme üst sınırı
+LOCK_RETRIES = 3             # O3: geçici OSError (ör. Windows PermissionError) için deneme
+BROKEN_RETRY_SECONDS = 60.0  # O3: süreç içi sınırlayıcıya düşüldükten sonra dosya yeniden sınanır
 
-    def __init__(self, path: str, sleep: Callable[[float], None]) -> None:
+
+class _FileLock:
+    """Süreçler arası dosya kilidi (refresh.ProcessLock kalıbı); bloklamayan denemelerle en fazla
+    ``timeout`` saniye bekler, sonra ``TimeoutError`` (OSError) yükseltir."""
+
+    def __init__(self, path: str, sleep: Callable[[float], None] | None = None,
+                 timeout: float = LOCK_TIMEOUT_SECONDS) -> None:
         self.path = path
-        self._sleep = sleep
+        self.timeout = timeout
         self._fh = None
 
-    def __enter__(self):
-        fh = open(self.path, "a+b")
+    def _try_lock(self, fh) -> bool:
         try:
             if os.name == "nt":  # pragma: no cover - Windows
                 import msvcrt
 
-                while True:
-                    try:
-                        fh.seek(0)
-                        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-                        break
-                    except OSError:
-                        self._sleep(0.005)
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
 
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (BlockingIOError, PermissionError):
+            return False
+        except OSError as exc:  # Windows: kilitli bölge EACCES / EDEADLK
+            if getattr(exc, "errno", None) in (13, 35, 36, 11):
+                return False
+            raise
+        return True
+
+    def __enter__(self):
+        fh = open(self.path, "a+b")
+        deadline = time.monotonic() + self.timeout
+        try:
+            while not self._try_lock(fh):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Hız sınırı kilidi zaman aşımına uğradı")
+                time.sleep(0.005)
         except BaseException:
             fh.close()
             raise
@@ -133,7 +150,12 @@ class FileRateLimiter:
         self._sleep = sleep
         self._thread_lock = threading.Lock()
         self._fallback = RateLimiter(max_per_second, clock=clock, sleep=sleep)
-        self._broken = False
+        self._broken_at: float | None = None
+
+    @property
+    def broken(self) -> bool:
+        """Dosya yolu kullanılamıyor mu (süreç içi sınırlayıcıya düşüldü)?"""
+        return self._broken_at is not None
 
     def _read(self) -> dict:
         try:
@@ -156,14 +178,30 @@ class FileRateLimiter:
         return float(value)
 
     def _locked(self, fn: Callable[[], float]) -> float:
-        os.makedirs(self._directory, exist_ok=True)
-        with _FileLock(self.lock_path, self._sleep):
-            return fn()
+        """Kilit altında ``fn``; geçici OSError'da kısa aralıklarla yeniden dener (O3)."""
+        for attempt in range(LOCK_RETRIES):
+            try:
+                os.makedirs(self._directory, exist_ok=True)
+                with _FileLock(self.lock_path):
+                    return fn()
+            except OSError:
+                if attempt == LOCK_RETRIES - 1:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+        raise OSError("ulaşılamaz")  # pragma: no cover
+
+    def _file_usable(self) -> bool:
+        if self._broken_at is None:
+            return True
+        if self._clock() - self._broken_at >= BROKEN_RETRY_SECONDS:
+            self._broken_at = None  # 60 sn sonra dosya yolu yeniden sınanır
+            return True
+        return False
 
     def acquire(self) -> None:
         """Bir istek hakkı alır; gerekirse bekler (tüm süreçler toplamında max_per_second)."""
         with self._thread_lock:
-            if self._broken:
+            if not self._file_usable():
                 self._fallback.acquire()
                 return
             while True:
@@ -181,9 +219,10 @@ class FileRateLimiter:
                 try:
                     wait = self._locked(step)
                 except OSError as exc:
-                    log.warning("Paylaşılan hız sınırı dosyası kullanılamıyor (%s); süreç içi "
-                                "sınırlayıcıya geçildi.", type(exc).__name__)
-                    self._broken = True
+                    log.warning("Paylaşılan hız sınırı dosyası kullanılamıyor (%s); %d sn süreç "
+                                "içi sınırlayıcı kullanılacak.", type(exc).__name__,
+                                BROKEN_RETRY_SECONDS)
+                    self._broken_at = self._clock()
                     self._fallback.acquire()
                     return
                 if wait <= 0:
@@ -194,7 +233,7 @@ class FileRateLimiter:
         """SEC-07: tüm süreçlerdeki sonraki SEC isteklerini ``seconds`` saniye ertele."""
         seconds = min(max(float(seconds), 0.0), MAX_PAUSE_SECONDS)
         self._fallback.pause(seconds)
-        if self._broken:
+        if self._broken_at is not None:
             return
 
         def step() -> float:
